@@ -55,7 +55,7 @@ Releases go out from `main` through [`.github/workflows/release.yml`](./.github/
 1. Changes that affect a published package come with a changeset (`pnpm changeset`).
 2. On `main`, the workflow keeps a "chore: version packages" pull request up to date: the new versions and changelogs from the pending changesets.
 3. Merging it runs the release: a clean build (`pnpm clean && pnpm build`), the packed-package check (`pnpm smoke`), then `pnpm release`, which packs each package whose version isn't on npm yet and stages it with `npm stage publish`. npm authenticates the workflow with trusted publishing, so there's no token, and adds provenance.
-4. A maintainer approves the staged versions with two-factor authentication: `npm stage list`, then `npm stage approve`, or on npmjs.com. Approve in dependency order (`spec`, `core`, `analyzers`, `federation`, `mcp`, `cli`), so the CLI never goes live before what it needs.
+4. A maintainer approves the staged versions with two-factor authentication: `npm stage list`, then `npm stage approve`, or on npmjs.com. Approve in dependency order (`spec`, `core`, `analyzers`, `federation`, `mcp`, `cli`), so the CLI never goes live before what it needs. `pnpm approve-staged` does this for you: it lists the staged versions, asks once, and approves each in that order.
 
 All six packages share one version (a Changesets `fixed` group), and each release is tagged `v<version>`. v2 jumped from 0.1.1 to 0.3.0, because the v0 viewer's tags already use `v0.1.2` to `v0.2.0`. For a version Changesets can't reach like that, `pnpm set-version <x.y.z> "<changelog note>"` sets all six by hand and validates the result.
 
