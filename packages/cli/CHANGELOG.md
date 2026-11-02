@@ -1,5 +1,18 @@
 # @archdoc/cli
 
+## 0.4.1
+
+### Patch Changes
+
+- 24f9809: The Claude Code plugin's skill tells the agent to use the MCP tools, not the CLI: the server starts through `npx` and can take a few seconds, so the tools may not be listed yet or may be listed by name only, and the agent should search for them and wait rather than run `archdoc` in a shell. The CLI is for when no ArchDoc MCP server is configured. The skill also stops offering `archdoc_show` with `sample`, which 0.4.0 removed.
+- df7d982: The Claude Code plugin opens the explorer for you. Asked to see the architecture, or after creating or changing the model, the skill starts `archdoc view --watch --open` in the background and reports its URL, reusing one already running, and on a remote machine (a cloud session or SSH) writes `archdoc site` instead and says where. `/archdoc:view [path] [--base <ref>]` does the same on demand.
+- Updated dependencies [6df5f40]
+  - @archdoc/core@0.4.1
+  - @archdoc/analyzers@0.4.1
+  - @archdoc/federation@0.4.1
+  - @archdoc/mcp@0.4.1
+  - @archdoc/spec@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes
