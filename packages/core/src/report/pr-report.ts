@@ -490,6 +490,10 @@ const FIX: [RegExp, string][] = [
   [/^drift\/stale-/, "Update the element's code paths or snippets."],
   [/^journey\//, "Update the journey's steps to match the model."],
   [/^import\//, "Run archdoc sync."],
+  [
+    /^model\/(component-outside-container|code-outside-component)$/,
+    "Move it under the element it is a part of, or change its kind to the layer it is.",
+  ],
   [/^ref\//, "Fix the reference, or run archdoc sync if it's in another repo."],
   [/^data\//, "Fix the data entry or what sends it."],
   [
@@ -508,6 +512,8 @@ const TITLE: [RegExp, (f: MarkedFinding) => string][] = [
   [/^ref\//, () => "A reference that doesn't resolve"],
   [/^import\//, () => "Another repo's model is out of sync"],
   [/^model\/orphan-element$/, () => "An element nothing connects to"],
+  [/^model\/component-outside-container$/, () => "A component outside a container"],
+  [/^model\/code-outside-component$/, () => "Code outside a component"],
   [/^data\//, () => "Invalid data"],
   [/^seal\/changed$/, () => "Code changed under the model"],
   [/^seal\/unsealed$/, () => "A new fact no one has checked against its code"],

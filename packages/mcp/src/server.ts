@@ -110,7 +110,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "Start a model",
       description:
-        "Only for a repository with no .archdoc/: writes a starting model from its packages, compose services, imports, and schema files, all marked inferred, and says what to add (descriptions, actors, journeys). Never writes over a model.",
+        "Only for a repository with no .archdoc/: writes a starting model from its packages, compose services, imports, and schema files, all marked inferred: containers, the components inside each, the code (files, functions, classes) inside each component, and the uses between them at each level. Says what to add (descriptions, actors, journeys). Never writes over a model.",
       inputSchema: {
         name: z.string().optional().describe("The namespace; defaults to the root package's name"),
         dryRun: z.boolean().optional().describe("Return the model without writing it"),

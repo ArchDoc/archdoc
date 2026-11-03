@@ -136,14 +136,11 @@ export const ProvideSchema = z
   ])
   .describe("An api, topic, or event this element exposes");
 
-export const ElementKindSchema = z.enum([
-  "system",
-  "container",
-  "component",
-  "datastore",
-  "queue",
-  "external",
-]);
+export const ElementKindSchema = z
+  .enum(["system", "container", "component", "code", "datastore", "queue", "external"])
+  .describe(
+    "system, container (something that runs or ships), component (a part of a container), code (a function, class, or file inside a component), datastore, queue, or external",
+  );
 
 export const StoreSchema = z.strictObject({
   entity: z.string(),

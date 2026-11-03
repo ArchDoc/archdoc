@@ -14,7 +14,7 @@ import { evaluateRules, type RuleEdge } from "./rules.js";
 
 export interface Finding {
   severity: Severity;
-  /** drift/undeclared-dependency, rule/violation, drift/stale-path, drift/schema-*, model/orphan-element, or a validation code. */
+  /** drift/undeclared-dependency, rule/violation, drift/stale-path, drift/schema-*, model/orphan-element, model/component-outside-container, model/code-outside-component, or a validation code. */
   code: string;
   message: string;
   /** The element the finding is about, if any. */
@@ -284,8 +284,51 @@ export function check(model: Model, options: CheckOptions = {}): CheckResult {
     });
   }
 
+  findings.push(...misplaced(model));
+
   findings.sort((a, b) => ORDER[a.severity] - ORDER[b.severity] || a.code.localeCompare(b.code));
   return { findings, edges, codemap };
+}
+
+/**
+ * The layers nest: a component is a part of a container, and code (a
+ * function, class, or file) is a part of a component. One that isn't inside
+ * its layer is usually a container or a component written at the wrong level.
+ */
+function misplaced(model: Model): Finding[] {
+  const out: Finding[] = [];
+  const within = (e: ElementNode, kind: string) => {
+    for (let p = e.parentId; p; p = model.elements.get(p)?.parentId) {
+      if (model.elements.get(p)?.spec.kind === kind) return true;
+    }
+    return false;
+  };
+  for (const e of model.elements.values()) {
+    const where = e.parentId ? `inside ${e.parentId}` : "at the top of the model";
+    if (e.spec.kind === "component" && !within(e, "container")) {
+      out.push({
+        severity: "warning",
+        code: "model/component-outside-container",
+        message: `${e.id} is a component ${where}, not inside a container. Move it into the container whose code it is part of, or make it a container if it runs or ships on its own.`,
+        element: e.id,
+        evidence: [],
+        files: e.location ? [e.location.file] : [],
+        location: e.location,
+      });
+    }
+    if (e.spec.kind === "code" && !within(e, "component")) {
+      out.push({
+        severity: "warning",
+        code: "model/code-outside-component",
+        message: `${e.id} is code ${where}, not inside a component. Move it into the component it is part of, or add a component for it.`,
+        element: e.id,
+        evidence: [],
+        files: e.location ? [e.location.file] : [],
+        location: e.location,
+      });
+    }
+  }
+  return out;
 }
 
 /** Maps file-level dependencies onto elements, and marks which the model declares. */
@@ -338,10 +381,14 @@ function orphans(model: Model): ElementNode[] {
       for (const t of [s.from, s.to]) if (t?.type === "element") mark(t.id);
     }
   }
+  // Code is a part of its component, judged with it: it needs no relationships of its own,
+  // and a component made only of code is still a leaf.
+  const isCode = (id: string) => model.elements.get(id)?.spec.kind === "code";
   return [...model.elements.values()].filter(
     (e) =>
       !touched.has(e.id) &&
-      e.childIds.length === 0 &&
+      e.spec.kind !== "code" &&
+      e.childIds.every(isCode) &&
       e.spec.kind !== "external" &&
       e.spec.status !== "planned" &&
       e.spec.status !== "deprecated",

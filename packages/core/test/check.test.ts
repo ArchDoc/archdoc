@@ -156,4 +156,39 @@ describe("check", () => {
     });
     expect(check(parts).findings.filter((f) => f.code === "rule/violation")).toEqual([]);
   });
+
+  it("flags a component outside a container, and code outside a component", () => {
+    const layered = model({
+      "archdoc.yaml": root(`
+        elements:
+          shop:
+            kind: system
+            elements:
+              api:
+                kind: container
+                uses: { loose: Calls it }
+                elements:
+                  orders:
+                    kind: component
+                    elements:
+                      place: { kind: code, code: { path: src/orders.ts, symbol: placeOrder } }
+                    uses: { stray: Calls it }
+                  stray: { kind: code }
+              loose: { kind: component, uses: { api: Calls it } }
+      `),
+    });
+    const found = check(layered)
+      .findings.filter((f) => f.code.startsWith("model/"))
+      .map((f) => `${f.code} ${f.element}`);
+    expect(found).toEqual(
+      expect.arrayContaining([
+        "model/component-outside-container shop.loose",
+        "model/code-outside-component shop.api.stray",
+      ]),
+    );
+    expect(found).not.toContain("model/code-outside-component shop.api.orders.place");
+    expect(found).not.toContain("model/component-outside-container shop.api.orders");
+    // Code needs no relationships of its own; its component is judged with it.
+    expect(found.filter((f) => f.startsWith("model/orphan-element"))).toEqual([]);
+  });
 });
