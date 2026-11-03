@@ -73,14 +73,32 @@ fix: Pass amount_cents through unchanged.
 
 In a repository with no `.archdoc/`, when the user asks you to model it (or to use ArchDoc):
 
-What `init` writes is a starting point, not a model: it knows the packages and their imports, not what they're for or who uses them. Steps 2 to 4 are the work, and they're done before you hand the model over, even when `archdoc_check` already passes.
+What `init` writes is raw material, not a model. It lists every package, directory, file, and import it finds, without knowing what they're for or who uses them. The model you hand over is one an engineer new to the repository can read top-down in ten minutes and use to find where things live. Steps 2 to 6 are that work. They usually take most of your turns. Do them before you hand the model over, even when `archdoc_check` already passes.
 
 1. **Start it.** Call `archdoc_init` (or run `archdoc init`). It writes `.archdoc/` from what the repository declares, every layer of it: a container per package, module, or code directory; inside each container, a component per code directory (or, in a flat package, per file); inside each component, code for its files, or a file's functions and classes (`kind: code`, `code: { path, symbol }`); datastores and queues from compose files; uses from imports, declared at the level where the two sides part (between containers, between the components of one container, or between the code of one component); and data and contracts from schema files. Everything is marked `provenance: { source: inferred }`. It never writes over a model.
-2. **Describe each element, layer by layer,** with the code open (`archdoc_show <id>` with `code: true`): what it does, not what it's called. Start with the containers, then the components inside each, then their code. Merge or split elements where the directories don't match how the system works, but keep the layers nested: a component inside a container, and code (a function, class, or file) inside a component. `archdoc_check` flags one that isn't.
-3. **Add actors**: who and what uses the system. Look for routes, CLIs, UIs, scheduled jobs, webhooks, and other services calling in.
-4. **Add the two or three journeys that matter most**, with `code:` on each step, so `archdoc_context` can point at them.
-5. **Check** with `archdoc_check` until it has no errors. Fix a warning only with what the code shows: an element nothing connects to is fine to leave or remove (build tooling often is), and a step that doesn't say what it sends can wait for `data:`. Never add a use or step you haven't seen in the code to quiet a warning; say what's left instead. Then ask the user to review the model. They accept facts by removing their `provenance` blocks. Once they have, `archdoc seal --all` starts keeping the model true.
-6. **Offer to open it.** Ask whether they'd like to see it, and if so, open the explorer for them (below).
+2. **Read how the project describes itself.** Read the README, any architecture or design docs, and the files that wire the system together: compose files, Kubernetes manifests, Helm charts, Terraform, an app host (.NET Aspire and the like), and the entry points (`cmd/`, `main`, `bin`). Note the parts they name and how those parts talk to each other. Those parts are your top-level elements, under the names the project uses.
+3. **Reshape it before you describe it.** Change init's structure until it matches those parts and these limits:
+   - **Keep each level small.** Aim for about 3 to 12 top-level elements, and about 3 to 10 children under each. A container is something that runs or ships on its own: a service, a binary, a web app, a worker, a published library. A component is one responsibility inside a container.
+   - **Fold away what's too fine.** Fold init's per-file `kind: code` elements into their component's `code:` glob. Keep a code element only for a file or function a newcomer has to find by name, such as an entry point or the core algorithm. Fold build and tooling config (`vite-config`, `eslint-config`, `jest-config`, `next-config`) into the element it configures.
+   - **Set aside what isn't the system.** Make test suites, benchmarks, examples, and code generators one element each, and say in the description what they're for, or leave them out. Never model vendored or generated code as architecture.
+   - **Group variants.** When one thing comes in many variants, make one element for the thing, and list the variants in its `technology` or as its children. Examples are the same server written in several languages, one client per framework, or one plugin per provider.
+   - **Rename what init named after build files.** IDs like `gson-parent-2` or `stripe-sample-app-3` become what the project calls the element. Fix `namespace` the same way.
+   - **Place shared code once.** When several binaries share library code, put it where a newcomer would look for it, and say in its description who uses it.
+4. **Add what init can't see.** Some things only show up in app hosts, manifests, Terraform, connection strings, and SDK clients. Add the datastores, queues, and external services you find there, each as its own element with `kind` and `technology`. Add each deployment definition (manifest, chart, Terraform module, app host) to the `code:` of the element it deploys or provisions. Add shared contracts (protobuf, OpenAPI) to the element that serves them. Then fix the uses:
+   - Put each use between the components whose code makes the call, not on their containers.
+   - Route messages through the queue (publisher to queue, consumer to queue), not straight from service to service.
+   - Point each use at the datastore or external it reaches.
+5. **Describe each element, top-down,** with the code open (`archdoc_show <id>` with `code: true`). Start with the containers, then the components inside each. Give each one or two sentences that say what it's responsible for, in the domain's terms, not what it's called or which files it has. Keep the layers nested: a component inside a container, and code inside a component. `archdoc_check` flags one that isn't.
+6. **Add actors and journeys.** Actors are who and what uses the system. Look for routes, CLIs, UIs, scheduled jobs, webhooks, and other services calling in. Then add the two or three journeys that matter most: the main flows a newcomer would trace, each step on a real element with `code:`, so `archdoc_context` can point at them.
+7. **Check** with `archdoc_check` until it has no errors. Fix a warning only with what the code shows. An element nothing connects to is fine to leave or remove (build tooling often is). A step that doesn't say what it sends can wait for `data:`. Never add a use or step you haven't seen in the code to quiet a warning; say what's left instead.
+8. **Check it's done** before you hand it over:
+   - Every level is within the limits in step 3.
+   - Every container and component has a description.
+   - The infrastructure is in.
+   - The main flows are journeys.
+
+   If you can't finish, say what's left. Then ask the user to review the model. They accept facts by removing their `provenance` blocks. Once they have, `archdoc seal --all` starts keeping the model true.
+9. **Offer to open it.** Ask whether they'd like to see it, and if so, open the explorer for them (below).
 
 ## Show the user the model
 
