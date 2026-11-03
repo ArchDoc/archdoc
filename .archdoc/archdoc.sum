@@ -3,8 +3,9 @@ sealVersion: 1
 seals:
   element:toolchain.agent-skills:
     kind: structure
-    hash: fnv-ec75748d6f744f4b
+    hash: fnv-4bbe8202346ab434
     files:
+      .agents/skills/archdoc/SKILL.md: []
       .claude-plugin/marketplace.json: []
       .claude/skills/archdoc/SKILL.md: []
       .mcp.json: []

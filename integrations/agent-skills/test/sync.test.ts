@@ -4,8 +4,9 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 describe("agent integrations", () => {
-  it("this repo uses the same skill it ships", () => {
-    expect(read("../../../.claude/skills/archdoc/SKILL.md")).toBe(
+  // Claude Code reads .claude/skills/; Codex and other agents read .agents/skills/.
+  it.each([".claude", ".agents"])("this repo's %s/skills/ has the same skill it ships", (dir) => {
+    expect(read(`../../../${dir}/skills/archdoc/SKILL.md`)).toBe(
       read("../../claude-plugin/skills/archdoc/SKILL.md"),
     );
   });
