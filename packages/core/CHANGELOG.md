@@ -1,5 +1,11 @@
 # @archdoc/core
 
+## 0.5.1
+
+### Patch Changes
+
+- @archdoc/spec@0.5.1
+
 ## 0.5.0
 
 ### Minor Changes
