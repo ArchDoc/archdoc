@@ -1,15 +1,26 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, posix } from "node:path";
-import { buildModel, isDevTooling, listRepoFiles, locate } from "@archdoc/core";
+import {
+  buildModel,
+  type CodeIndex,
+  isDevTooling,
+  listRepoFiles,
+  locate,
+  observedEdges,
+} from "@archdoc/core";
 import { parse, stringify } from "yaml";
 import { type AnalyzerContext, contextFor } from "./api.js";
 import { analyze } from "./run.js";
+import { indexCode } from "./symbols.js";
 
 /**
  * A starting model for a repository that has none, from what the repository
- * declares: packages and modules from their manifests, datastores and queues
- * from compose files, uses from the dependencies the analyzers see, and data
+ * declares: containers for packages and modules from their manifests,
+ * components for the directories (or, in a flat package, the files) inside
+ * each, and code for the files and functions inside each component;
+ * datastores and queues from compose files; uses, at every level, from the
+ * dependencies the analyzers see; and data
  * and contracts from schema files. Deterministic: no LLM, no network. Every
  * fact is marked inferred, for a person (or an agent) to review. What can't
  * be inferred (who uses the system, and how) is left for them to add.
@@ -18,7 +29,13 @@ export interface InitResult {
   /** Files to write, relative to the repository. */
   files: { path: string; text: string }[];
   stats: {
+    /** Containers. */
     elements: number;
+    /** Components inside the containers. */
+    components: number;
+    /** Code (files, functions, classes) inside the components. */
+    code: number;
+    /** Uses at every level: between containers, components, and code. */
     uses: number;
     datastores: number;
     contracts: number;
@@ -33,15 +50,17 @@ export interface InitResult {
 interface Unit {
   key: string;
   dir: string;
-  kind: "container" | "datastore" | "queue";
+  kind: "container" | "component" | "code" | "datastore" | "queue";
   description?: string | undefined;
   technology?: string | undefined;
   /** Code paths; datastores and queues from images have none. */
   code: string[];
+  /** The declaration a code element points at, in its one file. */
+  symbol?: string | undefined;
   uses: Map<string, string>;
   provides: string[];
   stores: Map<string, { entity: string }>;
-  /** Children, when one package is the whole repository. */
+  /** Children: a container's components, a component's code. */
   components: Unit[];
   source: string;
   /** Run by a compose file. */
@@ -91,26 +110,6 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
       name ?? (await rootName(ctx)) ?? basename(root),
     );
   }
-  const only = units.filter((u) => u.kind === "container");
-  if (only.length === 1 && only[0]) {
-    const whole = only[0];
-    const dirs = codeDirs(files, whole.dir);
-    // A flat layout, such as a Go module or a Python service: its packages sit at the top.
-    for (const dir of dirs.length ? dirs : topDirs(files, whole.dir)) {
-      whole.components.push({
-        key: sanitize(basename(dir)),
-        dir,
-        kind: "container",
-        code: [`${dir}/**`],
-        uses: new Map(),
-        provides: [],
-        stores: new Map(),
-        components: [],
-        source: "a code directory",
-      });
-    }
-  }
-
   // Build, release, and maintenance scripts at the top, which no package claims.
   for (const dir of ["scripts", "tools", "bin"]) {
     const inside = files.filter((f) => f.startsWith(`${dir}/`) && SOURCE.test(f));
@@ -119,19 +118,50 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     }
   }
 
+  // Components inside each container, and code inside each component.
+  const index = await indexCode(ctx).catch(
+    (): CodeIndex => ({ files: [...ctx.files], sources: [] }),
+  );
+  const exportsOf = new Map(index.sources.map((s) => [s.path, s.exports]));
+  for (const unit of units.filter((u) => u.kind === "container" && u.code.length)) {
+    const sources = files.filter(
+      (f) => isSource(f) && inside(unit.dir, f) && ownerOf(units, f) === unit,
+    );
+    unit.components = components(unit.dir, sources, exportsOf);
+  }
+
   // 2. Datastores, queues, and dependencies, from compose files.
   await compose(ctx, units, add);
 
-  // 3. Uses, from the dependencies analyzers see between the units' files.
-  const owner = (path: string) => ownerOf(units, path);
-  for (const d of await analyze(ctx)) {
-    if (isDevTooling(d)) continue;
-    const from = owner(d.from);
-    const to = owner(d.to);
-    if (!from || !to || from === to) continue;
-    // A package's files using its own directories isn't a use between elements.
-    if (from.components.includes(to) || to.components.includes(from)) continue;
-    if (!from.uses.has(to.key)) from.uses.set(to.key, `Imports ${d.specifier ?? to.key}`);
+  // 3. Uses, from the dependencies analyzers see, mapped onto the elements the
+  // way archdoc check maps them, and declared at the level where the two
+  // sides part: between containers, between the components of one container,
+  // or between the code of one component. check then finds every import declared.
+  const draft = buildModel(
+    [{ path: ".archdoc/archdoc.yaml", text: stringify(modelDoc("x", units), YAML) }],
+    {
+      root: ".archdoc/archdoc.yaml",
+    },
+  );
+  const byId = new Map<string, Unit>();
+  const walk = (list: Unit[], prefix: string) => {
+    for (const u of list) {
+      byId.set(`${prefix}${u.key}`, u);
+      walk(u.components, `${prefix}${u.key}.`);
+    }
+  };
+  walk(units, "");
+  const deps = (await analyze(ctx)).filter((d) => !isDevTooling(d));
+  for (const e of observedEdges(draft, deps)) {
+    if (e.declared) continue;
+    const a = e.from.split(".");
+    const b = e.to.split(".");
+    let n = 0;
+    while (a[n] === b[n]) n++;
+    const from = byId.get(a.slice(0, n + 1).join("."));
+    const to = byId.get(b.slice(0, n + 1).join("."));
+    if (!from || !to || from === to || from.uses.has(to.key)) continue;
+    from.uses.set(to.key, `Imports ${e.dependencies[0]?.specifier ?? to.key}`);
   }
 
   // 4. Data and contracts, from schema files.
@@ -161,13 +191,22 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
 
   const source = files.filter((f) => SOURCE.test(f) && !SKIP_DIR.test(f));
   const claimed = source.filter((f) => locate(model, f).element).length;
-  const all = units.flatMap((u) => [u, ...u.components]);
+  const all: Unit[] = [];
+  const flat = (list: Unit[]) => {
+    for (const u of list) {
+      all.push(u);
+      flat(u.components);
+    }
+  };
+  flat(units);
   return {
     files: files_,
     stats: {
       elements: all.filter((u) => u.kind === "container").length,
+      components: all.filter((u) => u.kind === "component").length,
+      code: all.filter((u) => u.kind === "code").length,
       uses: all.reduce((n, u) => n + u.uses.size, 0),
-      datastores: all.filter((u) => u.kind !== "container").length,
+      datastores: all.filter((u) => u.kind === "datastore" || u.kind === "queue").length,
       contracts: all.reduce((n, u) => n + u.provides.length, 0),
       data: Object.keys(data).length,
       coverage: { claimed, total: source.length },
@@ -209,7 +248,8 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
       : r.problems.length
         ? "✗ Wrote nothing: the model init inferred doesn't validate."
         : `Would write ${r.files.map((f) => f.path).join(" and ")}:`,
-    `  ${s.elements} element${s.elements === 1 ? "" : "s"}, ${s.uses} use${s.uses === 1 ? "" : "s"}, ${s.datastores} datastore${s.datastores === 1 ? "" : "s"} or queue${s.datastores === 1 ? "" : "s"}, ${s.contracts} contract${s.contracts === 1 ? "" : "s"}, ${s.data} data entr${s.data === 1 ? "y" : "ies"}`,
+    `  ${s.elements} container${s.elements === 1 ? "" : "s"}, ${s.components} component${s.components === 1 ? "" : "s"} in them, ${s.code} code element${s.code === 1 ? "" : "s"} in those`,
+    `  ${s.uses} use${s.uses === 1 ? "" : "s"}, ${s.datastores} datastore${s.datastores === 1 ? "" : "s"} or queue${s.datastores === 1 ? "" : "s"}, ${s.contracts} contract${s.contracts === 1 ? "" : "s"}, ${s.data} data entr${s.data === 1 ? "y" : "ies"}`,
     `  ${s.coverage.claimed} of ${s.coverage.total} source files (${pct}%) belong to an element`,
   ];
   for (const p of r.problems) out.push(`  ✗ ${p}`);
@@ -218,7 +258,9 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
       "",
       "Everything is marked inferred. Next, with the code open:",
       "  1. Describe each element: what it does, not what it's called (archdoc show <id> --code).",
-      "     Merge or split elements; a component can point at a symbol (code: { path, symbol }).",
+      "     Go layer by layer: containers, then the components inside each, then their code.",
+      "     Merge or split elements to match how the system works, but keep the layers nested:",
+      "     a component inside a container, code (kind: code, code: { path, symbol }) inside a component.",
       "  2. Add actors: who and what uses it (routes, CLIs, UIs, scheduled jobs, webhooks).",
       "  3. Add the two or three journeys that matter most, with code: on each step.",
       "  4. archdoc check until it's clean, then ask a person to review it in archdoc view.",
@@ -254,7 +296,8 @@ function modelDoc(namespace: string, units: Unit[]) {
     out.description =
       u.description ??
       `${capitalize(u.source)}${u.dir && !u.source.includes(u.dir) ? ` (${u.dir})` : ""}.`;
-    if (u.code.length) out.code = u.code.length === 1 ? u.code[0] : u.code;
+    if (u.symbol) out.code = { path: u.code[0], symbol: u.symbol };
+    else if (u.code.length) out.code = u.code.length === 1 ? u.code[0] : u.code;
     if (u.provides.length) out.provides = u.provides.map((api) => ({ api }));
     if (u.stores.size) out.stores = Object.fromEntries(u.stores);
     if (u.uses.size) {
@@ -438,6 +481,131 @@ async function directoryUnit(ctx: AnalyzerContext, dir: string): Promise<Omit<Fo
     technology = found.slice(0, 3).join(", ") || undefined;
   }
   return { dir, kind: "container", technology, description, code: [glob(dir)], source };
+}
+
+const TEST_FILE = /([._-](test|spec)\.[a-z]+$)|((^|\/)test_[^/]+\.py$)|(\.d\.ts$)/;
+/** Files that wire a package together rather than do one job: they stay with their container. */
+const ENTRY_FILE = /(^|\/)(index|main|mod|lib|bin|cli|__init__|__main__|conftest)\.[a-z]+$/;
+/** What a code element can point at: a function or a class. */
+const CALLABLE = new Set(["function", "class"]);
+
+function isSource(f: string): boolean {
+  return SOURCE.test(f) && !SKIP_DIR.test(f) && !TEST_FILE.test(f);
+}
+
+function inside(dir: string, f: string): boolean {
+  return !dir || f.startsWith(`${dir}/`);
+}
+
+type Exports = Map<string, { name: string; kind: string; line: number }[]>;
+
+/**
+ * A container's components: the directories its code is split into (looking
+ * through src/, lib/, internal/, and the like), or in a flat package, its
+ * files. Each component's code follows: its files, or a file's functions and
+ * classes. A container with one part has no components; files that wire it
+ * together (index.ts, main.go, __init__.py) stay with the container.
+ */
+function components(dir: string, sources: string[], exportsOf: Exports, depth = 0): Unit[] {
+  const prefix = dir ? `${dir}/` : "";
+  const dirs = new Map<string, string[]>();
+  const loose: string[] = [];
+  for (const f of sources) {
+    const parts = f.slice(prefix.length).split("/");
+    let i = 0;
+    while (i < parts.length - 1 && CODE_ROOTS.includes(parts[i] as string)) i++;
+    if (i === parts.length - 1) {
+      if (!ENTRY_FILE.test(f)) loose.push(f);
+      continue;
+    }
+    const top = parts[i] as string;
+    if (top.startsWith(".") || top.startsWith("_") || (!dir && top === "scripts")) continue;
+    const at = `${prefix}${parts.slice(0, i + 1).join("/")}`;
+    dirs.set(at, [...(dirs.get(at) ?? []), f]);
+  }
+  // One package inside, such as backend/app: its parts are one level down.
+  const [only] = dirs;
+  if (dirs.size === 1 && !loose.length && only && depth < 3) {
+    return components(only[0], only[1], exportsOf, depth + 1);
+  }
+  const keys = new Set<string>();
+  const key = (k: string) => uniqueIn(keys, k);
+  const out: Unit[] = [
+    ...[...dirs].map(([at, inside]) => ({
+      ...part(key(sanitize(basename(at))), at, "component", [`${at}/**`], "a code directory"),
+      components: filesAsCode(at, inside, exportsOf),
+    })),
+    // A flat package: each file is a part, and its functions and classes are its code.
+    ...(dirs.size >= 2
+      ? []
+      : loose.map((f) => ({
+          ...part(key(sanitize(stem(basename(f)))), f, "component", [f], "a source file"),
+          components: symbolsAsCode(f, exportsOf),
+        }))),
+  ];
+  return out.length >= 2 ? out.sort((a, b) => a.dir.localeCompare(b.dir)) : [];
+}
+
+/** A component directory's code: a code element per file, at its one function or class when it has one. */
+function filesAsCode(dir: string, files: string[], exportsOf: Exports): Unit[] {
+  const keys = new Set<string>();
+  return files
+    .filter((f) => !ENTRY_FILE.test(f))
+    .sort()
+    .map((f) => {
+      const callable = (exportsOf.get(f) ?? []).filter((x) => CALLABLE.has(x.kind));
+      const symbol = callable.length === 1 ? callable[0]?.name : undefined;
+      const k = uniqueIn(keys, sanitize(stem(f.slice(dir.length + 1)).replaceAll("/", "-")));
+      return { ...part(k, f, "code", [f], "a source file"), symbol };
+    });
+}
+
+/** A file component's code: its exported functions and classes, when it has more than one. */
+function symbolsAsCode(file: string, exportsOf: Exports): Unit[] {
+  const callable = (exportsOf.get(file) ?? [])
+    .filter((x) => CALLABLE.has(x.kind) && x.name !== "default")
+    .sort((a, b) => a.line - b.line);
+  if (callable.length < 2) return [];
+  const keys = new Set<string>();
+  return callable.map((x) => ({
+    ...part(
+      uniqueIn(keys, ID.test(x.name) ? x.name : sanitize(x.name)),
+      file,
+      "code",
+      [file],
+      `${x.kind} ${x.name}`,
+    ),
+    symbol: x.name,
+  }));
+}
+
+const ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+function part(key: string, dir: string, kind: Unit["kind"], code: string[], source: string): Unit {
+  return {
+    key,
+    dir,
+    kind,
+    code,
+    source,
+    uses: new Map(),
+    provides: [],
+    stores: new Map(),
+    components: [],
+  };
+}
+
+function uniqueIn(keys: Set<string>, key: string): string {
+  const base = key || "part";
+  let k = base;
+  for (let i = 2; keys.has(k); i++) k = `${base}-${i}`;
+  keys.add(k);
+  return k;
+}
+
+/** packages/core/src/check/check.ts → check. */
+function stem(path: string): string {
+  return path.replace(/\.[^./]+$/, "");
 }
 
 /** Datastores and queues from compose images; built services' dependencies as uses. */
@@ -668,32 +836,6 @@ function codeDirs(
     .sort();
 }
 
-/** Directories right under `under` that hold two source files, for layouts with no code roots. */
-function topDirs(files: readonly string[], under: string, depth = 0): string[] {
-  const prefix = under ? `${under}/` : "";
-  const counts = new Map<string, number>();
-  for (const f of files) {
-    const rest = f.slice(prefix.length);
-    if (!f.startsWith(prefix) || SKIP_DIR.test(rest) || !SOURCE.test(f)) continue;
-    const [top, ...more] = rest.split("/");
-    if (!more.length || !top || top.startsWith(".") || top.startsWith("_") || top === "scripts") {
-      continue;
-    }
-    counts.set(`${prefix}${top}`, (counts.get(`${prefix}${top}`) ?? 0) + 1);
-  }
-  const dirs = [...counts]
-    .filter(([, n]) => n >= 2)
-    .map(([d]) => d)
-    .sort();
-  // One package under the project, such as backend/app: its parts are one level down.
-  const [only] = dirs;
-  if (dirs.length === 1 && only && depth < 2) {
-    const inner = topDirs(files, only, depth + 1);
-    if (inner.length > 1) return inner;
-  }
-  return dirs;
-}
-
 /** The unit whose directory holds the path, most specific first. */
 function ownerOf(units: Unit[], path: string): Unit | undefined {
   let best: Unit | undefined;
@@ -795,6 +937,8 @@ function emptyResult(): InitResult {
     files: [],
     stats: {
       elements: 0,
+      components: 0,
+      code: 0,
       uses: 0,
       datastores: 0,
       contracts: 0,

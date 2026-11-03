@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildModel, loadModel, type Model } from "@archdoc/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { formatInit, inferModel, initModel } from "../src/index.js";
+import { checkRepository, formatInit, inferModel, initModel } from "../src/index.js";
 
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
 const org = join(repo, "examples/org");
@@ -195,7 +195,8 @@ describe("archdoc init on a Go service with compose and SQL migrations", () => {
   it("says what it found and what to do next", async () => {
     const out = formatInit({ ...(await inferModel(dir)), written: true });
     expect(out).toMatch(/^✓ Wrote \.archdoc\/archdoc\.yaml and \.archdoc\/data\.yaml\./);
-    expect(out).toContain("3 elements, 5 uses, 3 datastores or queues, 0 contracts, 1 data entry");
+    expect(out).toContain("3 containers, 0 components in them, 0 code elements in those");
+    expect(out).toContain("5 uses, 3 datastores or queues, 0 contracts, 1 data entry");
     expect(out).toContain("2. Add actors");
     expect(out).toContain("archdoc seal --all");
   });
@@ -227,7 +228,16 @@ describe("archdoc init on flat Go and Python layouts", () => {
     await w("common/db.go", 'package common\n\nimport "database/sql"\n');
     await w("common/errors.go", "package common\n");
     const { model } = await inferred(root);
-    expect([...model.elements.keys()].sort()).toEqual(["blog", "blog.articles", "blog.common"]);
+    const kinds = Object.fromEntries([...model.elements.values()].map((e) => [e.id, e.spec.kind]));
+    expect(kinds).toEqual({
+      blog: "container",
+      "blog.articles": "component",
+      "blog.articles.models": "code",
+      "blog.articles.routers": "code",
+      "blog.common": "component",
+      "blog.common.db": "code",
+      "blog.common.errors": "code",
+    });
     expect(uses(model)).toEqual(["blog.articles->blog.common"]);
   });
 
@@ -249,5 +259,91 @@ describe("archdoc init on flat Go and Python layouts", () => {
       false,
     );
     expect(uses(model)).toEqual(["app.api->app.core"]);
+  });
+});
+
+describe("archdoc init, layer by layer", () => {
+  let dir: string;
+  const write = async (path: string, text: string) => {
+    await mkdir(dirname(join(dir, path)), { recursive: true });
+    await writeFile(join(dir, path), text);
+  };
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), "archdoc-init-layers-"));
+    await write("package.json", JSON.stringify({ name: "shop", private: true }));
+    await write("pnpm-workspace.yaml", "packages: [apps/*, packages/*]\n");
+    await write("apps/web/package.json", JSON.stringify({ name: "@shop/web" }));
+    await write(
+      "apps/web/src/app.ts",
+      'import { placeOrder } from "@shop/api";\nexport const app = placeOrder;\n',
+    );
+    await write(
+      "packages/api/package.json",
+      JSON.stringify({ name: "@shop/api", main: "src/index.ts" }),
+    );
+    await write("packages/api/src/index.ts", 'export { placeOrder } from "./orders/place.js";\n');
+    await write(
+      "packages/api/src/orders/place.ts",
+      'import { login } from "../users/login.js";\nimport { price } from "./price.js";\nexport function placeOrder() {\n  return [login(), price()];\n}\n',
+    );
+    await write(
+      "packages/api/src/orders/price.ts",
+      "export function price() {}\nexport function tax() {}\n",
+    );
+    await write("packages/api/src/users/login.ts", "export function login() {}\n");
+    await write("packages/util/package.json", JSON.stringify({ name: "@shop/util" }));
+    await write("packages/util/src/strings.ts", "export function pad() {}\nexport class Slug {}\n");
+    await write(
+      "packages/util/src/dates.ts",
+      'import { pad } from "./strings.js";\nexport function day() {\n  return pad();\n}\n',
+    );
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["add", "."], { cwd: dir });
+  });
+  afterAll(() => rm(dir, { recursive: true, force: true }));
+
+  it("nests components in containers and code in components, with uses at every level", async () => {
+    const r = await initModel(dir);
+    expect(r.problems).toEqual([]);
+    const model = await loadModel(".", { cwd: dir });
+    const kinds = Object.fromEntries([...model.elements.values()].map((e) => [e.id, e.spec.kind]));
+    expect(kinds).toEqual({
+      web: "container",
+      api: "container",
+      "api.orders": "component",
+      "api.orders.place": "code",
+      "api.orders.price": "code",
+      "api.users": "component",
+      "api.users.login": "code",
+      util: "container",
+      // A flat package: its files are the components, their functions and classes the code.
+      "util.dates": "component",
+      "util.strings": "component",
+      "util.strings.pad": "code",
+      "util.strings.Slug": "code",
+    });
+    // A file with one function points at it; one with several leaves them to its component.
+    expect(model.elements.get("api.orders.place")?.code).toEqual([
+      { path: "packages/api/src/orders/place.ts", symbol: "placeOrder" },
+    ]);
+    expect(model.elements.get("api.orders.price")?.code).toEqual([
+      { path: "packages/api/src/orders/price.ts" },
+    ]);
+    const uses = model.relationships
+      .map((x) => `${"id" in x.from ? x.from.id : ""}->${"id" in x.to ? x.to.id : ""}`)
+      .sort();
+    expect(uses).toEqual([
+      "api.orders->api.users",
+      "api.orders.place->api.orders.price",
+      "util.dates->util.strings",
+      "web->api",
+    ]);
+    expect(r.stats).toMatchObject({ elements: 3, components: 4, code: 5, uses: 4 });
+
+    // check agrees: every import is declared, and every layer sits inside the one above it.
+    const checked = await checkRepository({ cwd: dir });
+    const codes = checked.findings.map((f) => `${f.code} ${f.element ?? ""}`);
+    expect(codes).toEqual([]);
   });
 });

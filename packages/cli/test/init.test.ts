@@ -55,7 +55,8 @@ describe("archdoc init", () => {
     const r = await run("init");
     expect(r.code).toBe(0);
     expect(r.out).toContain("✓ Wrote .archdoc/archdoc.yaml.");
-    expect(r.out).toContain("2 elements, 1 use");
+    expect(r.out).toContain("2 containers");
+    expect(r.out).toContain("1 use,");
     const yaml = await readFile(join(repo, ".archdoc/archdoc.yaml"), "utf8");
     expect(yaml).toContain("technology: TypeScript, React");
     expect((await run("validate")).code).toBe(0);

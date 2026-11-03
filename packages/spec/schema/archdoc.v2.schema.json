@@ -1994,7 +1994,8 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["system", "container", "component", "datastore", "queue", "external"]
+          "enum": ["system", "container", "component", "code", "datastore", "queue", "external"],
+          "description": "system, container (something that runs or ships), component (a part of a container), code (a function, class, or file inside a component), datastore, queue, or external"
         },
         "name": {
           "type": "string"
