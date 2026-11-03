@@ -302,7 +302,11 @@ async function oneRun(name, i) {
     writeFileSync(join(runDir, "score.txt"), `${formatScore(s, true)}\n`);
     run.score = summary(s);
     run.detail = s;
-    run.judge = await judged(name, dir, join(dir, ".archdoc"), found);
+    try {
+      run.judge = await judged(name, dir, join(dir, ".archdoc"), found);
+    } catch (e) {
+      run.error ??= `judge failed: ${e}`;
+    }
     if (run.judge) writeFileSync(join(runDir, "judge.json"), JSON.stringify(run.judge, null, 2));
   } else {
     run.error ??= "wrote no .archdoc/";

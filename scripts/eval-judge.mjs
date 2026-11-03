@@ -221,8 +221,8 @@ function prompt({ model, repo, reference, questions }) {
 function callJudge(text, claude) {
   const cwd = mkdtempSync(join(tmpdir(), "archdoc-judge-"));
   const args = [
+    // The prompt goes on stdin: a large model doesn't fit in argv.
     "-p",
-    text,
     "--model",
     JUDGE_MODEL,
     "--system-prompt",
@@ -241,7 +241,9 @@ function callJudge(text, claude) {
     JSON.stringify(schema),
   ];
   return new Promise((done) => {
-    const child = spawn(claude, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(claude, args, { cwd, stdio: ["pipe", "pipe", "pipe"] });
+    child.stdin.end(text);
+    child.on("error", (e) => done({ error: String(e) }));
     let out = "";
     let err = "";
     child.stdout.on("data", (d) => {
