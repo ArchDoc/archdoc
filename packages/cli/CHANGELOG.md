@@ -1,5 +1,22 @@
 # @archdoc/cli
 
+## 0.5.0
+
+### Minor Changes
+
+- 11662c5: `archdoc init` sweeps every layer: containers, the components inside each container (its code directories, or in a flat package its files), and the code inside each component (its files, or a file's functions and classes), with uses from imports declared at the level where the two sides part. The model format gains `kind: code` for that layer, and `archdoc check` warns about a component outside a container (`model/component-outside-container`) and code outside a component (`model/code-outside-component`). Code needs no relationships of its own, so it isn't reported as an orphan.
+
+### Patch Changes
+
+- Updated dependencies [b9c94bf]
+- Updated dependencies [11662c5]
+- Updated dependencies [c59e030]
+  - @archdoc/analyzers@0.5.0
+  - @archdoc/spec@0.5.0
+  - @archdoc/core@0.5.0
+  - @archdoc/mcp@0.5.0
+  - @archdoc/federation@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes
