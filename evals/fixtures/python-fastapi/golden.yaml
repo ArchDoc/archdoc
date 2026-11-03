@@ -1,0 +1,33 @@
+archdoc: "2.0"
+namespace: invoicing
+elements:
+  invoicing:
+    kind: container
+    technology: Python, FastAPI
+    description: Issues invoices and looks up customers.
+    code: "**"
+    uses: { db: Reads and writes invoices and customers }
+    elements:
+      api:
+        kind: component
+        description: The FastAPI app and its routers.
+        code: [invoicing/main.py, invoicing/api/**]
+        uses: { services: Issues invoices and finds customers }
+      services:
+        kind: component
+        description: Billing and customer lookups.
+        code: invoicing/services/**
+        uses: { models: Builds invoices, persistence: Opens sessions }
+      models:
+        kind: component
+        description: SQLAlchemy models for invoices and customers.
+        code: invoicing/models/**
+      persistence:
+        kind: component
+        description: The SQLAlchemy engine and sessions.
+        code: invoicing/db.py
+        uses: { db: Connects }
+  db:
+    kind: datastore
+    technology: PostgreSQL
+    description: Invoices and customers.

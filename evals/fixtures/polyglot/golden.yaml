@@ -1,0 +1,50 @@
+archdoc: "2.0"
+namespace: tickets
+elements:
+  tickets:
+    kind: system
+    description: Support tickets.
+    elements:
+      frontend:
+        kind: container
+        technology: TypeScript, React
+        description: Where people file and follow support tickets.
+        code: frontend/**
+        uses: { backend: Lists and opens tickets over HTTP }
+      backend:
+        kind: container
+        technology: Go
+        description: The tickets API.
+        code: backend/**
+        elements:
+          handlers:
+            kind: component
+            description: HTTP handlers and the server.
+            code: [backend/main.go, backend/http/**]
+            uses: { domain: Opens tickets }
+          domain:
+            kind: component
+            description: Opens and saves tickets.
+            code: backend/tickets/**
+            uses: { publisher: Publishes ticket.opened, postgres: Saves tickets }
+          publisher:
+            kind: component
+            description: Publishes to RabbitMQ.
+            code: backend/queue/**
+            uses: { rabbitmq: Publishes ticket.opened }
+      worker:
+        kind: container
+        technology: Python
+        description: Triages tickets as they're opened.
+        code: worker/**
+        uses:
+          rabbitmq: Consumes ticket.opened
+          postgres: Sets each ticket's priority
+      postgres:
+        kind: datastore
+        technology: PostgreSQL
+        description: Tickets.
+      rabbitmq:
+        kind: queue
+        technology: RabbitMQ
+        description: ticket.opened events.

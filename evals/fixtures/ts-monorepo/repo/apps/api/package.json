@@ -1,0 +1,10 @@
+{
+  "name": "@shop/api",
+  "description": "HTTP API for products and orders.",
+  "dependencies": {
+    "@shop/shared": "workspace:*",
+    "express": "^4.21.2",
+    "ioredis": "^5.4.2",
+    "pg": "^8.13.1"
+  }
+}

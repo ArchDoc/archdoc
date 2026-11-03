@@ -56,7 +56,7 @@ elements:
                 description: Loads archdoc.lock and the vendored models of other repos
           query:
             kind: component
-            description: Element, actor, and overview queries, search by words (and by file paths and symbols with a code index), impact (consumers, actors, journeys, owners, rules, and consumers and journeys in other repos), context briefs that rank the files and symbols to start a task in, eval scoring, and which experimental parts of the format a model uses.
+            description: Element, actor, and overview queries, search by words (and by file paths and symbols with a code index), impact (consumers, actors, journeys, owners, rules, and consumers and journeys in other repos), context briefs that rank the files and symbols to start a task in, eval scoring (of context briefs against past commits, and of a whole model against a golden one), and which experimental parts of the format a model uses.
             code: [{ path: packages/core/src/query/** }]
             uses:
               data:

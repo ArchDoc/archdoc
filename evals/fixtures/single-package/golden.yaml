@@ -1,0 +1,41 @@
+archdoc: "2.0"
+namespace: mdlint
+elements:
+  mdlint:
+    kind: container
+    technology: TypeScript, CLI
+    description: Lints Markdown files.
+    code: "**"
+    elements:
+      cli:
+        kind: component
+        description: The mdlint command and its subcommands.
+        code: src/cli.ts
+        uses: { commands: Runs check and fix }
+      commands:
+        kind: component
+        description: check reports problems; fix applies the fixes rules offer.
+        code: src/commands/**
+        uses:
+          config: Reads which rules are off
+          parser: Parses each file
+          rules: Runs the rules
+          render: Prints problems
+      parser:
+        kind: component
+        description: Turns Markdown into headings and links.
+        code: src/parser/**
+      rules:
+        kind: component
+        description: The lint rules.
+        code: src/rules/**
+        uses: { parser: Reads the parsed document, config: Skips rules turned off }
+      render:
+        kind: component
+        description: Prints problems.
+        code: src/render/**
+        uses: { rules: Prints the problems rules found }
+      config:
+        kind: component
+        description: Reads .mdlintrc.json.
+        code: src/config.ts

@@ -1,0 +1,11 @@
+{
+  "name": "mdlint",
+  "description": "Lints Markdown files.",
+  "bin": {
+    "mdlint": "dist/cli.js"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "micromark": "^4.0.1"
+  }
+}

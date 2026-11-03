@@ -13,3 +13,6 @@ packages/cli/web/
 
 # Worktrees that Claude Code agents create while working
 .claude/worktrees/
+
+# Agent eval runs (scripts/eval-agent.mjs)
+evals/results/
