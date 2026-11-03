@@ -73,6 +73,8 @@ const SKIP_DIR =
   /(^|\/)(node_modules|dist|build|out|target|vendor|coverage|\.git|\.archdoc|examples?|fixtures?|tests?|__tests__|testdata|templates?|docs?)(\/|$)/;
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs|go|rs|py|java|kt|rb|cs|php|swift|scala|ex|exs)$/;
 const CODE_ROOTS = ["apps", "services", "packages", "cmd", "libs", "lib", "src", "internal"];
+/** Where a package keeps its source, looked through to find its parts. */
+const SOURCE_ROOTS = ["src", "lib", "internal", "pkg"];
 /** Where a repository keeps what isn't an app or a library, but still ships. */
 const TOOL_ROOTS = ["integrations", "plugins", "extensions", "tools", "actions"];
 
@@ -501,8 +503,7 @@ type Exports = Map<string, { name: string; kind: string; line: number }[]>;
 
 /**
  * A container's components: the directories its code is split into (looking
- * through src/, lib/, internal/, and the like), or in a flat package, its
- * files. Each component's code follows: its files, or a file's functions and
+ * through src/, lib/, internal/, and the like), and the files beside them. Each component's code follows: its files, or a file's functions and
  * classes. A container with one part has no components; files that wire it
  * together (index.ts, main.go, __init__.py) stay with the container.
  */
@@ -513,7 +514,10 @@ function components(dir: string, sources: string[], exportsOf: Exports, depth = 
   for (const f of sources) {
     const parts = f.slice(prefix.length).split("/");
     let i = 0;
-    while (i < parts.length - 1 && CODE_ROOTS.includes(parts[i] as string)) i++;
+    // At the top of a repository, apps/ and services/ hold packages; inside a package,
+    // services/ is a part like any other, and only src/, lib/, and the like are looked through.
+    const roots = dir ? SOURCE_ROOTS : CODE_ROOTS;
+    while (i < parts.length - 1 && roots.includes(parts[i] as string)) i++;
     if (i === parts.length - 1) {
       if (!ENTRY_FILE.test(f)) loose.push(f);
       continue;
@@ -535,13 +539,12 @@ function components(dir: string, sources: string[], exportsOf: Exports, depth = 
       ...part(key(sanitize(basename(at))), at, "component", [`${at}/**`], "a code directory"),
       components: filesAsCode(at, inside, exportsOf),
     })),
-    // A flat package: each file is a part, and its functions and classes are its code.
-    ...(dirs.size >= 2
-      ? []
-      : loose.map((f) => ({
-          ...part(key(sanitize(stem(basename(f)))), f, "component", [f], "a source file"),
-          components: symbolsAsCode(f, exportsOf),
-        }))),
+    // A file beside the directories, or in a flat package: each is a part, and its functions
+    // and classes are its code.
+    ...loose.map((f) => ({
+      ...part(key(sanitize(stem(basename(f)))), f, "component", [f], "a source file"),
+      components: symbolsAsCode(f, exportsOf),
+    })),
   ];
   return out.length >= 2 ? out.sort((a, b) => a.dir.localeCompare(b.dir)) : [];
 }
