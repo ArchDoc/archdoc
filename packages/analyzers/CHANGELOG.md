@@ -1,5 +1,18 @@
 # @archdoc/analyzers
 
+## 0.5.0
+
+### Minor Changes
+
+- 11662c5: `archdoc init` sweeps every layer: containers, the components inside each container (its code directories, or in a flat package its files), and the code inside each component (its files, or a file's functions and classes), with uses from imports declared at the level where the two sides part. The model format gains `kind: code` for that layer, and `archdoc check` warns about a component outside a container (`model/component-outside-container`) and code outside a component (`model/code-outside-component`). Code needs no relationships of its own, so it isn't reported as an orphan.
+
+### Patch Changes
+
+- b9c94bf: `archdoc init` makes a `services/` (or `apps/`, `packages/`) directory inside a package a component, instead of looking through it as if it held packages, and makes the source files beside a package's directories (such as `db.py`) components too, so their code isn't left directly under the container. Files that wire a package together (`server.ts`, `app.py`, like `index.ts` and `main.go`) stay with the container.
+- Updated dependencies [11662c5]
+- Updated dependencies [c59e030]
+  - @archdoc/core@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes
