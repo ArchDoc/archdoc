@@ -16,3 +16,4 @@ packages/cli/web/
 
 # Agent eval runs (scripts/eval-agent.mjs)
 evals/results/
+evals/.cache/

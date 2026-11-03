@@ -1,0 +1,81 @@
+# What a Prometheus maintainer would agree on, not a full model. Scored for
+# recall: a model may go further than this and isn't marked down.
+archdoc: "2.0"
+namespace: prometheus
+elements:
+  prometheus:
+    kind: container
+    technology: Go
+    description: The Prometheus server, which scrapes targets, stores samples, evaluates rules, and serves queries.
+    code: [cmd/prometheus/**, scrape/**, discovery/**, tsdb/**, storage/**, promql/**, rules/**, notifier/**, web/*.go, web/api/**, config/**]
+    uses: { scrape-targets: Scrapes metrics over HTTP, alertmanager: Sends alerts, remote-endpoints: Writes and reads samples remotely }
+    elements:
+      scrape:
+        kind: component
+        description: Scrapes each target on its interval and appends the samples to storage.
+        code: scrape/**
+        uses: { storage: Appends samples, scrape-targets: Scrapes metrics }
+      discovery:
+        kind: component
+        description: Service discovery, which finds scrape targets and Alertmanagers from Kubernetes, Consul, files, clouds, and more.
+        code: discovery/**
+      tsdb:
+        kind: component
+        description: The local time series database, with the head block, WAL, compaction, and the index.
+        code: tsdb/**
+      storage:
+        kind: component
+        description: The storage interfaces and the fanout that sends reads and writes to local and remote storage.
+        code: storage/*.go
+        uses: { tsdb: Reads and writes local storage }
+      remote-storage:
+        kind: component
+        description: Remote write and remote read to external long-term storage.
+        code: storage/remote/**
+        uses: { remote-endpoints: Writes and reads samples }
+      promql:
+        kind: component
+        description: The PromQL parser and query engine.
+        code: promql/**
+        uses: { storage: Selects series }
+      rules:
+        kind: component
+        description: Evaluates recording and alerting rules on a schedule.
+        code: rules/**
+        uses: { promql: Evaluates rule expressions, storage: Writes recorded series, notifier: Sends firing alerts }
+      notifier:
+        kind: component
+        description: Queues alerts and sends them to Alertmanagers.
+        code: notifier/**
+        uses: { alertmanager: Posts alerts }
+      web-api:
+        kind: component
+        description: The HTTP server and the v1 API for queries, targets, rules, and metadata.
+        code: [web/*.go, web/api/**]
+        uses: { promql: Runs queries, storage: Reads series, rules: Lists rules and alerts, scrape: Lists targets }
+      config:
+        kind: component
+        description: Loads and validates prometheus.yml.
+        code: config/**
+  promtool:
+    kind: container
+    technology: Go
+    description: The command-line tool that checks config and rules, runs unit tests for rules, and inspects TSDB blocks.
+    code: cmd/promtool/**
+    uses: { promql: Tests queries, rules: Tests rules, tsdb: Inspects blocks, config: Checks config }
+  web-ui:
+    kind: container
+    technology: TypeScript, React
+    description: The web UI for querying, graphing, and viewing targets, rules, and alerts.
+    code: web/ui/**
+    uses: { web-api: Calls the HTTP API }
+  scrape-targets:
+    kind: external
+    description: The applications and exporters Prometheus scrapes.
+  alertmanager:
+    kind: external
+    technology: Alertmanager
+    description: Deduplicates, groups, and routes the alerts Prometheus sends.
+  remote-endpoints:
+    kind: external
+    description: Long-term storage systems that receive remote write and serve remote read.

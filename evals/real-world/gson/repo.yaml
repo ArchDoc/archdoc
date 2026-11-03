@@ -1,0 +1,9 @@
+# google/gson: the famous Java JSON library. A Maven multi-module build with
+# one core library, a few add-on modules, benchmarks, and test-only modules.
+# No services and no datastores: tests that a library gets sensible
+# components, not an invented deployment story. Init has no Java analyzer.
+url: https://github.com/google/gson
+ref: gson-parent-2.15.0
+commit: fcd416909db2bea96eb916bcfb2d0a83cb9b86c3
+maxTurns: 80
+maxBudgetUsd: 3

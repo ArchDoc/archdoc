@@ -1,0 +1,10 @@
+# GoogleCloudPlatform/microservices-demo (Online Boutique): Google's reference
+# microservices app. Eleven services in Go, C#, Node.js, Python, and Java that
+# talk gRPC, a load generator, Redis, and the infrastructure to run them all
+# in one repository: Kubernetes manifests, Helm, Kustomize, Skaffold, and
+# Terraform. The multi-service plus infrastructure case.
+url: https://github.com/GoogleCloudPlatform/microservices-demo
+ref: v0.10.7
+commit: 5b608cb1dfe317d05e4f1bb8c99b7618452fde87
+maxTurns: 100
+maxBudgetUsd: 4

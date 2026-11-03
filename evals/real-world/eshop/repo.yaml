@@ -1,0 +1,9 @@
+# dotnet/eShop: Microsoft's reference .NET app. A .NET Aspire host wires
+# several APIs, background processors, two web apps, a MAUI client, a
+# RabbitMQ event bus, Postgres, and Redis. Init has no C# analyzer, so this
+# measures how much the skill carries on its own.
+url: https://github.com/dotnet/eShop
+ref: main
+commit: 913acea66708a59595351174cee9b29f37179d29
+maxTurns: 100
+maxBudgetUsd: 4

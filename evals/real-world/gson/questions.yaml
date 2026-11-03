@@ -1,0 +1,13 @@
+# Questions a new contributor asks, with where the answer is in the code. The
+# judge answers each with one element from the model; it's a hit when that
+# element covers one of the paths.
+- ask: Where does Gson read and write fields of an arbitrary class by reflection?
+  paths: [gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java]
+- ask: Where is the low-level streaming JSON tokenizer?
+  paths: [gson/src/main/java/com/google/gson/stream/JsonReader.java]
+- ask: Where does Gson create instances of classes that have no no-argument constructor?
+  paths: [gson/src/main/java/com/google/gson/internal/ConstructorConstructor.java, gson/src/main/java/com/google/gson/internal/UnsafeAllocator.java]
+- ask: Where would I change how java.util.Date is serialized by default?
+  paths: [gson/src/main/java/com/google/gson/internal/bind/DefaultDateTypeAdapter.java]
+- ask: Where would I find an adapter for serializing a class hierarchy with a type field?
+  paths: [extras/src/main/java/com/google/gson/typeadapters/RuntimeTypeAdapterFactory.java]

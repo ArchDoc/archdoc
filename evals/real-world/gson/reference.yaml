@@ -1,0 +1,49 @@
+# What any Java engineer who knows Gson would agree on, not a full model.
+# Scored for recall: a model may go further than this and isn't marked down.
+archdoc: "2.0"
+namespace: gson
+elements:
+  gson:
+    kind: container
+    technology: Java library
+    description: The Gson library that converts Java objects to and from JSON.
+    code: [gson/pom.xml, gson/src/main/**]
+    elements:
+      api:
+        kind: component
+        description: The public API, Gson and GsonBuilder, TypeAdapter, and the JsonElement tree.
+        code: gson/src/main/java/com/google/gson/*.java
+        uses: { bind: Looks up type adapters, stream: Reads and writes JSON, internal: Excludes fields and constructs objects }
+      stream:
+        kind: component
+        description: The streaming JSON reader and writer every adapter reads and writes through.
+        code: gson/src/main/java/com/google/gson/stream/**
+      reflect:
+        kind: component
+        description: TypeToken, which captures generic types at runtime.
+        code: gson/src/main/java/com/google/gson/reflect/**
+      annotations:
+        kind: component
+        description: SerializedName, Expose, Since, Until, and JsonAdapter.
+        code: gson/src/main/java/com/google/gson/annotations/**
+      bind:
+        kind: component
+        description: The built-in type adapters, including the reflective adapter for arbitrary classes.
+        code: gson/src/main/java/com/google/gson/internal/bind/**
+        uses: { stream: Reads and writes tokens, internal: Constructs objects and checks exclusions, reflect: Resolves field types, annotations: Reads field annotations }
+      internal:
+        kind: component
+        description: Object construction, exclusion, type resolution, and other internals the adapters share.
+        code: [gson/src/main/java/com/google/gson/internal/*.java, gson/src/main/java/com/google/gson/internal/reflect/**, gson/src/main/java/com/google/gson/internal/sql/**]
+  extras:
+    kind: container
+    technology: Java library
+    description: Optional type adapters, such as RuntimeTypeAdapterFactory for polymorphic types, shipped separately.
+    code: extras/**
+    uses: { gson.api: Registers type adapter factories }
+  proto:
+    kind: container
+    technology: Java library
+    description: Type adapters for Protocol Buffers messages.
+    code: proto/**
+    uses: { gson.api: Registers type adapters }

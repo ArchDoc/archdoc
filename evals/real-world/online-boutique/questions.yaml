@@ -1,0 +1,10 @@
+- ask: Where is the order placed and the payment, shipping, and email calls orchestrated?
+  paths: [src/checkoutservice/main.go]
+- ask: Where would I change how carts are stored in Redis?
+  paths: [src/cartservice/src/cartstore/RedisCartStore.cs]
+- ask: Where are the gRPC service contracts defined?
+  paths: [protos/demo.proto]
+- ask: Where are the Kubernetes deployments for the services defined?
+  paths: [kubernetes-manifests/frontend.yaml, kubernetes-manifests/checkoutservice.yaml, helm-chart/templates/frontend.yaml]
+- ask: Where would I change how prices are converted between currencies?
+  paths: [src/currencyservice/server.js]
