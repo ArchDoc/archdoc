@@ -1,0 +1,6 @@
+services:
+  app:
+    build: .
+    depends_on: [db]
+  db:
+    image: postgres:16

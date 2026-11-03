@@ -1,0 +1,50 @@
+archdoc: "2.0"
+namespace: ledger
+elements:
+  ledger-api:
+    kind: container
+    technology: Go
+    description: HTTP API for accounts and postings.
+    code: cmd/ledger-api/**
+    uses: { accounts: Serves accounts, postings: Takes postings, events: Publishes posting.created }
+  ledger-worker:
+    kind: container
+    technology: Go
+    description: Settles postings as they're created.
+    code: cmd/ledger-worker/**
+    uses: { postings: Settles postings, events: Subscribes to posting.created }
+  ledger:
+    kind: container
+    technology: Go
+    description: The ledger's domain and storage, shared by the API and the worker.
+    code: [go.mod, internal/**]
+    elements:
+      accounts:
+        kind: component
+        description: Accounts and their balances.
+        code: internal/accounts/**
+        uses: { store: Reads accounts }
+      postings:
+        kind: component
+        description: Takes and settles postings.
+        code: internal/postings/**
+        uses: { store: Writes postings, events: Publishes posting.created }
+      store:
+        kind: component
+        description: The Postgres pool and queries.
+        code: internal/store/**
+        uses: { postgres: Reads and writes accounts and postings }
+      events:
+        kind: component
+        description: Publishes and subscribes on NATS.
+        code: internal/events/**
+        uses: { nats: Publishes and subscribes }
+  postgres:
+    kind: datastore
+    technology: PostgreSQL
+    description: Accounts and postings.
+    code: migrations/**
+  nats:
+    kind: queue
+    technology: NATS
+    description: posting.created events.

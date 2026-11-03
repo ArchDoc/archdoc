@@ -1,0 +1,4 @@
+{
+  "name": "@shop/shared",
+  "description": "Types and helpers the storefront and the API share."
+}

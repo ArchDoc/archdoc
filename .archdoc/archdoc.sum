@@ -497,7 +497,7 @@ seals:
         - parseYaml
   element:toolchain.core.query:
     kind: structure
-    hash: fnv-dedf9f11a0e12d55
+    hash: fnv-bba48204cc9956aa
     files:
       packages/core/src/query/code-index.ts:
         - CodeIndex
@@ -552,6 +552,13 @@ seals:
         - getElement
         - overview
         - resolveRef
+      packages/core/src/query/score.ts:
+        - ElementMatch
+        - Misnested
+        - ModelScore
+        - ScoreCount
+        - ScoreOptions
+        - scoreModel
       packages/core/src/query/search.ts:
         - SearchHit
         - search
@@ -561,10 +568,10 @@ seals:
         - sameWord
         - singular
         - splitIdentifier
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.core.report:
     kind: structure
-    hash: fnv-9511105a37c0f07a
+    hash: fnv-4b010faf2b077799
     files:
       packages/core/src/report/check-answer.ts:
         - CheckAnswerOptions
@@ -618,6 +625,8 @@ seals:
         - formatSimulation
         - impactToJSON
         - locatedToJSON
+      packages/core/src/report/score-report.ts:
+        - formatScore
       packages/core/src/report/seal-report.ts:
         - formatSealStatus
       packages/core/src/report/trace-report.ts:
@@ -629,7 +638,7 @@ seals:
         - TERMS
         - Term
         - counted
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.core.seals:
     kind: structure
     hash: fnv-9fb57c07c6d6bb63

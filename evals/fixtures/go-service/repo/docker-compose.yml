@@ -1,0 +1,11 @@
+services:
+  ledger-api:
+    build: { context: ., args: { CMD: ledger-api } }
+    depends_on: [postgres, nats]
+  ledger-worker:
+    build: { context: ., args: { CMD: ledger-worker } }
+    depends_on: [postgres, nats]
+  postgres:
+    image: postgres:16
+  nats:
+    image: nats:2.10
