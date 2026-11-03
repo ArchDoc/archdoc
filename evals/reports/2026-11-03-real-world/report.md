@@ -90,3 +90,48 @@ becoming components, and Maven module IDs from the parent's artifact ID.
   from the calling session.
 - Init-only judge scores exist for eshop and online-boutique only; the first
   run crashed before it judged init on the other three.
+
+## Second run: the skill reshapes before it describes
+
+After rewriting the skill's "No model yet" section (129fc43): read how the
+project describes itself, reshape to a small number of elements per level,
+group variants, add the infrastructure init can't see, and a done list. Same
+setup, one run each, $1.33 for the agents and $5.96 for judging.
+
+| Repository | Recall, run 1 → run 2 | Digestibility, run 1 → run 2 | Granularity | Infrastructure | Onboarding files | Turns | Agent cost |
+|---|---|---|---|---|---|---|---|
+| gson | 60% → **77%** | 36% → **64%** | 1 → **4** | 5 → 5 | 86 → **17** | 28 | $0.17 |
+| online-boutique | 78% → 79% | 50% → 46% | 3 → 3 | 1 → 1 | 11 → **4** | 22 | $0.38 |
+| eshop | 67% → 67% | 25% → 21% | 1 → 1 | 1 → 1 | 16 → 16 | 57 | $0.29 |
+| prometheus | 69% → 69% | 14% → **25%** | 1 → 1 | 1 → 2 | 88 → 88 | 54 | $0.25 |
+| stripe-accept-a-payment | 41% → 41% | 11% → **29%** | 1 → 2 | 1 → 1 | 26 → 25 | 19 | $0.24 |
+
+Mean digestibility 27% → 37%. Only gson was reshaped the way the skill now
+asks. The other runs show why:
+
+- **The model is too big to reshape by hand.** Init gave Prometheus 11
+  containers, 75 components, and 591 code elements, and eShop one container
+  with 22 components and 514 code elements. The agents described the top
+  layers and left the rest; restructuring that much YAML with edit calls is
+  more than they attempt. The Stripe agent, facing the same, rewrote the
+  file from scratch, which worked mechanically but still listed 28
+  containers, one per language variant.
+- **Init misreads C#.** eShop became a single container labeled TypeScript
+  (from the root package.json used for its end-to-end tests), so there were
+  no services to start from.
+- **Externals are missed.** The Stripe agent modeled Stripe as an actor,
+  saying the schema has no kind for it; `kind: external` exists.
+- **The agents still stop at a passing check**, after 19 to 57 turns and
+  under $0.40, even with the done list. Two said outright they wrote
+  descriptions without opening the code.
+
+Next, in order of what they'd move:
+
+1. Init: on a large repository, don't emit per-file code elements, and don't
+   make build-config files components, so the starting model is small enough
+   to reshape. Don't take a root package.json used only for tests as the
+   system's container.
+2. Skill: when init's model is larger than the limits, write a new
+   `archdoc.yaml` with the structure from step 2 rather than editing init's;
+   name `kind: external` for third-party services; and make the done list a
+   check the agent runs, not a paragraph.
