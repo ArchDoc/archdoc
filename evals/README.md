@@ -59,7 +59,8 @@ checkout, and scores the `.archdoc/` it writes, next to what init alone
 scores. The agent may use the file tools, the archdoc tools, and Bash for
 `archdoc`, `git status`, `git diff`, and `ls`, and nothing else. Results go to
 `evals/results/<time>/` (ignored by git): `report.md`, `results.json`, and
-each run's model, transcript, and `score.txt` with what it missed.
+each run's model, transcript, and `score.txt` with what it missed. Reports
+worth keeping go in `evals/reports/<date>/`.
 
 ## Adding a fixture
 

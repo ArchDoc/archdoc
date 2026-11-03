@@ -1,0 +1,2012 @@
+{
+  "prompt": "Model this repository's architecture with ArchDoc. It has no .archdoc/ yet. Follow the archdoc skill's workflow for a repository with no model, through archdoc check. Nobody is here to answer questions or review it: don't ask, and don't open the explorer. Stop when the model is done.",
+  "runs": 3,
+  "fixtures": [
+    {
+      "fixture": "go-service",
+      "runs": 3,
+      "scored": 3,
+      "init": {
+        "overall": 0.8754901960784315,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 0.3529411764705882,
+        "nesting": 1,
+        "code": 0.9,
+        "errors": 0
+      },
+      "agent": {
+        "overall": 0.8901465636759754,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 0.4408793820558527,
+        "nesting": 1,
+        "code": 0.9
+      },
+      "range": [0.8722222222222222, 0.9227272727272728],
+      "errors": 0,
+      "cost": 0.2503630666666667,
+      "turns": 23.666666666666668
+    },
+    {
+      "fixture": "polyglot",
+      "runs": 3,
+      "scored": 3,
+      "init": {
+        "overall": 0.872893772893773,
+        "containers": 1,
+        "components": 0.6,
+        "datastores": 1,
+        "uses": 0.7142857142857143,
+        "nesting": 1,
+        "code": 0.9230769230769231,
+        "errors": 0
+      },
+      "agent": {
+        "overall": 0.872893772893773,
+        "containers": 1,
+        "components": 0.6,
+        "datastores": 1,
+        "uses": 0.7142857142857143,
+        "nesting": 1,
+        "code": 0.923076923076923
+      },
+      "range": [0.872893772893773, 0.872893772893773],
+      "errors": 0,
+      "cost": 0.22458146666666667,
+      "turns": 21.666666666666668
+    },
+    {
+      "fixture": "python-fastapi",
+      "runs": 3,
+      "scored": 3,
+      "init": {
+        "overall": 0.9686609686609687,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 0.888888888888889,
+        "nesting": 1,
+        "code": 0.9230769230769231,
+        "errors": 0
+      },
+      "agent": {
+        "overall": 0.9871794871794872,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 1,
+        "nesting": 1,
+        "code": 0.923076923076923
+      },
+      "range": [0.9871794871794872, 0.9871794871794872],
+      "errors": 0,
+      "cost": 0.2324134,
+      "turns": 33.333333333333336
+    },
+    {
+      "fixture": "single-package",
+      "runs": 3,
+      "scored": 3,
+      "init": {
+        "overall": 0.9684848484848485,
+        "containers": 1,
+        "components": 0.9090909090909091,
+        "datastores": 1,
+        "uses": 0.9333333333333333,
+        "nesting": 1,
+        "code": 1,
+        "errors": 0
+      },
+      "agent": {
+        "overall": 0.978989898989899,
+        "containers": 1,
+        "components": 0.9393939393939394,
+        "datastores": 1,
+        "uses": 0.9555555555555556,
+        "nesting": 1,
+        "code": 1
+      },
+      "range": [0.9684848484848485, 1],
+      "errors": 0,
+      "cost": 0.21406689999999998,
+      "turns": 24.666666666666668
+    },
+    {
+      "fixture": "ts-monorepo",
+      "runs": 3,
+      "scored": 3,
+      "init": {
+        "overall": 0.9116612554112554,
+        "containers": 1,
+        "components": 0.7142857142857143,
+        "datastores": 1,
+        "uses": 0.8181818181818182,
+        "nesting": 1,
+        "code": 0.9375,
+        "errors": 0
+      },
+      "agent": {
+        "overall": 0.9116612554112554,
+        "containers": 1,
+        "components": 0.7142857142857143,
+        "datastores": 1,
+        "uses": 0.8181818181818182,
+        "nesting": 1,
+        "code": 0.9375
+      },
+      "range": [0.9116612554112554, 0.9116612554112554],
+      "errors": 0,
+      "cost": 0.2350369,
+      "turns": 29.333333333333332
+    }
+  ],
+  "results": [
+    {
+      "fixture": "go-service",
+      "run": 2,
+      "ms": 54490,
+      "turns": 29,
+      "cost": 0.24749150000000003,
+      "score": {
+        "overall": 0.9227272727272728,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 0.6363636363636365,
+        "nesting": 1,
+        "code": 0.9,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 3,
+          "found": 3,
+          "matched": 3,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 4,
+          "found": 4,
+          "matched": 4,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "datastores": {
+          "expected": 2,
+          "found": 2,
+          "matched": 2,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 10,
+          "found": 12,
+          "matched": 7,
+          "precision": 0.5833333333333334,
+          "recall": 0.7,
+          "f1": 0.6363636363636365
+        },
+        "nesting": {
+          "checked": 9,
+          "correct": 9,
+          "ratio": 1
+        },
+        "code": {
+          "total": 10,
+          "covered": 10,
+          "placed": 9,
+          "coverage": 1,
+          "accuracy": 0.9
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.9227272727272728,
+        "matches": [
+          {
+            "golden": "ledger-api",
+            "found": "ledger-api",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger-worker",
+            "found": "ledger-worker",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.accounts",
+            "found": "ledger.accounts",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.events",
+            "found": "ledger.events",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.postings",
+            "found": "ledger.postings",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.store",
+            "found": "ledger.store",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger",
+            "found": "ledger",
+            "overlap": 0.875,
+            "sameKind": true
+          },
+          {
+            "golden": "postgres",
+            "found": "postgres",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "nats",
+            "found": "nats",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [],
+        "misnested": [],
+        "missedUses": [
+          "ledger-api -> ledger.events",
+          "ledger-worker -> ledger.events",
+          "ledger.store -> postgres"
+        ],
+        "extraUses": [
+          "ledger -> nats",
+          "ledger -> postgres",
+          "ledger-api -> ledger",
+          "ledger-worker -> ledger",
+          "ledger-worker -> nats"
+        ]
+      }
+    },
+    {
+      "fixture": "go-service",
+      "run": 1,
+      "ms": 59891,
+      "turns": 21,
+      "cost": 0.238196,
+      "score": {
+        "overall": 0.8722222222222222,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 0.33333333333333326,
+        "nesting": 1,
+        "code": 0.9,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 3,
+          "found": 3,
+          "matched": 3,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 4,
+          "found": 4,
+          "matched": 4,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "datastores": {
+          "expected": 2,
+          "found": 2,
+          "matched": 2,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 10,
+          "found": 8,
+          "matched": 3,
+          "precision": 0.375,
+          "recall": 0.3,
+          "f1": 0.33333333333333326
+        },
+        "nesting": {
+          "checked": 9,
+          "correct": 9,
+          "ratio": 1
+        },
+        "code": {
+          "total": 10,
+          "covered": 10,
+          "placed": 9,
+          "coverage": 1,
+          "accuracy": 0.9
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.8722222222222222,
+        "matches": [
+          {
+            "golden": "ledger-api",
+            "found": "ledger-api",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger-worker",
+            "found": "ledger-worker",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.accounts",
+            "found": "ledger.accounts",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.events",
+            "found": "ledger.events",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.postings",
+            "found": "ledger.postings",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.store",
+            "found": "ledger.store",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger",
+            "found": "ledger",
+            "overlap": 0.875,
+            "sameKind": true
+          },
+          {
+            "golden": "postgres",
+            "found": "postgres",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "nats",
+            "found": "nats",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [],
+        "misnested": [],
+        "missedUses": [
+          "ledger-api -> ledger.accounts",
+          "ledger-api -> ledger.events",
+          "ledger-api -> ledger.postings",
+          "ledger-worker -> ledger.events",
+          "ledger-worker -> ledger.postings",
+          "ledger.events -> nats",
+          "ledger.store -> postgres"
+        ],
+        "extraUses": [
+          "ledger -> nats",
+          "ledger -> postgres",
+          "ledger-api -> ledger",
+          "ledger-worker -> ledger",
+          "ledger-worker -> nats"
+        ]
+      }
+    },
+    {
+      "fixture": "go-service",
+      "run": 3,
+      "ms": 79480,
+      "turns": 21,
+      "cost": 0.2654017,
+      "score": {
+        "overall": 0.8754901960784315,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 0.3529411764705882,
+        "nesting": 1,
+        "code": 0.9,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 3,
+          "found": 3,
+          "matched": 3,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 4,
+          "found": 4,
+          "matched": 4,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "datastores": {
+          "expected": 2,
+          "found": 2,
+          "matched": 2,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 10,
+          "found": 7,
+          "matched": 3,
+          "precision": 0.42857142857142855,
+          "recall": 0.3,
+          "f1": 0.3529411764705882
+        },
+        "nesting": {
+          "checked": 9,
+          "correct": 9,
+          "ratio": 1
+        },
+        "code": {
+          "total": 10,
+          "covered": 10,
+          "placed": 9,
+          "coverage": 1,
+          "accuracy": 0.9
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.8754901960784315,
+        "matches": [
+          {
+            "golden": "ledger-api",
+            "found": "ledger-api",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger-worker",
+            "found": "ledger-worker",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.accounts",
+            "found": "ledger.accounts",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.events",
+            "found": "ledger.events",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.postings",
+            "found": "ledger.postings",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger.store",
+            "found": "ledger.store",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "ledger",
+            "found": "ledger",
+            "overlap": 0.875,
+            "sameKind": true
+          },
+          {
+            "golden": "postgres",
+            "found": "postgres",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "nats",
+            "found": "nats",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [],
+        "misnested": [],
+        "missedUses": [
+          "ledger-api -> ledger.accounts",
+          "ledger-api -> ledger.events",
+          "ledger-api -> ledger.postings",
+          "ledger-worker -> ledger.events",
+          "ledger-worker -> ledger.postings",
+          "ledger.events -> nats",
+          "ledger.store -> postgres"
+        ],
+        "extraUses": [
+          "ledger -> nats",
+          "ledger -> postgres",
+          "ledger-api -> ledger",
+          "ledger-worker -> ledger"
+        ]
+      }
+    },
+    {
+      "fixture": "polyglot",
+      "run": 1,
+      "ms": 61105,
+      "turns": 15,
+      "cost": 0.19599160000000004,
+      "score": {
+        "overall": 0.872893772893773,
+        "containers": 1,
+        "components": 0.6,
+        "datastores": 1,
+        "uses": 0.7142857142857143,
+        "nesting": 1,
+        "code": 0.9230769230769231,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 3,
+          "found": 3,
+          "matched": 3,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 3,
+          "found": 7,
+          "matched": 3,
+          "precision": 0.42857142857142855,
+          "recall": 1,
+          "f1": 0.6
+        },
+        "datastores": {
+          "expected": 2,
+          "found": 2,
+          "matched": 2,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 7,
+          "found": 7,
+          "matched": 5,
+          "precision": 0.7142857142857143,
+          "recall": 0.7142857142857143,
+          "f1": 0.7142857142857143
+        },
+        "nesting": {
+          "checked": 8,
+          "correct": 8,
+          "ratio": 1
+        },
+        "code": {
+          "total": 13,
+          "covered": 13,
+          "placed": 12,
+          "coverage": 1,
+          "accuracy": 0.9230769230769231
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.872893772893773,
+        "matches": [
+          {
+            "golden": "tickets.backend",
+            "found": "tickets",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.backend.domain",
+            "found": "tickets.tickets",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.backend.publisher",
+            "found": "tickets.queue",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.frontend",
+            "found": "tickets-frontend",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.worker",
+            "found": "tickets-worker",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.backend.handlers",
+            "found": "tickets.http",
+            "overlap": 0.6666666666666666,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.postgres",
+            "found": "postgres",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.rabbitmq",
+            "found": "rabbitmq",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [
+          "tickets-frontend.client",
+          "tickets-frontend.tickets",
+          "tickets-worker.consume",
+          "tickets-worker.triage"
+        ],
+        "misnested": [],
+        "missedUses": [
+          "tickets.backend.domain -> tickets.postgres",
+          "tickets.backend.publisher -> tickets.rabbitmq"
+        ],
+        "extraUses": ["tickets -> postgres", "tickets -> rabbitmq"]
+      }
+    },
+    {
+      "fixture": "polyglot",
+      "run": 2,
+      "ms": 61681,
+      "turns": 34,
+      "cost": 0.2688242,
+      "score": {
+        "overall": 0.872893772893773,
+        "containers": 1,
+        "components": 0.6,
+        "datastores": 1,
+        "uses": 0.7142857142857143,
+        "nesting": 1,
+        "code": 0.9230769230769231,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 3,
+          "found": 3,
+          "matched": 3,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 3,
+          "found": 7,
+          "matched": 3,
+          "precision": 0.42857142857142855,
+          "recall": 1,
+          "f1": 0.6
+        },
+        "datastores": {
+          "expected": 2,
+          "found": 2,
+          "matched": 2,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 7,
+          "found": 7,
+          "matched": 5,
+          "precision": 0.7142857142857143,
+          "recall": 0.7142857142857143,
+          "f1": 0.7142857142857143
+        },
+        "nesting": {
+          "checked": 8,
+          "correct": 8,
+          "ratio": 1
+        },
+        "code": {
+          "total": 13,
+          "covered": 13,
+          "placed": 12,
+          "coverage": 1,
+          "accuracy": 0.9230769230769231
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.872893772893773,
+        "matches": [
+          {
+            "golden": "tickets.backend",
+            "found": "tickets",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.backend.domain",
+            "found": "tickets.tickets",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.backend.publisher",
+            "found": "tickets.queue",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.frontend",
+            "found": "tickets-frontend",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.worker",
+            "found": "tickets-worker",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.backend.handlers",
+            "found": "tickets.http",
+            "overlap": 0.6666666666666666,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.postgres",
+            "found": "postgres",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.rabbitmq",
+            "found": "rabbitmq",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [
+          "tickets-frontend.client",
+          "tickets-frontend.tickets",
+          "tickets-worker.consume",
+          "tickets-worker.triage"
+        ],
+        "misnested": [],
+        "missedUses": [
+          "tickets.backend.domain -> tickets.postgres",
+          "tickets.backend.publisher -> tickets.rabbitmq"
+        ],
+        "extraUses": ["tickets -> postgres", "tickets -> rabbitmq"]
+      }
+    },
+    {
+      "fixture": "polyglot",
+      "run": 3,
+      "ms": 47336,
+      "turns": 16,
+      "cost": 0.2089286,
+      "score": {
+        "overall": 0.872893772893773,
+        "containers": 1,
+        "components": 0.6,
+        "datastores": 1,
+        "uses": 0.7142857142857143,
+        "nesting": 1,
+        "code": 0.9230769230769231,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 3,
+          "found": 3,
+          "matched": 3,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 3,
+          "found": 7,
+          "matched": 3,
+          "precision": 0.42857142857142855,
+          "recall": 1,
+          "f1": 0.6
+        },
+        "datastores": {
+          "expected": 2,
+          "found": 2,
+          "matched": 2,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 7,
+          "found": 7,
+          "matched": 5,
+          "precision": 0.7142857142857143,
+          "recall": 0.7142857142857143,
+          "f1": 0.7142857142857143
+        },
+        "nesting": {
+          "checked": 8,
+          "correct": 8,
+          "ratio": 1
+        },
+        "code": {
+          "total": 13,
+          "covered": 13,
+          "placed": 12,
+          "coverage": 1,
+          "accuracy": 0.9230769230769231
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.872893772893773,
+        "matches": [
+          {
+            "golden": "tickets.backend",
+            "found": "tickets",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.backend.domain",
+            "found": "tickets.tickets",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.backend.publisher",
+            "found": "tickets.queue",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.frontend",
+            "found": "tickets-frontend",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.worker",
+            "found": "tickets-worker",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.backend.handlers",
+            "found": "tickets.http",
+            "overlap": 0.6666666666666666,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.postgres",
+            "found": "postgres",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "tickets.rabbitmq",
+            "found": "rabbitmq",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [
+          "tickets-frontend.client",
+          "tickets-frontend.tickets",
+          "tickets-worker.consume",
+          "tickets-worker.triage"
+        ],
+        "misnested": [],
+        "missedUses": [
+          "tickets.backend.domain -> tickets.postgres",
+          "tickets.backend.publisher -> tickets.rabbitmq"
+        ],
+        "extraUses": ["tickets -> postgres", "tickets -> rabbitmq"]
+      }
+    },
+    {
+      "fixture": "python-fastapi",
+      "run": 2,
+      "ms": 48459,
+      "turns": 26,
+      "cost": 0.2144627,
+      "score": {
+        "overall": 0.9871794871794872,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 1,
+        "nesting": 1,
+        "code": 0.9230769230769231,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 1,
+          "found": 1,
+          "matched": 1,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 4,
+          "found": 4,
+          "matched": 4,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "datastores": {
+          "expected": 1,
+          "found": 1,
+          "matched": 1,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 5,
+          "found": 5,
+          "matched": 5,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "nesting": {
+          "checked": 6,
+          "correct": 6,
+          "ratio": 1
+        },
+        "code": {
+          "total": 13,
+          "covered": 13,
+          "placed": 12,
+          "coverage": 1,
+          "accuracy": 0.9230769230769231
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.9871794871794872,
+        "matches": [
+          {
+            "golden": "invoicing",
+            "found": "invoicing",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.models",
+            "found": "invoicing.models",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.services",
+            "found": "invoicing.services",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.persistence",
+            "found": "invoicing.db",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.api",
+            "found": "invoicing.api",
+            "overlap": 0.75,
+            "sameKind": true
+          },
+          {
+            "golden": "db",
+            "found": "postgres",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [],
+        "misnested": [],
+        "missedUses": [],
+        "extraUses": []
+      }
+    },
+    {
+      "fixture": "python-fastapi",
+      "run": 3,
+      "ms": 50757,
+      "turns": 35,
+      "cost": 0.22964250000000003,
+      "score": {
+        "overall": 0.9871794871794872,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 1,
+        "nesting": 1,
+        "code": 0.9230769230769231,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 1,
+          "found": 1,
+          "matched": 1,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 4,
+          "found": 4,
+          "matched": 4,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "datastores": {
+          "expected": 1,
+          "found": 1,
+          "matched": 1,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 5,
+          "found": 5,
+          "matched": 5,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "nesting": {
+          "checked": 6,
+          "correct": 6,
+          "ratio": 1
+        },
+        "code": {
+          "total": 13,
+          "covered": 13,
+          "placed": 12,
+          "coverage": 1,
+          "accuracy": 0.9230769230769231
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.9871794871794872,
+        "matches": [
+          {
+            "golden": "invoicing",
+            "found": "invoicing",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.models",
+            "found": "invoicing.models",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.services",
+            "found": "invoicing.services",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.persistence",
+            "found": "invoicing.db",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.api",
+            "found": "invoicing.api",
+            "overlap": 0.75,
+            "sameKind": true
+          },
+          {
+            "golden": "db",
+            "found": "postgres",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [],
+        "misnested": [],
+        "missedUses": [],
+        "extraUses": []
+      }
+    },
+    {
+      "fixture": "python-fastapi",
+      "run": 1,
+      "ms": 79617,
+      "turns": 39,
+      "cost": 0.253135,
+      "score": {
+        "overall": 0.9871794871794872,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 1,
+        "nesting": 1,
+        "code": 0.9230769230769231,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 1,
+          "found": 1,
+          "matched": 1,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 4,
+          "found": 4,
+          "matched": 4,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "datastores": {
+          "expected": 1,
+          "found": 1,
+          "matched": 1,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 5,
+          "found": 5,
+          "matched": 5,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "nesting": {
+          "checked": 6,
+          "correct": 6,
+          "ratio": 1
+        },
+        "code": {
+          "total": 13,
+          "covered": 13,
+          "placed": 12,
+          "coverage": 1,
+          "accuracy": 0.9230769230769231
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.9871794871794872,
+        "matches": [
+          {
+            "golden": "invoicing",
+            "found": "invoicing",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.models",
+            "found": "invoicing.models",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.services",
+            "found": "invoicing.services",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.persistence",
+            "found": "invoicing.db",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "invoicing.api",
+            "found": "invoicing.api",
+            "overlap": 0.75,
+            "sameKind": true
+          },
+          {
+            "golden": "db",
+            "found": "postgres",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [],
+        "misnested": [],
+        "missedUses": [],
+        "extraUses": []
+      }
+    },
+    {
+      "fixture": "single-package",
+      "run": 1,
+      "ms": 51328,
+      "turns": 30,
+      "cost": 0.2339832,
+      "score": {
+        "overall": 1,
+        "containers": 1,
+        "components": 1,
+        "datastores": 1,
+        "uses": 1,
+        "nesting": 1,
+        "code": 1,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 1,
+          "found": 1,
+          "matched": 1,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 6,
+          "found": 6,
+          "matched": 6,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "datastores": {
+          "expected": 0,
+          "found": 0,
+          "matched": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 8,
+          "found": 8,
+          "matched": 8,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "nesting": {
+          "checked": 7,
+          "correct": 7,
+          "ratio": 1
+        },
+        "code": {
+          "total": 10,
+          "covered": 10,
+          "placed": 10,
+          "coverage": 1,
+          "accuracy": 1
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 1,
+        "matches": [
+          {
+            "golden": "mdlint",
+            "found": "mdlint",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.cli",
+            "found": "mdlint.cli",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.commands",
+            "found": "mdlint.commands",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.config",
+            "found": "mdlint.config",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.parser",
+            "found": "mdlint.parser",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.render",
+            "found": "mdlint.render",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.rules",
+            "found": "mdlint.rules",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": [],
+        "misnested": [],
+        "missedUses": [],
+        "extraUses": []
+      }
+    },
+    {
+      "fixture": "single-package",
+      "run": 2,
+      "ms": 57061,
+      "turns": 19,
+      "cost": 0.20553569999999996,
+      "score": {
+        "overall": 0.9684848484848485,
+        "containers": 1,
+        "components": 0.9090909090909091,
+        "datastores": 1,
+        "uses": 0.9333333333333333,
+        "nesting": 1,
+        "code": 1,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 1,
+          "found": 1,
+          "matched": 1,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 6,
+          "found": 5,
+          "matched": 5,
+          "precision": 1,
+          "recall": 0.8333333333333334,
+          "f1": 0.9090909090909091
+        },
+        "datastores": {
+          "expected": 0,
+          "found": 0,
+          "matched": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 8,
+          "found": 7,
+          "matched": 7,
+          "precision": 1,
+          "recall": 0.875,
+          "f1": 0.9333333333333333
+        },
+        "nesting": {
+          "checked": 6,
+          "correct": 6,
+          "ratio": 1
+        },
+        "code": {
+          "total": 10,
+          "covered": 10,
+          "placed": 10,
+          "coverage": 1,
+          "accuracy": 1
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.9684848484848485,
+        "matches": [
+          {
+            "golden": "mdlint",
+            "found": "mdlint",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.commands",
+            "found": "mdlint.commands",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.config",
+            "found": "mdlint.config",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.parser",
+            "found": "mdlint.parser",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.render",
+            "found": "mdlint.render",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.rules",
+            "found": "mdlint.rules",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": ["mdlint.cli"],
+        "extra": [],
+        "misnested": [],
+        "missedUses": ["mdlint.cli -> mdlint.commands"],
+        "extraUses": []
+      }
+    },
+    {
+      "fixture": "single-package",
+      "run": 3,
+      "ms": 43630,
+      "turns": 25,
+      "cost": 0.20268180000000002,
+      "score": {
+        "overall": 0.9684848484848485,
+        "containers": 1,
+        "components": 0.9090909090909091,
+        "datastores": 1,
+        "uses": 0.9333333333333333,
+        "nesting": 1,
+        "code": 1,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 1,
+          "found": 1,
+          "matched": 1,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 6,
+          "found": 5,
+          "matched": 5,
+          "precision": 1,
+          "recall": 0.8333333333333334,
+          "f1": 0.9090909090909091
+        },
+        "datastores": {
+          "expected": 0,
+          "found": 0,
+          "matched": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 8,
+          "found": 7,
+          "matched": 7,
+          "precision": 1,
+          "recall": 0.875,
+          "f1": 0.9333333333333333
+        },
+        "nesting": {
+          "checked": 6,
+          "correct": 6,
+          "ratio": 1
+        },
+        "code": {
+          "total": 10,
+          "covered": 10,
+          "placed": 10,
+          "coverage": 1,
+          "accuracy": 1
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.9684848484848485,
+        "matches": [
+          {
+            "golden": "mdlint",
+            "found": "mdlint",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.commands",
+            "found": "mdlint.commands",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.config",
+            "found": "mdlint.config",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.parser",
+            "found": "mdlint.parser",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.render",
+            "found": "mdlint.render",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "mdlint.rules",
+            "found": "mdlint.rules",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": ["mdlint.cli"],
+        "extra": [],
+        "misnested": [],
+        "missedUses": ["mdlint.cli -> mdlint.commands"],
+        "extraUses": []
+      }
+    },
+    {
+      "fixture": "ts-monorepo",
+      "run": 2,
+      "ms": 51763,
+      "turns": 26,
+      "cost": 0.20420500000000003,
+      "score": {
+        "overall": 0.9116612554112554,
+        "containers": 1,
+        "components": 0.7142857142857143,
+        "datastores": 1,
+        "uses": 0.8181818181818182,
+        "nesting": 1,
+        "code": 0.9375,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 3,
+          "found": 3,
+          "matched": 3,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 5,
+          "found": 9,
+          "matched": 5,
+          "precision": 0.5555555555555556,
+          "recall": 1,
+          "f1": 0.7142857142857143
+        },
+        "datastores": {
+          "expected": 2,
+          "found": 2,
+          "matched": 2,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 11,
+          "found": 11,
+          "matched": 9,
+          "precision": 0.8181818181818182,
+          "recall": 0.8181818181818182,
+          "f1": 0.8181818181818182
+        },
+        "nesting": {
+          "checked": 10,
+          "correct": 10,
+          "ratio": 1
+        },
+        "code": {
+          "total": 16,
+          "covered": 16,
+          "placed": 15,
+          "coverage": 1,
+          "accuracy": 0.9375
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.9116612554112554,
+        "matches": [
+          {
+            "golden": "shop.api",
+            "found": "api",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.catalog",
+            "found": "api.catalog",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.orders",
+            "found": "api.orders",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.payments",
+            "found": "api.payments",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.storage",
+            "found": "api.storage",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.shared",
+            "found": "shared",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.web",
+            "found": "web",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.routes",
+            "found": "api.routes",
+            "overlap": 0.6666666666666666,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.db",
+            "found": "db",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.cache",
+            "found": "cache",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": ["web.api-client", "web.pages", "shared.money", "shared.types"],
+        "misnested": [],
+        "missedUses": ["shop.api.storage -> shop.cache", "shop.api.storage -> shop.db"],
+        "extraUses": ["api -> cache", "api -> db"]
+      }
+    },
+    {
+      "fixture": "ts-monorepo",
+      "run": 3,
+      "ms": 57739,
+      "turns": 27,
+      "cost": 0.21277649999999998,
+      "score": {
+        "overall": 0.9116612554112554,
+        "containers": 1,
+        "components": 0.7142857142857143,
+        "datastores": 1,
+        "uses": 0.8181818181818182,
+        "nesting": 1,
+        "code": 0.9375,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 3,
+          "found": 3,
+          "matched": 3,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 5,
+          "found": 9,
+          "matched": 5,
+          "precision": 0.5555555555555556,
+          "recall": 1,
+          "f1": 0.7142857142857143
+        },
+        "datastores": {
+          "expected": 2,
+          "found": 2,
+          "matched": 2,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 11,
+          "found": 11,
+          "matched": 9,
+          "precision": 0.8181818181818182,
+          "recall": 0.8181818181818182,
+          "f1": 0.8181818181818182
+        },
+        "nesting": {
+          "checked": 10,
+          "correct": 10,
+          "ratio": 1
+        },
+        "code": {
+          "total": 16,
+          "covered": 16,
+          "placed": 15,
+          "coverage": 1,
+          "accuracy": 0.9375
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.9116612554112554,
+        "matches": [
+          {
+            "golden": "shop.api",
+            "found": "api",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.catalog",
+            "found": "api.catalog",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.orders",
+            "found": "api.orders",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.payments",
+            "found": "api.payments",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.storage",
+            "found": "api.storage",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.shared",
+            "found": "shared",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.web",
+            "found": "web",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.routes",
+            "found": "api.routes",
+            "overlap": 0.6666666666666666,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.db",
+            "found": "db",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.cache",
+            "found": "cache",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": ["web.api-client", "web.pages", "shared.money", "shared.types"],
+        "misnested": [],
+        "missedUses": ["shop.api.storage -> shop.cache", "shop.api.storage -> shop.db"],
+        "extraUses": ["api -> cache", "api -> db"]
+      }
+    },
+    {
+      "fixture": "ts-monorepo",
+      "run": 1,
+      "ms": 84015,
+      "turns": 35,
+      "cost": 0.2881292,
+      "score": {
+        "overall": 0.9116612554112554,
+        "containers": 1,
+        "components": 0.7142857142857143,
+        "datastores": 1,
+        "uses": 0.8181818181818182,
+        "nesting": 1,
+        "code": 0.9375,
+        "errors": 0
+      },
+      "detail": {
+        "containers": {
+          "expected": 3,
+          "found": 3,
+          "matched": 3,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "components": {
+          "expected": 5,
+          "found": 9,
+          "matched": 5,
+          "precision": 0.5555555555555556,
+          "recall": 1,
+          "f1": 0.7142857142857143
+        },
+        "datastores": {
+          "expected": 2,
+          "found": 2,
+          "matched": 2,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "relationships": {
+          "expected": 11,
+          "found": 11,
+          "matched": 9,
+          "precision": 0.8181818181818182,
+          "recall": 0.8181818181818182,
+          "f1": 0.8181818181818182
+        },
+        "nesting": {
+          "checked": 10,
+          "correct": 10,
+          "ratio": 1
+        },
+        "code": {
+          "total": 16,
+          "covered": 16,
+          "placed": 15,
+          "coverage": 1,
+          "accuracy": 0.9375
+        },
+        "kindAgreement": 1,
+        "errors": 0,
+        "overall": 0.9116612554112554,
+        "matches": [
+          {
+            "golden": "shop.api",
+            "found": "api",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.catalog",
+            "found": "api.catalog",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.orders",
+            "found": "api.orders",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.payments",
+            "found": "api.payments",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.storage",
+            "found": "api.storage",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.shared",
+            "found": "shared",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.web",
+            "found": "web",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.api.routes",
+            "found": "api.routes",
+            "overlap": 0.6666666666666666,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.db",
+            "found": "db",
+            "overlap": 1,
+            "sameKind": true
+          },
+          {
+            "golden": "shop.cache",
+            "found": "cache",
+            "overlap": 1,
+            "sameKind": true
+          }
+        ],
+        "missing": [],
+        "extra": ["web.api-client", "web.pages", "shared.money", "shared.types"],
+        "misnested": [],
+        "missedUses": ["shop.api.storage -> shop.cache", "shop.api.storage -> shop.db"],
+        "extraUses": ["api -> cache", "api -> db"]
+      }
+    }
+  ]
+}
