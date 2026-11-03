@@ -14,4 +14,4 @@ Open the explorer on this repository's model (`.archdoc/`) for the user. Argumen
 3. **Otherwise, start it in the background**, so it doesn't block the session (in Claude Code, the Bash tool's background option, not a trailing `&`): `npx -y @archdoc/cli view --watch --open $ARGUMENTS`. `--open` opens the user's browser, and `--watch` updates the page as the model changes.
 4. **Report the URL** from the line it prints, `ArchDoc explorer: http://127.0.0.1:<port>`, reading the background output for it. With `--base`, add `#changes` so the link opens on the change.
 
-If it says there's no model (`No ArchDoc model at …`), tell the user and offer to start one with the `archdoc` skill. If `npx` fails, say what it printed.
+If it says there's no model (`No ArchDoc model at …`), tell the user and offer to start one with the `archdoc` skill. If `npx` fails, say what it printed. If it exits with no output, or with `ENOTFOUND` or `EAI_AGAIN`, the sandbox has no network access: run it again with network access, since `npx` downloads `@archdoc/cli` the first time.

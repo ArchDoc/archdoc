@@ -11,6 +11,11 @@ Five MCP tools, one per question. Use them, not the CLI.
 
 The ArchDoc MCP server starts with the session through `npx`, which takes a few seconds the first time, so its tools may not be in your tool list yet, or may be listed by name only (`mcp__plugin_archdoc_archdoc__archdoc_context` and the like). If you don't see them, search your tools for "archdoc" and load them, and if the server is still starting, wait and search again. Run the CLI instead only when no ArchDoc MCP server is configured at all; each command prints the same answer as its tool.
 
+**`npx` needs the network the first time.** The MCP server and every `npx -y @archdoc/cli` command download the CLI from the npm registry until it's cached. In a sandbox without network access (Codex's default, and some other agents'), `npx` exits with no output, or with `ENOTFOUND`, `EAI_AGAIN`, or a fetch error, and the MCP server never starts. Don't read that as an empty answer or a missing model:
+
+1. Run the command again with network access. In Codex, ask to run it outside the sandbox (escalated permissions), and say it's to download `@archdoc/cli` from npm.
+2. If network access isn't allowed, tell the user what failed and give them two ways to fix it. They can turn on network access for the session; in Codex, that's `network_access = true` under `[sandbox_workspace_write]` in `~/.codex/config.toml`. Or they can install the CLI in the repository once (`npm install --save-dev @archdoc/cli`), so `npx` finds it without the network.
+
 | Tool | Question | CLI, only without the MCP server |
 |---|---|---|
 | `archdoc_context` | Where do I start, and what does it affect? | `archdoc context <words or paths>`, `--error <file>` |

@@ -6,7 +6,7 @@ ArchDoc models its own architecture in `.archdoc/`. Use it the way ArchDoc asks 
 
 This repository's architecture is modeled in `.archdoc/`: actors (who uses the system), elements (what it's made of, each mapped to code paths), journeys (how actors reach their goals), and data. People own the model. It's the fastest way to find where code lives and what a change affects, so use it before you search the code.
 
-Every task: context, edit, check, seal. Each MCP tool has a CLI command of the same name.
+Every task: context, edit, check, seal. Each MCP tool has a CLI command of the same name. The MCP server and `npx @archdoc/cli` download the CLI from npm the first time; in a sandbox without network access (Codex's default) they exit with no output. That isn't an empty answer: rerun the command with network access, or ask the user to allow it.
 
 1. Find where to start, before grepping: the `archdoc_context` MCP tool with the task in a few words, the files you plan to change, or both (for example "pr report shows type undefined for data fields"), or `pnpm -s archdoc context <words or paths>`. It returns the files and functions to open first, other code that does the same job (other callers of the functions they use, which a fix usually needs too), the data, rules, and journeys involved, the tests to run, owners, and who uses it, other repos included.
 2. Name the affected journeys and actors when you share your plan. Ask the user before changing a critical journey, or removing or renaming anything another repo uses.
