@@ -346,4 +346,28 @@ describe("archdoc init, layer by layer", () => {
     const codes = checked.findings.map((f) => `${f.code} ${f.element ?? ""}`);
     expect(codes).toEqual([]);
   });
+
+  it("makes services/ inside a package a component, and the files beside its directories too", async () => {
+    const root = join(dir, "py");
+    const w = (p: string, t: string) => write(`py/${p}`, t);
+    await w("pyproject.toml", '[project]\nname = "invoicing"\ndependencies = ["fastapi"]\n');
+    await w("invoicing/__init__.py", "");
+    await w("invoicing/db.py", "def session(): ...\n");
+    await w("invoicing/api/routes.py", "from invoicing.services.billing import bill\n");
+    await w("invoicing/models/invoice.py", "class Invoice: ...\n");
+    await w("invoicing/services/billing.py", "from invoicing.db import session\ndef bill(): ...\n");
+    await w("invoicing/services/customers.py", "def find(): ...\n");
+    const { model } = await inferred(root);
+    const components = [...model.elements.values()]
+      .filter((e) => e.spec.kind === "component")
+      .map((e) => e.id)
+      .sort();
+    expect(components).toEqual([
+      "invoicing.api",
+      "invoicing.db",
+      "invoicing.models",
+      "invoicing.services",
+    ]);
+    expect(model.elements.get("invoicing.services.billing")?.spec.kind).toBe("code");
+  });
 });
