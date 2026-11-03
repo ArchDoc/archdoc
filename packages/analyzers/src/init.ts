@@ -487,7 +487,8 @@ async function directoryUnit(ctx: AnalyzerContext, dir: string): Promise<Omit<Fo
 
 const TEST_FILE = /([._-](test|spec)\.[a-z]+$)|((^|\/)test_[^/]+\.py$)|(\.d\.ts$)/;
 /** Files that wire a package together rather than do one job: they stay with their container. */
-const ENTRY_FILE = /(^|\/)(index|main|mod|lib|bin|cli|server|app|__init__|__main__|conftest)\.[a-z]+$/;
+const ENTRY_FILE =
+  /(^|\/)(index|main|mod|lib|bin|cli|server|app|__init__|__main__|conftest)\.[a-z]+$/;
 /** What a code element can point at: a function or a class. */
 const CALLABLE = new Set(["function", "class"]);
 
