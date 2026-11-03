@@ -16,7 +16,8 @@ The skill is [`claude-plugin/skills/archdoc/SKILL.md`](../claude-plugin/skills/a
 ## Cursor, Codex, and other agents
 
 1. Paste [`AGENTS.md`](./AGENTS.md) near the top of your repository's `AGENTS.md`. Codex, Cursor, Copilot, and others read it.
-2. Register the MCP server, which runs `npx -y @archdoc/cli mcp` in the repository:
+2. Copy the skill folder, [`claude-plugin/skills/archdoc/`](../claude-plugin/skills/archdoc), to `.agents/skills/archdoc/` in your repository. Codex looks for skills there, not in `.claude/skills/` or the Claude Code plugin cache.
+3. Register the MCP server, which runs `npx -y @archdoc/cli mcp` in the repository:
    - **Cursor:** copy [`mcp/cursor.mcp.json`](./mcp/cursor.mcp.json) to `.cursor/mcp.json`.
    - **Codex:** add it to `~/.codex/config.toml`:
      ```toml
