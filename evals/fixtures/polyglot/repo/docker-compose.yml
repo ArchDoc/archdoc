@@ -1,0 +1,14 @@
+services:
+  frontend:
+    build: ./frontend
+    depends_on: [backend]
+  backend:
+    build: ./backend
+    depends_on: [postgres, rabbitmq]
+  worker:
+    build: ./worker
+    depends_on: [postgres, rabbitmq]
+  postgres:
+    image: postgres:16
+  rabbitmq:
+    image: rabbitmq:3-management

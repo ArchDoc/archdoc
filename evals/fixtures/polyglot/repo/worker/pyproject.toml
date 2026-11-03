@@ -1,0 +1,4 @@
+[project]
+name = "tickets-worker"
+version = "0.1.0"
+dependencies = ["pika>=1.3", "psycopg[binary]>=3.2"]

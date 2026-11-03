@@ -1,0 +1,7 @@
+{
+  "name": "tickets-frontend",
+  "description": "Where people file and follow support tickets.",
+  "dependencies": {
+    "react": "^18.3.1"
+  }
+}

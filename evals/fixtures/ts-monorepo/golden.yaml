@@ -1,0 +1,62 @@
+# A person's model of the fixture: what the evals score against.
+archdoc: "2.0"
+namespace: shop
+elements:
+  shop:
+    kind: system
+    description: An online shop.
+    elements:
+      web:
+        kind: container
+        technology: TypeScript, React
+        description: The storefront customers browse and check out in.
+        code: apps/web/**
+        uses:
+          api: Calls the HTTP API for products and orders
+          shared: Formats prices and types API responses
+      api:
+        kind: container
+        technology: TypeScript, Express
+        description: HTTP API for products and orders.
+        code: apps/api/**
+        uses:
+          shared: Types orders and products
+        elements:
+          routes:
+            kind: component
+            description: Express routes for orders and products.
+            code: [apps/api/src/server.ts, apps/api/src/routes/**]
+            uses: { orders: Creates orders, catalog: Looks up products }
+          orders:
+            kind: component
+            description: Creates orders and charges for them.
+            code: apps/api/src/orders/**
+            uses: { payments: Charges for the order, storage: Saves the order }
+          payments:
+            kind: component
+            description: Records charges.
+            code: apps/api/src/payments/**
+            uses: { storage: Records the charge }
+          catalog:
+            kind: component
+            description: Product lookups, cached.
+            code: apps/api/src/catalog/**
+            uses: { storage: Reads products through the cache }
+          storage:
+            kind: component
+            description: The Postgres pool and the Redis client.
+            code: apps/api/src/storage/**
+            uses: { db: Reads and writes orders and products, cache: Caches products }
+      shared:
+        kind: container
+        technology: TypeScript
+        description: Types and helpers the storefront and the API share.
+        code: packages/shared/**
+      db:
+        kind: datastore
+        technology: PostgreSQL
+        description: Orders, charges, and products.
+      cache:
+        kind: datastore
+        technology: Redis
+        description: Cached products.

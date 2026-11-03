@@ -1,0 +1,8 @@
+{
+  "name": "@shop/web",
+  "description": "The storefront customers browse and check out in.",
+  "dependencies": {
+    "@shop/shared": "workspace:*",
+    "react": "^18.3.1"
+  }
+}

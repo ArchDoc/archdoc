@@ -1,0 +1,4 @@
+[project]
+name = "invoicing"
+version = "0.1.0"
+dependencies = ["fastapi>=0.115", "sqlalchemy>=2.0", "psycopg[binary]>=3.2"]

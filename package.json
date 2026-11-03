@@ -28,6 +28,7 @@
     "release": "node scripts/release.mjs",
     "set-version": "node scripts/set-version.mjs",
     "replay-prs": "node scripts/replay-prs.mjs",
+    "eval:agent": "node scripts/eval-agent.mjs",
     "approve-staged": "node scripts/approve-staged.mjs"
   },
   "devDependencies": {

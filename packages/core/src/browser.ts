@@ -198,6 +198,14 @@ export {
   rulesMentioning,
 } from "./query/impact.js";
 export * from "./query/index.js";
+export {
+  type ElementMatch,
+  type Misnested,
+  type ModelScore,
+  type ScoreCount,
+  type ScoreOptions,
+  scoreModel,
+} from "./query/score.js";
 export { type SearchHit, search } from "./query/search.js";
 export { queryTerms, sameWord, splitIdentifier } from "./query/terms.js";
 export { type CheckAnswerOptions, formatCheck } from "./report/check-answer.js";
@@ -227,6 +235,7 @@ export {
   type Verdict,
 } from "./report/pr-report.js";
 export * from "./report/report.js";
+export { formatScore } from "./report/score-report.js";
 export { formatSealStatus } from "./report/seal-report.js";
 export {
   formatAnchors,
