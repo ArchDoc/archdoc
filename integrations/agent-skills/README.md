@@ -25,6 +25,9 @@ The skill is [`claude-plugin/skills/archdoc/SKILL.md`](../claude-plugin/skills/a
      command = "npx"
      args = ["-y", "@archdoc/cli", "mcp"]
      ```
+     `npx` downloads `@archdoc/cli` from npm the first time, and Codex's sandbox has no network access by default, so the server (and `npx @archdoc/cli` in a shell) exits with no output. Do one of these:
+     - Allow network access: add `network_access = true` under `[sandbox_workspace_write]` in `~/.codex/config.toml`.
+     - Install the CLI in the repository with `npm install --save-dev @archdoc/cli`, so `npx` finds it without the network.
    - **Anything else with MCP:** a stdio server with that command. Without MCP, the agent can run the CLI: each tool is a command of the same name, with `--format json` where it needs structure.
 
 ## MCP tools

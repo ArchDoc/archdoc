@@ -1,0 +1,10 @@
+# stripe-samples/accept-a-payment: Stripe's canonical sample. Four ways to
+# take a payment, each a browser or mobile client and a server, and each
+# server written in up to ten interchangeable languages, plus end-to-end
+# tests and a Terraform file for the Stripe account. Tests how a model shows
+# many variants of one thing, and Stripe as an external.
+url: https://github.com/stripe-samples/accept-a-payment
+ref: main
+commit: 1a57c3b2f5aaf4ecd8de59ab0b1c3c5638827625
+maxTurns: 80
+maxBudgetUsd: 3

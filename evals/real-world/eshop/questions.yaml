@@ -1,0 +1,10 @@
+- ask: Where is it decided which services, databases, and the message broker run, and how they're connected?
+  paths: [src/eShop.AppHost/AppHost.cs]
+- ask: Where are the rules for an order's state changes, like cancelling or shipping?
+  paths: [src/Ordering.Domain/AggregatesModel/OrderAggregate/Order.cs]
+- ask: Where would I change how integration events are published to RabbitMQ?
+  paths: [src/EventBusRabbitMQ/RabbitMQEventBus.cs]
+- ask: Where are baskets stored and read?
+  paths: [src/Basket.API/Repositories/RedisBasketRepository.cs]
+- ask: Where would I change the catalog's HTTP endpoints?
+  paths: [src/Catalog.API/Apis/CatalogApi.cs]

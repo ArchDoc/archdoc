@@ -1,0 +1,12 @@
+- ask: Where would I change how scraped samples are appended to storage?
+  paths: [scrape/scrape.go]
+- ask: Where is the head block and write-ahead log of the local database?
+  paths: [tsdb/head.go, tsdb/head_append.go, tsdb/wlog/wlog.go]
+- ask: Where would I add a new PromQL function?
+  paths: [promql/functions.go]
+- ask: Where would I add a new service discovery mechanism?
+  paths: [discovery/discovery.go, discovery/manager.go]
+- ask: Where are alerting rules evaluated and turned into alerts?
+  paths: [rules/alerting.go, rules/manager.go, rules/group.go]
+- ask: Where is the /api/v1/query endpoint implemented?
+  paths: [web/api/v1/api.go]

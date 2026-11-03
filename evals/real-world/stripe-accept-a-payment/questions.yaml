@@ -1,0 +1,10 @@
+- ask: Where does the Node server for the Payment Element create the PaymentIntent?
+  paths: [payment-element/server/node/server.js]
+- ask: Where does the plain HTML client mount the Payment Element and confirm the payment?
+  paths: [payment-element/client/html/index.js]
+- ask: Where would I change the Python server for the prebuilt Checkout page?
+  paths: [prebuilt-checkout-page/server/python/server.py]
+- ask: Where is the Stripe webhook endpoint for the samples configured as infrastructure?
+  paths: [main.tf]
+- ask: Where are the end-to-end tests that drive a browser through the payment flows?
+  paths: [spec/payment_element_e2e_spec.rb, playwright/custom-payment-flow-e2e-html.spec.ts]

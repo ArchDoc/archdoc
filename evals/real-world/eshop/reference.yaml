@@ -1,0 +1,98 @@
+# The services and dependencies src/eShop.AppHost/AppHost.cs wires, not a
+# full model. Scored for recall: a model may go further than this and isn't
+# marked down.
+archdoc: "2.0"
+namespace: eshop
+elements:
+  webapp:
+    kind: container
+    technology: ASP.NET Core, Blazor
+    description: The online store web app.
+    code: [src/WebApp/**, src/WebAppComponents/**]
+    uses: { basket-api: Reads and changes the basket, catalog-api: Lists products, ordering-api: Places and lists orders, identity-api: Signs users in, eventbus: Subscribes to order status events }
+  identity-api:
+    kind: container
+    technology: ASP.NET Core, Duende IdentityServer
+    description: Signs users in and issues tokens for the apps and APIs.
+    code: src/Identity.API/**
+    uses: { postgres: Stores users }
+  basket-api:
+    kind: container
+    technology: ASP.NET Core, gRPC
+    description: Holds each user's basket.
+    code: src/Basket.API/**
+    uses: { redis: Stores baskets, eventbus: Clears the basket when an order starts }
+  catalog-api:
+    kind: container
+    technology: ASP.NET Core
+    description: The product catalog, with AI semantic search.
+    code: src/Catalog.API/**
+    uses: { postgres: Stores products, eventbus: Publishes price changes and stock events }
+  ordering-api:
+    kind: container
+    technology: ASP.NET Core
+    description: Creates orders and tracks their status, with DDD domain and infrastructure layers.
+    code: [src/Ordering.API/**, src/Ordering.Domain/**, src/Ordering.Infrastructure/**]
+    uses: { postgres: Stores orders, eventbus: Publishes and handles order events }
+    elements:
+      api:
+        kind: component
+        description: The HTTP endpoints, commands, queries, and integration event handlers.
+        code: src/Ordering.API/**
+        uses: { domain: Runs order logic, infrastructure: Loads and saves orders }
+      domain:
+        kind: component
+        description: The order and buyer aggregates and their domain events.
+        code: src/Ordering.Domain/**
+      infrastructure:
+        kind: component
+        description: EF Core repositories and the ordering database context.
+        code: src/Ordering.Infrastructure/**
+        uses: { domain: Persists aggregates }
+  order-processor:
+    kind: container
+    technology: .NET worker
+    description: Moves orders whose grace period has ended on to stock confirmation.
+    code: src/OrderProcessor/**
+    uses: { postgres: Reads orders, eventbus: Publishes grace period confirmed }
+  payment-processor:
+    kind: container
+    technology: .NET worker
+    description: Simulates payment for orders and reports success or failure.
+    code: src/PaymentProcessor/**
+    uses: { eventbus: Handles stock confirmed and publishes payment results }
+  webhooks-api:
+    kind: container
+    technology: ASP.NET Core
+    description: Lets clients register webhooks and calls them on order events.
+    code: src/Webhooks.API/**
+    uses: { postgres: Stores subscriptions, eventbus: Handles order events }
+  webhook-client:
+    kind: container
+    technology: ASP.NET Core, Blazor
+    description: A sample app that registers for and receives webhooks.
+    code: src/WebhookClient/**
+    uses: { webhooks-api: Registers webhooks }
+  app-host:
+    kind: container
+    technology: .NET Aspire
+    description: Starts and wires every service and dependency for local development and deployment.
+    code: src/eShop.AppHost/**
+  integration-events:
+    kind: container
+    technology: .NET library
+    description: The integration event abstractions, the RabbitMQ implementation, and the outbox log the services share.
+    code: [src/EventBus/**, src/EventBusRabbitMQ/**, src/IntegrationEventLogEF/**]
+    uses: { eventbus: Publishes and consumes }
+  postgres:
+    kind: datastore
+    technology: PostgreSQL with pgvector
+    description: catalogdb, identitydb, orderingdb, and webhooksdb.
+  redis:
+    kind: datastore
+    technology: Redis
+    description: Baskets.
+  eventbus:
+    kind: queue
+    technology: RabbitMQ
+    description: Integration events between the services.

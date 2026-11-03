@@ -1,0 +1,58 @@
+# The four integrations in the README, each a client and a server, not a full
+# model. The language variants aren't listed: the judge looks at how the model
+# shows them. Scored for recall.
+archdoc: "2.0"
+namespace: accept-a-payment
+elements:
+  prebuilt-checkout-page-client:
+    kind: container
+    technology: HTML, React, Vue
+    description: The store page that redirects to a Stripe-hosted Checkout page.
+    code: prebuilt-checkout-page/client/**
+    uses: { prebuilt-checkout-page-server: Creates a Checkout Session }
+  prebuilt-checkout-page-server:
+    kind: container
+    technology: Node, Python, Ruby, Java, Go, .NET, PHP, Next.js
+    description: Creates Checkout Sessions and handles webhooks, in each language.
+    code: prebuilt-checkout-page/server/**
+    uses: { stripe: Creates Checkout Sessions }
+  payment-element-client:
+    kind: container
+    technology: HTML, React, Vue
+    description: Embeds the Payment Element and confirms the PaymentIntent with Stripe.js.
+    code: payment-element/client/**
+    uses: { payment-element-server: Creates a PaymentIntent, stripe: Confirms the payment }
+  payment-element-server:
+    kind: container
+    technology: Node, Python, Ruby, Java, Go, .NET, PHP, Next.js
+    description: Creates PaymentIntents and handles webhooks, in each language.
+    code: payment-element/server/**
+    uses: { stripe: Creates PaymentIntents }
+  custom-payment-flow-client:
+    kind: container
+    technology: HTML, React, React Native, Swift, Kotlin
+    description: Collects payment details for one payment method at a time, on the web and on mobile.
+    code: custom-payment-flow/client/**
+    uses: { custom-payment-flow-server: Creates a PaymentIntent, stripe: Confirms the payment }
+  custom-payment-flow-server:
+    kind: container
+    technology: Node, Python, Ruby, Java, Go, .NET, PHP, Next.js
+    description: Creates PaymentIntents for a chosen payment method and handles webhooks, in each language.
+    code: custom-payment-flow/server/**
+    uses: { stripe: Creates PaymentIntents }
+  elements-with-checkout-sessions-client:
+    kind: container
+    technology: HTML, React
+    description: Embeds Elements backed by a Checkout Session.
+    code: elements-with-checkout-sessions/client/**
+    uses: { elements-with-checkout-sessions-server: Creates a Checkout Session, stripe: Confirms the payment }
+  elements-with-checkout-sessions-server:
+    kind: container
+    technology: Node, Python, Ruby, Java, Go, .NET, PHP
+    description: Creates Checkout Sessions for embedded Elements, in each language.
+    code: elements-with-checkout-sessions/server/**
+    uses: { stripe: Creates Checkout Sessions }
+  stripe:
+    kind: external
+    technology: Stripe API
+    description: Payments, Checkout Sessions, and webhooks.

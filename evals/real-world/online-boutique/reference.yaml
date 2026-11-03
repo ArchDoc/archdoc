@@ -1,0 +1,88 @@
+# The services and calls in the project's own README, not a full model.
+# Scored for recall: a model may go further than this and isn't marked down.
+archdoc: "2.0"
+namespace: boutique
+elements:
+  frontend:
+    kind: container
+    technology: Go
+    description: The web store, which renders pages and calls the backend services over gRPC.
+    code: src/frontend/**
+    uses:
+      adservice: Gets ads
+      cartservice: Reads and changes the cart
+      checkoutservice: Places orders
+      currencyservice: Converts prices
+      productcatalogservice: Lists and searches products
+      recommendationservice: Gets recommendations
+      shippingservice: Quotes shipping
+      shoppingassistantservice: Asks the shopping assistant
+  cartservice:
+    kind: container
+    technology: C#
+    description: Stores the items in each user's cart.
+    code: src/cartservice/**
+    uses: { redis-cart: Reads and writes carts }
+  productcatalogservice:
+    kind: container
+    technology: Go
+    description: Lists products from a JSON file, with search and lookup.
+    code: src/productcatalogservice/**
+  currencyservice:
+    kind: container
+    technology: Node.js
+    description: Converts money between currencies with ECB rates.
+    code: src/currencyservice/**
+  paymentservice:
+    kind: container
+    technology: Node.js
+    description: Charges a credit card (mock) and returns a transaction ID.
+    code: src/paymentservice/**
+  shippingservice:
+    kind: container
+    technology: Go
+    description: Quotes shipping costs and ships orders (mock).
+    code: src/shippingservice/**
+  emailservice:
+    kind: container
+    technology: Python
+    description: Sends order confirmation emails (mock).
+    code: src/emailservice/**
+  checkoutservice:
+    kind: container
+    technology: Go
+    description: Takes the cart, prepares the order, and orchestrates payment, shipping, and the email.
+    code: src/checkoutservice/**
+    uses:
+      cartservice: Reads and empties the cart
+      productcatalogservice: Looks up products
+      currencyservice: Converts prices
+      shippingservice: Quotes and ships
+      paymentservice: Charges the card
+      emailservice: Sends the confirmation
+  recommendationservice:
+    kind: container
+    technology: Python
+    description: Recommends other products based on what's in the cart.
+    code: src/recommendationservice/**
+    uses: { productcatalogservice: Lists products }
+  adservice:
+    kind: container
+    technology: Java
+    description: Serves text ads based on context words.
+    code: src/adservice/**
+  shoppingassistantservice:
+    kind: container
+    technology: Python
+    description: An optional AI shopping assistant using Gemini and AlloyDB vector search.
+    code: src/shoppingassistantservice/**
+  loadgenerator:
+    kind: container
+    technology: Python, Locust
+    description: Simulates shoppers sending realistic traffic to the frontend.
+    code: src/loadgenerator/**
+    uses: { frontend: Sends shopper traffic }
+  redis-cart:
+    kind: datastore
+    technology: Redis
+    description: Holds the carts.

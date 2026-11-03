@@ -57,10 +57,56 @@ It copies each fixture to a scratch directory, runs Claude Code headless
 (`claude -p`) there with the skill, the MCP server, and the CLI from this
 checkout, and scores the `.archdoc/` it writes, next to what init alone
 scores. The agent may use the file tools, the archdoc tools, and Bash for
-`archdoc`, `git status`, `git diff`, and `ls`, and nothing else. Results go to
+`archdoc`, `git status`, `git diff`, and `ls`, and nothing else; Claude Code
+still lets read-only shell commands such as `cat` and `grep` through. Results go to
 `evals/results/<time>/` (ignored by git): `report.md`, `results.json`, and
 each run's model, transcript, and `score.txt` with what it missed. Reports
 worth keeping go in `evals/reports/<date>/`.
+
+## Real-world repositories
+
+The fixtures are small and written for the evals. `real-world/` holds open-source
+repositories from well-known owners, each pinned to a commit, to check that a
+model of a real system is one an engineer new to it can read and use:
+
+| Repository | Pinned at | What it tests |
+|---|---|---|
+| `prometheus` | prometheus/prometheus v3.15.1 | A large Go codebase (about 1,700 files) with well-known subsystems and a TypeScript UI |
+| `online-boutique` | GoogleCloudPlatform/microservices-demo v0.10.7 | Eleven gRPC services in five languages, Redis, and Kubernetes, Helm, Kustomize, and Terraform in one repository |
+| `eshop` | dotnet/eShop 913acea | A .NET Aspire app: APIs, workers, web apps, RabbitMQ, Postgres, Redis. No C# analyzer, so the skill carries it |
+| `gson` | google/gson 2.15.0 | A Java library: modules and components, no services or datastores |
+| `stripe-accept-a-payment` | stripe-samples/accept-a-payment 1a57c3b | Four integrations, each a client and a server in up to ten interchangeable languages, and Stripe as an external |
+
+Each has `repo.yaml` (URL, commit, and the run's turn and dollar caps),
+`reference.yaml` (the containers, components, datastores, and uses any
+maintainer would agree on, not a full model), and `questions.yaml` (what a
+newcomer asks, with the files that answer it). The repositories aren't
+committed: `pnpm eval:agent --set real-world` clones each once into
+`evals/.cache/repos/` and gives the agent the pinned commit's files without
+their history.
+
+They're scored two ways:
+
+- **Against the reference**, with `scoreModel`, for recall: containers,
+  components, datastores, and uses the reference has, plus nesting and code.
+  Precision means little against a partial reference, so a model that goes
+  further isn't marked down.
+- **By Claude as judge** (`scripts/eval-judge.mjs`), for whether the model is
+  well decomposed and easy to digest. The judge reads the model, the
+  repository's tree and docs, and the reference, and scores fidelity,
+  granularity, coverage, relationships, infrastructure, descriptions, and
+  journeys from 1 to 5 against written anchors, three passes, median kept. It
+  also runs the onboarding test: it answers each question with one element of
+  the model, and it's a hit when that element covers a file with the answer.
+  The judge model is fixed (`JUDGE_MODEL`) so scores compare across releases.
+
+`pnpm eval:agent --judge` judges the fixtures too. Before trusting a change to
+the rubric or the judge model, run `node scripts/eval-judge-calibrate.mjs`: on
+every fixture the golden model should score above what init writes, and that
+above a single container holding everything.
+
+A real-world run costs more than a fixture run: about $1 to $6 for the agent,
+capped by `maxBudgetUsd` in each `repo.yaml`, and about $0.30 to judge.
 
 ## Adding a fixture
 

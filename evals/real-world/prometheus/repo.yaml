@@ -1,0 +1,10 @@
+# prometheus/prometheus: the monitoring server. A large Go codebase (about
+# 1,700 files) with well-known subsystems (scrape, service discovery, TSDB,
+# PromQL, rules, notifier, remote storage, the HTTP API) and a TypeScript web
+# UI. Tests whether the agent finds those subsystems in a big repository
+# without drowning in it.
+url: https://github.com/prometheus/prometheus
+ref: v3.15.1
+commit: bae3eced0a5369e050e83ea73bc381d7c4b1a719
+maxTurns: 120
+maxBudgetUsd: 6
