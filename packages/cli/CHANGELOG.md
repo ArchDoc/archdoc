@@ -1,5 +1,17 @@
 # @archdoc/cli
 
+## 0.5.1
+
+### Patch Changes
+
+- 7d8fa8e: The archdoc skill and the AGENTS.md snippet tell agents that `npx @archdoc/cli` and the MCP server download the CLI the first time, so in a sandbox without network access (Codex's default) they exit with no output. The agent reruns the command with network access instead of reading it as an empty answer, or tells the user how to allow it or install the CLI in the repository. The Codex setup notes say the same.
+- 129fc43: The archdoc skill now has the agent reshape what `archdoc init` writes before describing it: read how the project describes itself, keep each level to a handful of elements, fold per-file and build-config elements away, group variants of one thing, rename elements named after build files, and add the datastores, queues, externals, and deployment definitions init can't see. It also says when the model is done.
+- @archdoc/analyzers@0.5.1
+  - @archdoc/core@0.5.1
+  - @archdoc/federation@0.5.1
+  - @archdoc/mcp@0.5.1
+  - @archdoc/spec@0.5.1
+
 ## 0.5.0
 
 ### Minor Changes
