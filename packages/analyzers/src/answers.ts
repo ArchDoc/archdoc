@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import {
   anchorError,
+  assessDiscovery,
   checkTrace,
   context,
   diffModels,
@@ -12,6 +13,7 @@ import {
   formatCode,
   formatContext,
   formatData,
+  formatDiscovery,
   formatElement,
   formatEnvironment,
   formatJourney,
@@ -218,6 +220,8 @@ export interface CheckInput {
   format?: "text" | "markdown" | undefined;
   /** False checks the model only, without analyzing code. */
   code?: boolean | undefined;
+  /** Whether a new model is done: what it still lacks (levels, descriptions, test code, orphans, actors, journeys, steps). */
+  done?: boolean | undefined;
 }
 
 export interface CheckAnswer extends Answer {
@@ -238,6 +242,19 @@ export async function checkAnswer(where: Where, input: CheckInput = {}): Promise
     code: input.code,
   });
   const { findings } = checked;
+  if (input.done) {
+    const files = await listRepoFiles(checked.model.baseDir);
+    const errors = findings.filter((f) => f.severity === "error");
+    const assessment = assessDiscovery(checked.model, files);
+    const text = [formatDiscovery(assessment, errors.length)];
+    if (errors.length) text.push("", formatCheck(errors, { all: input.all }));
+    return {
+      ok: true,
+      text: text.join("\n"),
+      failing: errors.length > 0 || assessment.gaps.length > 0,
+      findings,
+    };
+  }
   if (!input.base || !checked.base) {
     return {
       ok: true,

@@ -15,6 +15,8 @@ export interface CheckOptions {
   all?: boolean;
   /** Only the facts whose sealed code changed: exits 1 while there are any. */
   seals?: boolean;
+  /** Whether a new model is done: exits 1 while it still lacks anything. */
+  done?: boolean;
 }
 
 /** Runs analyzers and checks the model against the code and its rules. */
@@ -33,6 +35,19 @@ export async function check(options: CheckOptions, io: Io): Promise<number> {
       { model: options.model, format: options.format === "json" ? "json" : "text" },
       io,
     );
+  }
+  if (options.done) {
+    try {
+      const answer = await checkAnswer(
+        { model: options.model, cwd: io.cwd },
+        { done: true, all: options.all, code: options.code },
+      );
+      io.out(answer.text);
+      return answer.failing ? 1 : 0;
+    } catch (err) {
+      io.err(err instanceof Error ? err.message : String(err));
+      return 2;
+    }
   }
   const format = options.format ?? "text";
   if (!["text", "markdown", "json", "github"].includes(format)) {

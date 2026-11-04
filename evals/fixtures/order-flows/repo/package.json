@@ -1,0 +1,8 @@
+{
+  "name": "order-flows",
+  "private": true,
+  "scripts": {
+    "test": "pnpm -r test",
+    "e2e": "pnpm --filter e2e test"
+  }
+}

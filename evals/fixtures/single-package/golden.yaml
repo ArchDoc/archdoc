@@ -39,3 +39,28 @@ elements:
         kind: component
         description: Reads .mdlintrc.json.
         code: src/config.ts
+actors:
+  developer:
+    kind: person
+    description: Runs mdlint on their Markdown.
+    uses: { mdlint: Lints and fixes Markdown }
+journeys:
+  check-files:
+    actor: developer
+    goal: Find problems in Markdown files
+    importance: critical
+    steps:
+      - { from: developer, to: mdlint, action: Runs mdlint check, code: src/cli.ts }
+      - { from: mdlint.cli, to: mdlint.commands, action: Runs check, code: src/cli.ts }
+      - { from: mdlint.commands, to: mdlint.config, action: Reads which rules are off, code: src/commands/check.ts }
+      - { from: mdlint.commands, to: mdlint.parser, action: Parses each file, code: src/commands/check.ts }
+      - { from: mdlint.commands, to: mdlint.rules, action: Runs the rules, code: src/commands/check.ts }
+      - { from: mdlint.commands, to: mdlint.render, action: Prints the problems, code: src/commands/check.ts }
+  fix-files:
+    actor: developer
+    goal: Fix what the rules can fix
+    steps:
+      - { from: developer, to: mdlint, action: Runs mdlint fix, code: src/cli.ts }
+      - { from: mdlint.cli, to: mdlint.commands, action: Runs fix, code: src/cli.ts }
+      - { from: mdlint.commands, to: mdlint.parser, action: Parses each file, code: src/commands/fix.ts }
+      - { from: mdlint.commands, to: mdlint.rules, action: Applies the fixes rules offer, code: src/commands/fix.ts }

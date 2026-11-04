@@ -1,4 +1,4 @@
-import type { ModelScore, ScoreCount } from "../query/score.js";
+import type { DiscoveryScore, ModelScore, ScoreCount } from "../query/score.js";
 
 // A model's score against a golden one, as text: what the init and agent
 // evals print for each fixture.
@@ -34,6 +34,27 @@ export function formatScore(s: ModelScore, verbose = false): string {
     );
     list("missed uses", s.missedUses);
     list("extra uses", s.extraUses);
+  }
+  return out.join("\n");
+}
+
+/** How well a model was discovered (scoreDiscovery), as text. */
+export function formatDiscoveryScore(d: DiscoveryScore, verbose = false): string {
+  const out = [
+    `Discovery ${pct(d.overall)}${d.gaps ? `, ${d.gaps} thing${d.gaps === 1 ? "" : "s"} archdoc check --done still lists` : ""}`,
+    d.journeys.expected
+      ? `  ${"Journeys".padEnd(14)} recall ${pct(d.journeys.recall).padStart(4)} (${d.journeys.matched}/${d.journeys.expected}), ${d.journeys.found} in the model`
+      : `  ${"Journeys".padEnd(14)} ${d.journeys.found} in the model`,
+    `  ${"Journey depth".padEnd(14)} ${pct(d.journeyDepth)} of journeys are long enough and reach where they end`,
+    `  ${"Step detail".padEnd(14)} ${pct(d.stepDetail)} of steps have an action and code that exists`,
+    `  ${"Step depth".padEnd(14)} ${pct(d.stepPrecision)} of steps name the most specific element`,
+    `  ${"Tests left out".padEnd(14)} ${pct(d.testExclusion)} of test and verification files`,
+    `  ${"Mapped".padEnd(14)} ${pct(d.mapped)} of source files belong to an element`,
+    `  ${"Connected".padEnd(14)} ${pct(d.connected)} of elements`,
+    `  ${"Described".padEnd(14)} ${pct(d.described)} of elements`,
+  ];
+  if (verbose && d.journeys.missed.length) {
+    out.push(`  missed journeys: ${d.journeys.missed.join(", ")}`);
   }
   return out.join("\n");
 }

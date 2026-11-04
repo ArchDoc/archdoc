@@ -1,7 +1,16 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildModel, formatScore, listRepoFiles, type ModelScore, scoreModel } from "@archdoc/core";
+import {
+  assessDiscovery,
+  buildModel,
+  formatDiscoveryScore,
+  formatScore,
+  listRepoFiles,
+  type ModelScore,
+  scoreDiscovery,
+  scoreModel,
+} from "@archdoc/core";
 import { describe, expect, it } from "vitest";
 import { inferModel } from "../src/index.js";
 
@@ -67,6 +76,18 @@ const floors: Record<string, Floor> = {
     nesting: 1,
     code: 1,
   },
+  // Services that reach each other over HTTP and RabbitMQ, which imports
+  // don't show, plus tests, mocks, smoke checks, and a load test that init
+  // leaves out. Init finds the services; the uses between them are the agent's.
+  "order-flows": {
+    overall: 0.8,
+    containers: 1,
+    components: 1,
+    datastores: 1,
+    uses: 0.3,
+    nesting: 1,
+    code: 0.96,
+  },
   "ts-monorepo": {
     overall: 0.91,
     containers: 1,
@@ -78,7 +99,7 @@ const floors: Record<string, Floor> = {
   },
 };
 
-async function scoreInit(name: string): Promise<ModelScore> {
+async function scoreInit(name: string) {
   const dir = join(fixtures, name);
   const golden = buildModel(
     [{ path: "golden.yaml", text: readFileSync(join(dir, "golden.yaml"), "utf8") }],
@@ -89,8 +110,15 @@ async function scoreInit(name: string): Promise<ModelScore> {
   const r = await inferModel(repo);
   expect(r.problems).toEqual([]);
   const found = buildModel(r.files, { root: ".archdoc/archdoc.yaml" });
-  const files = (await listRepoFiles(repo)).filter((f) => SOURCE.test(f));
-  return scoreModel(found, golden, files);
+  const all = await listRepoFiles(repo);
+  const files = all.filter((f) => SOURCE.test(f));
+  const score: ModelScore = scoreModel(found, golden, files);
+  return {
+    score,
+    discovery: scoreDiscovery(found, golden, all, score),
+    golden: scoreDiscovery(golden, golden, all, scoreModel(golden, golden, files)),
+    done: assessDiscovery(found, all),
+  };
 }
 
 describe("evals: archdoc init on the fixture repos", () => {
@@ -104,7 +132,7 @@ describe("evals: archdoc init on the fixture repos", () => {
 
   for (const [name, floor] of Object.entries(floors)) {
     it(name, async () => {
-      const s = await scoreInit(name);
+      const { score: s } = await scoreInit(name);
       const got = {
         overall: s.overall,
         containers: s.containers.recall,
@@ -120,6 +148,26 @@ describe("evals: archdoc init on the fixture repos", () => {
       expect(s.errors).toBe(0);
       // Containers come from manifests, so every one init writes should be real.
       expect(s.containers.precision).toBe(1);
+    });
+  }
+
+  // What the agent is there to add, and what scoreDiscovery measures it by.
+  for (const name of Object.keys(floors)) {
+    it(`${name}: discovery`, async () => {
+      const { discovery, golden, done } = await scoreInit(name);
+      const shown = `\n${formatDiscoveryScore(discovery, true)}`;
+      // Init leaves test and verification code out, and writes no journeys or actors.
+      expect(done.stats.testElements, shown).toEqual([]);
+      expect(discovery.testExclusion, shown).toBe(1);
+      expect(discovery.journeys.found, shown).toBe(0);
+      expect(done.gaps.map((g) => g.code)).toEqual(
+        expect.arrayContaining(["done/no-actors", "done/few-journeys", "done/undescribed"]),
+      );
+      // The golden model follows every journey it has, with detailed steps.
+      expect(golden.journeys.expected, formatDiscoveryScore(golden)).toBeGreaterThanOrEqual(2);
+      expect(golden.journeys.recall, formatDiscoveryScore(golden, true)).toBe(1);
+      expect(golden.stepDetail, formatDiscoveryScore(golden)).toBe(1);
+      expect(golden.overall).toBeGreaterThan(discovery.overall);
     });
   }
 });

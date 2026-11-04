@@ -11,6 +11,14 @@ export {
   type ObservedEdge,
   observedEdges,
 } from "./check/check.js";
+export {
+  assessDiscovery,
+  type DiscoveryAssessment,
+  type DiscoveryGap,
+  formatDiscovery,
+  isVerificationCode,
+  LEVEL_LIMITS,
+} from "./check/discovery.js";
 export { validateJourneys } from "./check/journeys.js";
 export { evidenceOf, isDevTooling, type ObservedDependency } from "./check/observed.js";
 export {
@@ -209,11 +217,13 @@ export {
 } from "./query/impact.js";
 export * from "./query/index.js";
 export {
+  type DiscoveryScore,
   type ElementMatch,
   type Misnested,
   type ModelScore,
   type ScoreCount,
   type ScoreOptions,
+  scoreDiscovery,
   scoreModel,
 } from "./query/score.js";
 export { type SearchHit, search } from "./query/search.js";
@@ -245,7 +255,7 @@ export {
   type Verdict,
 } from "./report/pr-report.js";
 export * from "./report/report.js";
-export { formatScore } from "./report/score-report.js";
+export { formatDiscoveryScore, formatScore } from "./report/score-report.js";
 export { formatSealStatus } from "./report/seal-report.js";
 export {
   formatAnchors,

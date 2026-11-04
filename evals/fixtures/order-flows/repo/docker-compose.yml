@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16
+  rabbitmq:
+    image: rabbitmq:3-management
+  orders:
+    build: ./orders
+    environment:
+      DATABASE_URL: postgres://postgres@postgres/orders
+      AMQP_URL: amqp://rabbitmq
+    depends_on: [postgres, rabbitmq]
+  web:
+    build: ./web
+    environment:
+      VITE_ORDERS_URL: http://orders:3000
+  fulfillment:
+    build: ./fulfillment
+    environment:
+      AMQP_URL: amqp://rabbitmq
+      CARRIER_API_URL: https://api.carrier.example/v2
+  notifier:
+    build: ./notifier
+    environment:
+      AMQP_URL: amqp://rabbitmq
+      SMTP_HOST: smtp.mail.example

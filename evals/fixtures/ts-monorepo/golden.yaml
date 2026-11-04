@@ -60,3 +60,31 @@ elements:
         kind: datastore
         technology: Redis
         description: Cached products.
+actors:
+  shopper:
+    kind: person
+    description: Browses products and checks out.
+    uses: { web: Shops }
+journeys:
+  checkout:
+    actor: shopper
+    goal: Buy what's in the cart
+    importance: critical
+    steps:
+      - { from: shopper, to: web, action: Checks out the cart, code: apps/web/src/pages/cart.tsx }
+      - { from: web, to: api, action: POSTs the order, code: apps/web/src/api-client.ts }
+      - { from: api.routes, to: api.orders, action: Creates the order, code: apps/api/src/routes/orders.ts }
+      - { from: api.orders, to: api.payments, action: Charges for it, code: apps/api/src/orders/service.ts }
+      - { from: api.payments, to: api.storage, action: Records the charge, code: apps/api/src/payments/charge.ts }
+      - { from: api.orders, to: api.storage, action: Saves the order, code: apps/api/src/orders/service.ts }
+      - { from: api.storage, to: db, action: Inserts the order and the charge, code: apps/api/src/storage/db.ts }
+  browse-product:
+    actor: shopper
+    goal: See a product and its price
+    steps:
+      - { from: shopper, to: web, action: Opens a product page, code: apps/web/src/pages/product.tsx }
+      - { from: web, to: api, action: GETs the product, code: apps/web/src/api-client.ts }
+      - { from: api.routes, to: api.catalog, action: Looks up the product, code: apps/api/src/routes/products.ts }
+      - { from: api.catalog, to: api.storage, action: Reads it through the cache, code: apps/api/src/catalog/products.ts }
+      - { from: api.storage, to: cache, action: Reads the cached product, code: apps/api/src/storage/cache.ts }
+      - { from: api.storage, to: db, action: Reads the product on a miss, code: apps/api/src/storage/db.ts }

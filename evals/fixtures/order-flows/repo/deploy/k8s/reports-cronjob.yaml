@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-sales-report
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: reports
+              image: registry.example/order-flows/reports:latest
+              args: ["--day", "yesterday"]
+              env:
+                - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: orders-db, key: url } } }
+                - { name: SMTP_HOST, value: smtp.mail.example }
+                - { name: FINANCE_EMAIL, value: finance@example.com }
+          restartPolicy: OnFailure

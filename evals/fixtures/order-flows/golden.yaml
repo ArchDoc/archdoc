@@ -1,0 +1,163 @@
+# A person's model of the fixture: what the evals score against. Its
+# journeys are the flows a newcomer would trace; the services reach each
+# other over HTTP and RabbitMQ, which imports don't show, and the tests,
+# smoke checks, and load test aren't architecture.
+archdoc: "2.0"
+namespace: shop
+actors:
+  customer:
+    kind: person
+    description: Buys from the storefront and follows their order.
+    uses: { web: Checks out and follows their order }
+  finance:
+    kind: team
+    description: Reads the nightly sales report.
+  scheduler:
+    kind: agent
+    description: The Kubernetes CronJob that starts the nightly report.
+    uses: { reports: Runs it every night at 02:00 }
+elements:
+  shop:
+    kind: system
+    description: An online shop whose services talk over HTTP and RabbitMQ.
+    elements:
+      web:
+        kind: container
+        technology: TypeScript, React
+        description: The storefront customers check out in and follow their order's status.
+        code: web/**
+        uses:
+          orders.routes: Places and looks up orders over HTTP (VITE_ORDERS_URL)
+      orders:
+        kind: container
+        technology: TypeScript, Express
+        description: The orders API. Prices the cart, saves the order, and publishes order.placed.
+        code: orders/**
+        elements:
+          routes:
+            kind: component
+            description: The HTTP routes for placing and looking up orders.
+            code: [orders/src/server.ts, orders/src/routes/**]
+            uses: { checkout: Places the order, store: Looks up an order }
+          checkout:
+            kind: component
+            description: Prices the cart, saves the order, and announces it.
+            code: orders/src/checkout/**
+            uses: { store: Saves the order, events: Publishes order.placed }
+          store:
+            kind: component
+            description: Reads and writes orders in Postgres.
+            code: orders/src/store/**
+            uses: { postgres: Inserts and selects orders }
+          events:
+            kind: component
+            description: Publishes order events to RabbitMQ.
+            code: orders/src/events/**
+            uses: { rabbitmq: Publishes order.placed }
+      fulfillment:
+        kind: container
+        technology: Python
+        description: Picks and ships each placed order, then announces it shipped.
+        code: fulfillment/**
+        uses:
+          rabbitmq: Consumes order.placed and publishes order.shipped
+          carrier: Books a shipping label
+      notifier:
+        kind: container
+        technology: Python
+        description: Emails the customer when their order ships.
+        code: notifier/**
+        uses:
+          rabbitmq: Consumes order.shipped
+          email: Sends the shipped email
+      reports:
+        kind: container
+        technology: Go
+        description: The nightly job that totals the day's sales and emails finance.
+        code: [reports/**, deploy/k8s/reports-cronjob.yaml]
+        uses:
+          postgres: Totals the day's orders
+          email: Sends the report
+      postgres:
+        kind: datastore
+        technology: PostgreSQL
+        description: Orders.
+      rabbitmq:
+        kind: queue
+        technology: RabbitMQ
+        description: The orders exchange, with order.placed and order.shipped.
+  carrier:
+    kind: external
+    description: The carrier's label API.
+  email:
+    kind: external
+    technology: SMTP
+    description: The SMTP relay that delivers email.
+journeys:
+  place-order:
+    actor: customer
+    goal: Buy what's in the cart
+    importance: critical
+    steps:
+      - { from: customer, to: web, action: Places the order, code: web/src/pages/checkout.tsx }
+      - from: web
+        to: orders.routes
+        action: POSTs the cart to /orders
+        code: web/src/api.ts
+      - from: orders.routes
+        to: orders.checkout
+        action: Prices the cart and places the order
+        code: orders/src/routes/orders.ts
+      - from: orders.checkout
+        to: orders.store
+        action: Saves the order as placed
+        code: orders/src/checkout/place-order.ts
+      - from: orders.store
+        to: postgres
+        action: Inserts the order
+        code: orders/src/store/orders-repo.ts
+      - from: orders.checkout
+        to: orders.events
+        action: Announces the order
+        code: orders/src/checkout/place-order.ts
+      - from: orders.events
+        to: rabbitmq
+        action: Publishes order.placed
+        code: orders/src/events/publisher.ts
+  ship-order:
+    actor: customer
+    goal: Get the order delivered and know it's on its way
+    steps:
+      - from: fulfillment
+        to: rabbitmq
+        action: Consumes order.placed and picks the parcel
+        code: fulfillment/fulfillment/consumer.py
+      - from: fulfillment
+        to: carrier
+        action: Books a label and gets a tracking number
+        code: fulfillment/fulfillment/carrier.py
+      - from: fulfillment
+        to: rabbitmq
+        action: Publishes order.shipped
+        code: fulfillment/fulfillment/events.py
+      - from: notifier
+        to: rabbitmq
+        action: Consumes order.shipped
+        code: notifier/notifier/listener.py
+      - from: notifier
+        to: email
+        action: Emails the customer the tracking number
+        code: notifier/notifier/mailer.py
+  nightly-sales-report:
+    actor: scheduler
+    goal: Tell finance what sold yesterday
+    steps:
+      - { from: scheduler, to: reports, action: Starts the job at 02:00, code: deploy/k8s/reports-cronjob.yaml }
+      - from: reports
+        to: postgres
+        action: Totals yesterday's orders
+        code: reports/sales/summary.go
+      - from: reports
+        to: email
+        action: Emails the summary to finance
+        code: reports/sales/summary.go

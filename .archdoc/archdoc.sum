@@ -277,7 +277,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.checker:
     kind: structure
-    hash: fnv-e2d6528e7931fde8
+    hash: fnv-06594568367b7280
     files:
       packages/core/src/check/check.ts:
         - CheckOptions
@@ -286,6 +286,14 @@ seals:
         - ObservedEdge
         - check
         - observedEdges
+        - orphanElements
+      packages/core/src/check/discovery.ts:
+        - DiscoveryAssessment
+        - DiscoveryGap
+        - LEVEL_LIMITS
+        - assessDiscovery
+        - formatDiscovery
+        - isVerificationCode
       packages/core/src/check/journeys.ts:
         - validateJourneys
       packages/core/src/check/observed.ts:
@@ -529,7 +537,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.query:
     kind: structure
-    hash: fnv-e8cbc615c793fee9
+    hash: fnv-7776449bc140db8d
     files:
       packages/core/src/query/code-index.ts:
         - CodeIndex
@@ -594,11 +602,13 @@ seals:
         - overview
         - resolveRef
       packages/core/src/query/score.ts:
+        - DiscoveryScore
         - ElementMatch
         - Misnested
         - ModelScore
         - ScoreCount
         - ScoreOptions
+        - scoreDiscovery
         - scoreModel
       packages/core/src/query/search.ts:
         - SearchHit
@@ -612,7 +622,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.report:
     kind: structure
-    hash: fnv-4b010faf2b077799
+    hash: fnv-01c3d2b222a8beec
     files:
       packages/core/src/report/check-answer.ts:
         - CheckAnswerOptions
@@ -667,6 +677,7 @@ seals:
         - impactToJSON
         - locatedToJSON
       packages/core/src/report/score-report.ts:
+        - formatDiscoveryScore
         - formatScore
       packages/core/src/report/seal-report.ts:
         - formatSealStatus
@@ -679,7 +690,7 @@ seals:
         - TERMS
         - Term
         - counted
-    by: agent:claude
+    by: agent:claude-code
   element:toolchain.core.seals:
     kind: structure
     hash: fnv-9fb57c07c6d6bb63
