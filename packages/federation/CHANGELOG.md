@@ -1,5 +1,14 @@
 # @archdoc/federation
 
+## 0.6.2
+
+### Patch Changes
+
+- Updated dependencies [043e5a5]
+  - @archdoc/analyzers@0.6.2
+  - @archdoc/core@0.6.2
+  - @archdoc/spec@0.6.2
+
 ## 0.6.1
 
 ### Patch Changes
