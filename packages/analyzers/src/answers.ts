@@ -15,6 +15,7 @@ import {
   formatData,
   formatDiscovery,
   formatElement,
+  formatEnvironment,
   formatJourney,
   formatLineage,
   formatOverview,
@@ -152,6 +153,7 @@ export function showAnswer(where: Where, input: ShowInput): Promise<Answer> {
       formatActor(m, id),
       journey ? formatJourney(m, journey) : undefined,
       formatData(m, id),
+      formatEnvironment(m, id),
     ].filter((s): s is string => s !== undefined);
     if (sections.length) return ok(sections.join("\n\n"));
 

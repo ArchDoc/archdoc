@@ -2,7 +2,8 @@
  * The explorer's tokens: every color and size it uses. Colors live only in
  * this block (a test fails on a hex color anywhere else), and they mean one
  * thing each: the accent is selection and links; added, changed, removed, and
- * breaks are the only status colors. A box's kind is its shape, never a color.
+ * breaks are the only status colors. A box's kind is its shape and a kind
+ * color (--kind-*), named in the map's legend; kind colors never mean status.
  */
 /* tokens:start */
 :root {
@@ -31,6 +32,22 @@
   --log-bg: #121a26;
   --log-ink: #e2e8f0;
   --log-muted: #8a97aa;
+  /* Infrastructure: what a deployment node is, never a status. */
+  --infra-environment: #2563eb;
+  --infra-network: #059669;
+  --infra-compute: #db2777;
+  --infra-service: #65a30d;
+  --infra-client: #78716c;
+  /* What a box is: people, agents, and each kind of element. */
+  --kind-actor: #7c3aed;
+  --kind-agent: #c026d3;
+  --kind-system: #4338ca;
+  --kind-container: #0f766e;
+  --kind-component: #0369a1;
+  --kind-code: #475569;
+  --kind-datastore: #c2410c;
+  --kind-queue: #a16207;
+  --kind-external: #64748b;
 
   /* One type scale: six steps. */
   --fs-1: 12px;
@@ -55,6 +72,11 @@
     --line: #253142;
     --line-strong: #4c5a6e;
     --edge: #5d6b80;
+    --infra-environment: #60a5fa;
+    --infra-network: #34d399;
+    --infra-compute: #f472b6;
+    --infra-service: #a3e635;
+    --infra-client: #a8a29e;
     --accent: #5aa2ff;
     --accent-soft: #15294a;
     --on-accent: #0b1017;
@@ -69,6 +91,15 @@
     --shadow: rgb(0 0 0 / 30%);
     --shadow-strong: rgb(0 0 0 / 50%);
     --log-bg: #06090e;
+    --kind-actor: #a78bfa;
+    --kind-agent: #e879f9;
+    --kind-system: #818cf8;
+    --kind-container: #2dd4bf;
+    --kind-component: #38bdf8;
+    --kind-code: #94a3b8;
+    --kind-datastore: #fb923c;
+    --kind-queue: #facc15;
+    --kind-external: #94a3b8;
     color-scheme: dark;
   }
 }
@@ -82,6 +113,11 @@
   --line: #253142;
   --line-strong: #4c5a6e;
   --edge: #5d6b80;
+  --infra-environment: #60a5fa;
+  --infra-network: #34d399;
+  --infra-compute: #f472b6;
+  --infra-service: #a3e635;
+  --infra-client: #a8a29e;
   --accent: #5aa2ff;
   --accent-soft: #15294a;
   --on-accent: #0b1017;
@@ -96,6 +132,15 @@
   --shadow: rgb(0 0 0 / 30%);
   --shadow-strong: rgb(0 0 0 / 50%);
   --log-bg: #06090e;
+  --kind-actor: #a78bfa;
+  --kind-agent: #e879f9;
+  --kind-system: #818cf8;
+  --kind-container: #2dd4bf;
+  --kind-component: #38bdf8;
+  --kind-code: #94a3b8;
+  --kind-datastore: #fb923c;
+  --kind-queue: #facc15;
+  --kind-external: #94a3b8;
   color-scheme: dark;
 }
 /* tokens:end */
@@ -1320,6 +1365,21 @@ ul.plain {
   border-radius: 999px;
 }
 
+/* A participant in its kind's color, as on the map. */
+.lane-head[class*="tone-"] .lane-name {
+  padding: 1px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--kind) 55%, var(--line-strong));
+  border-left: 4px solid var(--kind);
+  background: color-mix(in srgb, var(--kind) 8%, var(--surface));
+}
+
+.lane-head.is-actor[class*="tone-"] .lane-name {
+  border-radius: 999px;
+  border-left-width: 1px;
+  border-color: var(--kind);
+}
+
 .lane-sub {
   font-size: var(--fs-1);
   color: var(--muted);
@@ -2047,7 +2107,7 @@ table.observed td.is-wrong code {
   pointer-events: none;
 }
 
-/* A box: kind is its shape. */
+/* A box: kind is its shape, and its color (the legend says which). */
 .card {
   position: relative;
   height: 100%;
@@ -2070,6 +2130,62 @@ table.observed td.is-wrong code {
 .card-main {
   flex: 1;
   min-width: 0;
+}
+
+/* Each kind its color: a tinted face and a stripe down the left side. */
+.tone-actor {
+  --kind: var(--kind-actor);
+}
+.tone-agent {
+  --kind: var(--kind-agent);
+}
+.tone-system {
+  --kind: var(--kind-system);
+}
+.tone-container {
+  --kind: var(--kind-container);
+}
+.tone-component {
+  --kind: var(--kind-component);
+}
+.tone-code {
+  --kind: var(--kind-code);
+}
+.tone-datastore {
+  --kind: var(--kind-datastore);
+}
+.tone-queue {
+  --kind: var(--kind-queue);
+}
+.tone-external {
+  --kind: var(--kind-external);
+}
+
+.card[class*="tone-"] {
+  background: color-mix(in srgb, var(--kind) 7%, var(--surface));
+  border-color: color-mix(in srgb, var(--kind) 55%, var(--line-strong));
+  border-left: 5px solid var(--kind);
+}
+
+.card.shape-pill[class*="tone-"] {
+  border-left-width: 1.5px;
+  border-color: var(--kind);
+}
+
+.card[class*="tone-"] .card-icon {
+  stroke: var(--kind);
+}
+
+.card-kind {
+  color: var(--kind, var(--muted));
+  font-size: var(--fs-1);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.card-label > .card-kind {
+  flex: none;
+  font-weight: 500;
 }
 
 .card.shape-pill {
@@ -2099,6 +2215,12 @@ table.observed td.is-wrong code {
   background: var(--surface-2);
 }
 
+.card.is-dashed[class*="tone-"],
+.card.shape-dashed[class*="tone-"] {
+  background: color-mix(in srgb, var(--kind) 4%, var(--surface-2));
+  border-left-style: dashed;
+}
+
 .card.is-group {
   align-items: flex-start;
   background: color-mix(in srgb, var(--surface) 40%, transparent);
@@ -2106,6 +2228,13 @@ table.observed td.is-wrong code {
   border-radius: 12px;
   box-shadow: none;
   padding: 14px 16px;
+}
+
+/* An open box: a faint wash of its kind's color, with its stripe along the top. */
+.card.is-group[class*="tone-"] {
+  background: color-mix(in srgb, var(--kind) 4%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--kind) 35%, var(--line));
+  border-top: 5px solid var(--kind);
 }
 
 .card.is-group.shape-store::before {
@@ -2298,8 +2427,14 @@ table.observed td.is-wrong code {
 /* Uses: thin and faint, until a box they touch is hovered or selected. */
 .react-flow__edge.rel path {
   stroke: var(--edge);
-  stroke-width: 1;
-  opacity: 0.55;
+  stroke-width: 1.4;
+  opacity: 0.85;
+}
+
+.react-flow__edge.rel.is-hover path {
+  stroke: var(--ink);
+  stroke-width: 2;
+  opacity: 1;
 }
 
 .react-flow__edge.rel.is-planned path {
@@ -2317,7 +2452,7 @@ table.observed td.is-wrong code {
 }
 
 .react-flow__edge.rel.is-dim {
-  opacity: 0.25;
+  opacity: 0.3;
 }
 
 .react-flow__edge.rel.is-lit path {
@@ -2427,6 +2562,154 @@ table.observed td.is-wrong code {
   to {
     stroke-dashoffset: -12;
   }
+}
+
+/* Descriptions sit over the lines they're on, the current journey step's included. */
+.react-flow__edgelabel-renderer {
+  z-index: 11;
+}
+
+/* What a use is for, on its line (which runs under it): always there, faded with its line. */
+.edge-note {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-align: center;
+  align-items: center;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: all;
+  transition: opacity 0.2s;
+}
+
+.edge-note.is-lit,
+.edge-note.is-hover {
+  border-color: var(--accent);
+  color: var(--ink);
+  z-index: 1;
+}
+
+.edge-note.is-dim {
+  opacity: 0.3;
+}
+
+/* On a journey's map: what its steps do along the line, the current one lit. */
+.edge-note.is-step {
+  color: var(--ink);
+  opacity: 0.75;
+}
+
+.edge-note.is-step.is-current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  opacity: 1;
+  z-index: 1;
+}
+
+/* The C4 level and the layout's direction, over the map. */
+.map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 1px 3px var(--shadow);
+}
+
+/* What the colors mean, and the switch for the descriptions. */
+.map-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 1px 3px var(--shadow);
+  font-size: var(--fs-1);
+  color: var(--muted);
+  max-width: 220px;
+}
+
+.map-legend summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.map-legend:not([open]) {
+  gap: 0;
+}
+
+.legend-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--kind) 18%, var(--surface));
+  border: 1px solid var(--kind);
+  border-left-width: 3px;
+}
+
+.legend-notes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.react-flow__minimap {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.react-flow__minimap-mask {
+  fill: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.react-flow__minimap-node {
+  fill: var(--line-strong);
+}
+
+.react-flow__minimap-node.is-group {
+  fill: var(--surface-2);
+  stroke: var(--line);
+}
+
+.react-flow__minimap-node[class*="tone-"] {
+  fill: var(--kind);
+}
+
+.react-flow__minimap-node.is-group[class*="tone-"] {
+  fill: color-mix(in srgb, var(--kind) 12%, var(--surface));
+  stroke: var(--kind);
 }
 
 /* The message travelling the current journey step's arrow. */
@@ -3164,4 +3447,181 @@ table.observed td.is-wrong code {
   font-size: var(--fs-2);
   color: var(--added);
   margin: 0;
+}
+
+/* ---------- Infrastructure ---------- */
+
+/* Each node is colored by what it is: network, compute, managed service, or client. */
+.infra-tone-environment {
+  --infra: var(--infra-environment);
+}
+.infra-tone-network {
+  --infra: var(--infra-network);
+}
+.infra-tone-compute {
+  --infra: var(--infra-compute);
+}
+.infra-tone-service {
+  --infra: var(--infra-service);
+}
+.infra-tone-client {
+  --infra: var(--infra-client);
+}
+
+/* The environment: the outermost frame, dashed, so it reads as a place, not a box. */
+.infra-environment .card.is-group {
+  border: 2px dashed var(--infra);
+  background: color-mix(in srgb, var(--infra) 5%, transparent);
+}
+
+/* Nodes inside it: a colored top edge and a faint tint, so nesting reads at a glance. */
+.infra-node .card.is-group {
+  border: 1.5px solid color-mix(in srgb, var(--infra) 45%, var(--line));
+  border-top: 4px solid var(--infra);
+  background: color-mix(in srgb, var(--infra) 6%, var(--surface));
+}
+
+.infra-node .card:not(.is-group) {
+  border: 1.5px solid color-mix(in srgb, var(--infra) 55%, var(--line-strong));
+  border-left: 4px solid var(--infra);
+  background: color-mix(in srgb, var(--infra) 8%, var(--surface));
+}
+
+.infra-box .card.is-group .card-label {
+  font-size: var(--fs-3);
+  color: color-mix(in srgb, var(--infra) 70%, var(--ink));
+  text-transform: none;
+}
+
+.infra-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  max-width: 60%;
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  font-size: var(--fs-1);
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px var(--shadow);
+}
+
+.infra-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.infra-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--infra) 18%, var(--surface));
+  border: 2px solid var(--infra);
+}
+
+.infra-tree-node .infra-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  vertical-align: baseline;
+}
+
+.infra-box .card {
+  cursor: pointer;
+}
+
+/* What the environment talks to from outside it. */
+.infra-outside .card {
+  box-shadow: none;
+}
+
+.infra-side {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 16px 12px 24px;
+}
+
+.infra-side > p {
+  margin: 0 6px;
+  font-size: var(--fs-2);
+}
+
+.infra-envs {
+  flex-wrap: wrap;
+  row-gap: 6px;
+  margin: 0 4px 6px;
+}
+
+.infra-envs legend {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.infra-tree,
+.infra-tree ul,
+.infra-missing {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.infra-tree-node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  padding: 5px 8px;
+  text-align: left;
+  font: inherit;
+  font-size: var(--fs-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.infra-tree-node:hover {
+  background: var(--surface-2);
+}
+
+.infra-tree-node.is-on {
+  background: var(--accent-soft);
+}
+
+.infra-tree-node .muted {
+  font-size: var(--fs-1);
+}
+
+.infra-missing li {
+  padding: 3px 8px;
+  font-size: var(--fs-2);
+}
+
+.infra-deployments li + li {
+  margin-top: 8px;
+}
+
+.infra-intro {
+  max-width: 560px;
+}
+
+.infra-example {
+  font-family: var(--f-mono);
+  font-size: var(--fs-mono);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
 }

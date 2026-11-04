@@ -15,6 +15,7 @@ elements:
     elements:
       spec:
         kind: container
+        deploy: [release.npm]
         technology: TypeScript, Zod, JSON Schema
         description: Source of truth for the model format, its JSON Schema, and v1→v2 migration.
         code: [{ path: packages/spec/** }]
@@ -32,6 +33,7 @@ elements:
 
       core:
         kind: container
+        deploy: [release.npm]
         technology: TypeScript
         description: Deterministic engine. Loads, validates, queries, diffs, maps to code, checks rules and data, and checks references into other repos.
         code: [{ path: packages/core/** }]
@@ -46,7 +48,7 @@ elements:
         elements:
           loader:
             kind: component
-            description: Multi-file loading, reference resolution, diagnostics with file and line.
+            description: Multi-file loading, reference resolution (deploy targets in environments included), diagnostics with file and line.
             code: [{ path: packages/core/src/load/** }]
             uses:
               checker: Validates journeys once references resolve
@@ -56,7 +58,7 @@ elements:
                 description: Loads archdoc.lock and the vendored models of other repos
           query:
             kind: component
-            description: Element, actor, and overview queries, search by words (and by file paths and symbols with a code index), impact (consumers, actors, journeys, owners, rules, and consumers and journeys in other repos), context briefs that rank the files and symbols to start a task in, eval scoring (of context briefs against past commits, and of a whole model against a golden one, for its structure and for how well it was discovered), and which experimental parts of the format a model uses.
+            description: Element, actor, and overview queries, where elements are deployed (an environment's nodes, what runs on each, and the uses between them), search by words (and by file paths and symbols with a code index), impact (consumers, actors, journeys, owners, rules, and consumers and journeys in other repos), context briefs that rank the files and symbols to start a task in, eval scoring (of context briefs against past commits, and of a whole model against a golden one, for its structure and for how well it was discovered), and which experimental parts of the format a model uses.
             code: [{ path: packages/core/src/query/** }]
             uses:
               checker:
@@ -99,7 +101,7 @@ elements:
                 description: Prints what archdoc check --seals says
           checker:
             kind: component
-            description: Validates journeys, and compares the model with the code and its rules (undeclared dependencies, rule violations, stale paths, orphans, and components outside containers or code outside components). Also says whether a new model is done (archdoc check --done), listing levels over the limits, init's descriptions, test and verification code modeled as elements, unconnected elements, actors, journeys, and steps without an action or code. Build tooling (devDependencies, tool config files) is not a dependency between elements.
+            description: Validates journeys, and compares the model with the code and its rules (undeclared dependencies, rule violations, stale paths including deployment code, orphans, and components outside containers or code outside components). Also says whether a new model is done (archdoc check --done), listing levels over the limits, unmapped code, init's descriptions, test and verification code modeled as elements, unconnected elements, actors, journeys, and steps without an action or code. Build tooling (devDependencies, tool config files) is not a dependency between elements.
             code: [{ path: packages/core/src/check/** }]
             uses:
               seals:
@@ -140,7 +142,7 @@ elements:
                 description: Reads other repos' data, mappings, and logic for lineage and simulation
           seals:
             kind: component
-            description: Seals, in archdoc.sum beside the model. Fingerprints the code each fact points at (an element's files and exports, a snippet's or decision's lines, a step's entry file, a data entry's schema fields), says what changed since someone sealed it, and writes the file again when they have checked.
+            description: Seals, in archdoc.sum beside the model. Fingerprints the code each fact points at (an element's files and exports, a snippet's or decision's lines, a step's entry file, a data entry's schema fields, a deployment's infrastructure files), says what changed since someone sealed it, and writes the file again when they have checked.
             code:
               - { path: packages/core/src/seal/** }
               - { path: packages/core/src/seal/seal.ts, symbol: fingerprints, description: What each fact's code is now }
@@ -174,6 +176,7 @@ elements:
 
       analyzers:
         kind: container
+        deploy: [release.npm]
         technology: TypeScript (ts.preProcessFile), yaml
         description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, check, seal), and init infers a starting model from manifests, compose files, imports, and schema files, layer by layer (containers, their components, and the code in those), with uses from imports at the level where the two sides part.
         code: [{ path: packages/analyzers/** }]
@@ -187,6 +190,7 @@ elements:
 
       federation:
         kind: container
+        deploy: [release.npm]
         technology: Node.js, git, semver
         description: Shares models across repos. `sync` reads other repos' models (and the landscape, with every model it pins) at their release tags and vendors them, pinned in archdoc.lock; `publish` writes a versioned bundle, with what the model's schema sources say. Experimental (docs/experimental.md).
         code: [{ path: packages/federation/** }]
@@ -204,6 +208,7 @@ elements:
 
       cli:
         kind: container
+        deploy: [release.npm, workstation.node, ci.actions]
         technology: Node.js, commander
         description: "`archdoc` command. For agents, the same answers as the MCP tools: init, context, show, check, and seal. For people and CI: validate, view, site, map, diff, report, trace list, mcp, and schema. sync, publish, landscape build, and view --landscape are experimental and left out of --help. eval and migrate are hidden maintainer commands."
         code: [{ path: packages/cli/** }]
@@ -237,6 +242,7 @@ elements:
 
       mcp:
         kind: container
+        deploy: [release.npm, workstation.agent]
         technology: Node.js, @modelcontextprotocol/sdk (stdio)
         description: "MCP tools for agents, one per question: archdoc_context (where to start, from a task, paths, or an error), archdoc_show (one thing by ID), archdoc_check (what's wrong or stale, and with a base, what the change does), archdoc_seal (record checked facts), and archdoc_init (start a model). Only seal and init write."
         code: [{ path: packages/mcp/** }]
@@ -249,8 +255,9 @@ elements:
 
       web:
         kind: container
+        deploy: [workstation.browser]
         technology: React 19, Vite, @xyflow/react, elkjs
-        description: Explorer. Tabs for Overview (journeys as cards, owners, a top-level map), Journeys (lanes per participant, branches by outcome, one step at a time), Traces (a bug's path as lanes beneath the modeled step, checked in the browser), Data (entries, tables, lineage), and Changes (the PR comment's verdict and what changed on the map). The map opens one level at a time; a box's kind is its shape. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain.
+        description: Explorer. Tabs for Overview (journeys as cards, owners, a top-level map), Journeys (on the map by default, or as a sequence with lanes per participant, branches by outcome, one step at a time), Traces (a bug's path as lanes beneath the modeled step, checked in the browser), Data (entries, tables, lineage), Infrastructure (one environment at a time, its nodes as boxes inside boxes colored by what they are, what runs on each, and the uses between them), and Changes (the PR comment's verdict and what changed on the map). The map starts at the C4 context and opens a level at a time (containers, then components), left to right or top down; a box's kind is its shape and its color, with a key, and every use says what it's for on its line. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain.
         code: [{ path: apps/web/** }]
         uses:
           core:
@@ -265,11 +272,11 @@ elements:
               graph: Hands the model to the canvas
           graph:
             kind: component
-            description: Decides what's visible (expand, focus, journeys, and a landscape's boxes by repo, team, or domain), lifts relationships to visible boxes, and lays them out with ELK.
+            description: Decides what's visible (C4 levels, expand, focus, journeys, a landscape's boxes by repo, team, or domain, and an environment's infrastructure), lifts relationships to visible boxes, sizes each use's description, and lays them out with ELK, keeping room for the descriptions.
             code: [{ path: apps/web/src/graph/** }]
           ui:
             kind: component
-            description: Tabs, the map, journey lanes and the step panel, the side lists, and the details panel with code links.
+            description: Tabs, the map (cards colored by kind, its key and minimap, descriptions on the lines, level and layout controls), journey lanes and the step panel, the side lists, and the details panel with code links.
             code: [{ path: apps/web/src/components/**, description: Components }, apps/web/src/App.tsx, { path: apps/web/src/styles.css, description: Styles and tokens }]
             uses:
               graph: Renders the laid-out graph
@@ -278,6 +285,7 @@ elements:
 
       github-action:
         kind: container
+        deploy: [release.github, ci.actions]
         technology: GitHub Actions (composite), actions/github-script
         description: Posts a pull request comment that leads with a verdict (what blocks the merge, what to check, who to involve) only when there is something to fix or check, otherwise writes the report to the job summary; puts introduced findings on their lines, and fails on drift the pull request introduces.
         code: [{ path: integrations/github-action/** }]
@@ -288,6 +296,7 @@ elements:
 
       agent-skills:
         kind: container
+        deploy: [release.github, workstation.agent]
         technology: Claude Code plugin and marketplace, Markdown (skill, AGENTS.md), MCP configs
         description: Teaches coding agents the workflows. A change starts with a context brief and ends with check and seal, with the model edited alongside the code. A bug starts with context on the error, and ends with a trace with evidence on every step. A repository without a model starts with init. Asked to show the model, the skill starts `archdoc view` in the background and gives the user its URL (a static `archdoc site` on a remote machine), and `/archdoc:view` does the same. Claude Code users install it as a plugin (the skills, and an MCP server pinned to the CLI released with it) from the marketplace at the repository root; other agents get an AGENTS.md snippet, MCP configs, and the skill to copy to `.agents/skills/`, where Codex looks for it.
         code: [{ path: integrations/agent-skills/** }, { path: integrations/claude-plugin/** }, .claude-plugin/**, .claude/**, .agents/**, AGENTS.md, CLAUDE.md, .mcp.json]
@@ -300,6 +309,7 @@ elements:
 
       landscape-template:
         kind: container
+        deploy: [release.github]
         technology: Markdown, YAML, GitHub Actions
         description: Starting point for a landscape repo. A model with teams, a cross-team journey, domains, and an org rule, and a workflow that takes every team's newest release weekly and publishes the site to GitHub Pages. Experimental, with federation (docs/experimental.md).
         code: [{ path: integrations/landscape-template/** }]

@@ -568,6 +568,101 @@
             "additionalProperties": false
           }
         },
+        "environments": {
+          "description": "Where the system is deployed: each environment and its infrastructure. Elements name a node in it with deploy.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "owners": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": ["active", "planned", "deprecated"],
+                "description": "Lifecycle status, used for roadmap overlays. Defaults to active."
+              },
+              "links": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["url"],
+                  "additionalProperties": false
+                }
+              },
+              "provenance": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": ["declared", "inferred", "suggested"],
+                    "description": "declared: written by a person (the default). inferred: produced by an analyzer. suggested: proposed by an AI agent and not yet accepted."
+                  },
+                  "by": {
+                    "description": "Who produced it: analyzer:ts-imports, agent:claude-code, human:@handle",
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "required": ["source"],
+                "additionalProperties": false,
+                "description": "Where a fact came from. Absent means declared by a person."
+              },
+              "nodes": {
+                "description": "The infrastructure in it, outermost first: cloud, region, cluster, and so on",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema1"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
         "mappings": {
           "description": "Experimental (docs/experimental.md): how records become other records, field by field, for lineage and simulation",
           "type": "object",
@@ -2460,6 +2555,348 @@
             "additionalProperties": false
           }
         },
+        "deploy": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The environment, or a node inside it, as a dotted path: production, production.aws.eks"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "technology": {
+                  "description": "How it's deployed there, such as Helm chart, ECS service, or Lambda",
+                  "type": "string"
+                },
+                "replicas": {
+                  "description": "How many instances run, such as 3 or 2-10",
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "description": "Where it's reached in that environment",
+                  "type": "string"
+                },
+                "code": {
+                  "description": "The deployment definition: a Helm chart, manifest, Terraform module, or compose file",
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A file, directory, or glob relative to the repo root"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "lines": {
+                              "description": "A snippet of a file: one line, or a range such as 40-88",
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                {
+                                  "type": "string",
+                                  "pattern": "^\\d+(-\\d+)?$"
+                                }
+                              ]
+                            },
+                            "symbol": {
+                              "description": "A snippet of a file: the function, class, or type it declares, such as stepMessage",
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": ["path"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "A file, directory, or glob relative to the repo root"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "lines": {
+                                "description": "A snippet of a file: one line, or a range such as 40-88",
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  {
+                                    "type": "string",
+                                    "pattern": "^\\d+(-\\d+)?$"
+                                  }
+                                ]
+                              },
+                              "symbol": {
+                                "description": "A snippet of a file: the function, class, or type it declares, such as stepMessage",
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["path"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["active", "planned", "deprecated"],
+                  "description": "Lifecycle status, used for roadmap overlays. Defaults to active."
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "enum": ["declared", "inferred", "suggested"],
+                      "description": "declared: written by a person (the default). inferred: produced by an analyzer. suggested: proposed by an AI agent and not yet accepted."
+                    },
+                    "by": {
+                      "description": "Who produced it: analyzer:ts-imports, agent:claude-code, human:@handle",
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["source"],
+                  "additionalProperties": false,
+                  "description": "Where a fact came from. Absent means declared by a person."
+                }
+              },
+              "required": ["to"],
+              "additionalProperties": false
+            },
+            {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "to": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "The environment, or a node inside it, as a dotted path: production, production.aws.eks"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "technology": {
+                        "description": "How it's deployed there, such as Helm chart, ECS service, or Lambda",
+                        "type": "string"
+                      },
+                      "replicas": {
+                        "description": "How many instances run, such as 3 or 2-10",
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "url": {
+                        "description": "Where it's reached in that environment",
+                        "type": "string"
+                      },
+                      "code": {
+                        "description": "The deployment definition: a Helm chart, manifest, Terraform module, or compose file",
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "A file, directory, or glob relative to the repo root"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "lines": {
+                                    "description": "A snippet of a file: one line, or a range such as 40-88",
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      {
+                                        "type": "string",
+                                        "pattern": "^\\d+(-\\d+)?$"
+                                      }
+                                    ]
+                                  },
+                                  "symbol": {
+                                    "description": "A snippet of a file: the function, class, or type it declares, such as stepMessage",
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": ["path"],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "description": "A file, directory, or glob relative to the repo root"
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "lines": {
+                                      "description": "A snippet of a file: one line, or a range such as 40-88",
+                                      "anyOf": [
+                                        {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 9007199254740991
+                                        },
+                                        {
+                                          "type": "string",
+                                          "pattern": "^\\d+(-\\d+)?$"
+                                        }
+                                      ]
+                                    },
+                                    "symbol": {
+                                      "description": "A snippet of a file: the function, class, or type it declares, such as stepMessage",
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": ["path"],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["active", "planned", "deprecated"],
+                        "description": "Lifecycle status, used for roadmap overlays. Defaults to active."
+                      },
+                      "provenance": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string",
+                            "enum": ["declared", "inferred", "suggested"],
+                            "description": "declared: written by a person (the default). inferred: produced by an analyzer. suggested: proposed by an AI agent and not yet accepted."
+                          },
+                          "by": {
+                            "description": "Who produced it: analyzer:ts-imports, agent:claude-code, human:@handle",
+                            "type": "string"
+                          },
+                          "evidence": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["source"],
+                        "additionalProperties": false,
+                        "description": "Where a fact came from. Absent means declared by a person."
+                      }
+                    },
+                    "required": ["to"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          ],
+          "description": "Where a container, datastore, or queue is deployed: a node path such as production.aws.eks, a list of them, or { to, replicas, url, code }"
+        },
         "provenance": {
           "type": "object",
           "properties": {
@@ -2503,6 +2940,192 @@
         }
       },
       "required": ["kind"],
+      "additionalProperties": false
+    },
+    "__schema1": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "cloud, region, zone, network, cluster, namespace, host, vm, serverless, managed, cdn, device, browser, or another",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "technology": {
+          "description": "Such as AWS, EKS 1.30, Cloud Run, or Docker Compose",
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "owners": {
+          "description": "Actors (usually teams) that run it",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "planned", "deprecated"],
+          "description": "Lifecycle status, used for roadmap overlays. Defaults to active."
+        },
+        "code": {
+          "description": "Where it's defined: Terraform, Pulumi, CloudFormation, Kubernetes, or compose files",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "A file, directory, or glob relative to the repo root"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "lines": {
+                      "description": "A snippet of a file: one line, or a range such as 40-88",
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^\\d+(-\\d+)?$"
+                        }
+                      ]
+                    },
+                    "symbol": {
+                      "description": "A snippet of a file: the function, class, or type it declares, such as stepMessage",
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["path"],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A file, directory, or glob relative to the repo root"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "lines": {
+                        "description": "A snippet of a file: one line, or a range such as 40-88",
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^\\d+(-\\d+)?$"
+                          }
+                        ]
+                      },
+                      "symbol": {
+                        "description": "A snippet of a file: the function, class, or type it declares, such as stepMessage",
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": ["url"],
+            "additionalProperties": false
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": ["declared", "inferred", "suggested"],
+              "description": "declared: written by a person (the default). inferred: produced by an analyzer. suggested: proposed by an AI agent and not yet accepted."
+            },
+            "by": {
+              "description": "Who produced it: analyzer:ts-imports, agent:claude-code, human:@handle",
+              "type": "string"
+            },
+            "evidence": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "required": ["source"],
+          "additionalProperties": false,
+          "description": "Where a fact came from. Absent means declared by a person."
+        },
+        "nodes": {
+          "description": "Nodes inside this one, such as a cluster inside a region",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema1"
+          }
+        }
+      },
       "additionalProperties": false
     }
   }

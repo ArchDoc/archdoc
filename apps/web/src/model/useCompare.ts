@@ -133,7 +133,7 @@ function build(s: Sources): Model {
 }
 
 /** The explorer's tabs. */
-export type Tab = "overview" | "journeys" | "traces" | "data" | "changes";
+export type Tab = "overview" | "journeys" | "traces" | "data" | "infrastructure" | "changes";
 
 /** What the address says to open. */
 export interface HashState {
@@ -145,6 +145,8 @@ export interface HashState {
   data?: string | undefined;
   /** The open trace on the Traces tab. */
   trace?: string | undefined;
+  /** The environment on the Infrastructure tab. */
+  environment?: string | undefined;
 }
 
 /**
@@ -163,6 +165,9 @@ export function readHash(hash = window.location.hash): HashState {
     }
     if (name === "journeys") return { tab: "journeys", journey: value || undefined };
     if (name === "traces") return { tab: "traces", trace: value || undefined };
+    if (name === "infrastructure") {
+      return { tab: "infrastructure", environment: value || undefined };
+    }
     if (name === "data") {
       const data = value
         ? value.split(".").length > 2
@@ -184,6 +189,8 @@ export function hashOf(state: HashState): string {
       return `#changes${pair ? `=${encodeURIComponent(pair.base)}${pair.head ? `...${encodeURIComponent(pair.head)}` : ""}` : ""}`;
     case "traces":
       return `#traces${state.trace ? `=${encodeURIComponent(state.trace)}` : ""}`;
+    case "infrastructure":
+      return `#infrastructure${state.environment ? `=${encodeURIComponent(state.environment)}` : ""}`;
     case "journeys":
       return `#journeys${state.journey ? `=${encodeURIComponent(state.journey)}` : ""}`;
     case "data": {

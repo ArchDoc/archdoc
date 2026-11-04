@@ -1,6 +1,14 @@
 import type { Simulation } from "@archdoc/core/browser";
 import { type CSSProperties, useEffect, useRef } from "react";
-import type { LaneBranch, LaneRow, LaneStep, Lanes as LanesData } from "../model/stories.js";
+import type { Lane, LaneBranch, LaneRow, LaneStep, Lanes as LanesData } from "../model/stories.js";
+import { toneOf } from "./Legend.js";
+
+/** A participant's color, the one its box has on the map. */
+function toneClass(l: Lane): string {
+  if (!l.kind) return "";
+  const tone = toneOf({ family: l.actor ? "actor" : "element", kind: l.kind });
+  return tone ? `tone-${tone.id}` : "";
+}
 
 export interface LanesProps {
   data: LanesData;
@@ -164,7 +172,13 @@ export function Lanes({ data, at, onAt, simulation }: LanesProps) {
         <div className="lane-heads">
           <span className="lane-num" />
           {lanes.map((l) => (
-            <span key={l.key} className={`lane-head${l.actor ? " is-actor" : ""}`} title={l.key}>
+            <span
+              key={l.key}
+              className={["lane-head", l.actor ? "is-actor" : "", toneClass(l)]
+                .filter(Boolean)
+                .join(" ")}
+              title={l.kind ? `${l.key} · ${l.kind}` : l.key}
+            >
               <span className="lane-name">{l.label}</span>
               {l.sub ? <span className="lane-sub">{l.sub}</span> : null}
             </span>

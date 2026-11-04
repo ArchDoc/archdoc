@@ -23,7 +23,12 @@ export interface Layout {
    * box leave and enter it at different points.
    */
   routes: Map<string, Point[]>;
+  /** Where each labelled edge's label sits, in absolute coordinates. */
+  labels: Map<string, Box>;
 }
+
+/** The room an edge's label needs, by edge id. */
+export type LabelSizes = ReadonlyMap<string, { width: number; height: number }>;
 
 export const NODE_WIDTH = 220;
 export const NODE_HEIGHT = 64;
@@ -41,6 +46,7 @@ async function layoutOnce(
   graph: Graph,
   /** Extra ELK options for the root, to compare layouts. */
   options: Record<string, string> = {},
+  labels: LabelSizes = new Map(),
 ): Promise<Layout> {
   const elkNodes = new Map<string, ElkNode>();
   for (const n of graph.nodes) {
@@ -86,23 +92,47 @@ async function layoutOnce(
       "elk.edgeRouting": "ORTHOGONAL",
       // Routes in absolute coordinates, wherever ELK keeps the edge.
       "elk.json.edgeCoords": "ROOT",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "110",
-      "elk.layered.spacing.edgeNodeBetweenLayers": "28",
-      "elk.layered.spacing.edgeEdgeBetweenLayers": "14",
-      "elk.spacing.nodeNode": "36",
-      "elk.spacing.edgeNode": "22",
-      "elk.spacing.edgeEdge": "14",
+      // Room between rows of boxes, so each line has a long last leg and its arrowhead shows
+      // which way it goes.
+      "elk.layered.spacing.nodeNodeBetweenLayers": "120",
+      "elk.layered.spacing.edgeNodeBetweenLayers": "36",
+      "elk.layered.spacing.edgeEdgeBetweenLayers": "16",
+      "elk.spacing.nodeNode": "44",
+      "elk.spacing.edgeNode": "26",
+      "elk.spacing.edgeEdge": "16",
+      // A use's description sits on its line, in a row of its own between the boxes.
+      "elk.edgeLabels.placement": "CENTER",
+      "elk.spacing.edgeLabel": "8",
+      "elk.layered.edgeLabels.sideSelection": "SMART_DOWN",
       "elk.spacing.componentComponent": "60",
       "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
       ...options,
     },
     children: [],
-    edges: graph.edges.map((e) => ({
-      id: e.id,
-      sources: [e.sourcePort ?? e.source],
-      targets: [e.targetPort ?? e.target],
-    })),
+    edges: graph.edges.map((e) => {
+      const label = labels.get(e.id);
+      return {
+        id: e.id,
+        sources: [e.sourcePort ?? e.source],
+        targets: [e.targetPort ?? e.target],
+        // ELK places a label only if it has text; its size is what matters. Inline, the label
+        // sits centered on its line, which runs through it.
+        ...(label
+          ? {
+              labels: [
+                {
+                  id: `${e.id}:label`,
+                  text: "label",
+                  width: label.width,
+                  height: label.height,
+                  layoutOptions: { "elk.edgeLabels.inline": "true" },
+                },
+              ],
+            }
+          : {}),
+      };
+    }),
   };
 
   for (const n of graph.nodes) {
@@ -122,10 +152,15 @@ async function layoutOnce(
   const result = await elk.layout(root);
   const boxes = new Map<string, Box>();
   const routes = new Map<string, Point[]>();
+  const placed = new Map<string, Box>();
   const visit = (node: ElkNode) => {
     for (const e of (node.edges ?? []) as ElkExtendedEdge[]) {
       const s = e.sections?.[0];
       if (s) routes.set(e.id, [s.startPoint, ...(s.bendPoints ?? []), s.endPoint]);
+      const l = e.labels?.[0];
+      if (l && l.x !== undefined && l.y !== undefined) {
+        placed.set(e.id, { x: l.x, y: l.y, width: l.width ?? 0, height: l.height ?? 0 });
+      }
     }
     for (const n of node.children ?? []) {
       boxes.set(n.id, {
@@ -138,7 +173,7 @@ async function layoutOnce(
     }
   };
   visit(result);
-  return { boxes, routes };
+  return { boxes, routes, labels: placed };
 }
 
 export interface UntangledLayout extends Layout {
@@ -156,15 +191,17 @@ export async function layoutGraph(
   graph: Graph,
   options: Record<string, string> = {},
   passes = 4,
+  /** Room to keep for edges' labels, such as each use's description. */
+  labels: LabelSizes = new Map(),
 ): Promise<UntangledLayout> {
-  let best = { graph, ...(await layoutOnce(graph, options)) };
+  let best = { graph, ...(await layoutOnce(graph, options, labels)) };
   if (!graph.edges.some((e) => e.rows)) return best;
   let crossings = countCrossings(best.routes.values());
   // Each pass reorders from the last one, which may be worse before it gets better.
   let current = best;
   for (let pass = 0; pass < passes && crossings > 0; pass++) {
     const next = reorderRows(current.graph, barycenters(current.graph, current.boxes));
-    current = { graph: next, ...(await layoutOnce(next, options)) };
+    current = { graph: next, ...(await layoutOnce(next, options, labels)) };
     const c = countCrossings(current.routes.values());
     if (c < crossings) {
       best = current;

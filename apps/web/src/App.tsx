@@ -10,8 +10,15 @@ import {
 } from "@archdoc/core/browser";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas } from "./components/Canvas.js";
+import { Canvas, useStoredChoice, useStoredFlag } from "./components/Canvas.js";
 import { Details } from "./components/Details.js";
+import {
+  defaultEnvironment,
+  EnvironmentList,
+  InfraCanvas,
+  InfraDetails,
+  InfraIntro,
+} from "./components/Infrastructure.js";
 import { Lanes } from "./components/Lanes.js";
 import { Overview } from "./components/Overview.js";
 import type { PayloadEntry } from "./components/Payload.js";
@@ -27,7 +34,14 @@ import {
   journeyStores,
   stepData,
 } from "./graph/data.js";
-import { ancestorsOf, defaultExpanded, journeyExpansion } from "./graph/graph.js";
+import {
+  ancestorsOf,
+  defaultExpanded,
+  journeyExpansion,
+  type Level,
+  levelExpansion,
+  levelOf,
+} from "./graph/graph.js";
 import { type GroupBy, type Grouping, groupLandscape } from "./graph/groups.js";
 import { type Compare, compareModels } from "./model/compare.js";
 import { journeyLanes, journeysByImportance } from "./model/stories.js";
@@ -174,7 +188,17 @@ function Explorer({
 }: ExplorerProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>("repo");
   // Boxes opened by hand, and boxes closed by hand that something else opened (by context).
-  const [expanded, setExpanded] = useState<Set<string>>(() => defaultExpanded(model));
+  // The map starts at the C4 context: each system one box, with who uses it and what it talks
+  // to. A landscape starts with its repos open, grouped.
+  const [expanded, setExpanded] = useState<Set<string>>(() =>
+    landscape ? defaultExpanded(model) : levelExpansion(model, "context"),
+  );
+  // Which way the map runs: left to right, or top down. This browser remembers.
+  const [direction, setDirection] = useStoredChoice(
+    "archdoc:map-direction",
+    ["RIGHT", "DOWN"] as const,
+    "RIGHT",
+  );
   const [closed, setClosed] = useState<{ context: string; ids: ReadonlySet<string> }>();
   // Datastores opened to show their tables, and those showing a journey's rows instead.
   const [tables, setTables] = useState<ReadonlySet<string>>(() => new Set());
@@ -189,7 +213,9 @@ function Explorer({
   const [journeyId, setJourneyId] = useState<string | undefined>(initial.journey);
   // The interaction the journey is at: a step's arrow, or its writer storing what it wrote.
   const [at, setAt] = useState(0);
-  const [onMap, setOnMap] = useState(false);
+  // A journey shows on the map unless someone picks its sequence, which this browser remembers.
+  const [sequence, setSequence] = useStoredFlag("archdoc:journey-sequence", false);
+  const onMap = !sequence;
   const [preview, setPreview] = useState<string>();
   const [centerOn, setCenterOn] = useState<string>();
   const [panelWidth, setPanelWidth] = usePanelWidth();
@@ -197,6 +223,10 @@ function Explorer({
   // The open trace, and the hop selected in it.
   const [traceId, setTraceId] = useState<string | undefined>(initial.trace);
   const [traceAt, setTraceAt] = useState<number>();
+  // The environment on the Infrastructure tab.
+  const [environment, setEnvironment] = useState<string | undefined>(
+    () => initial.environment ?? defaultEnvironment(model),
+  );
   const traceState = useMemo(() => readTraces(model, traces, files), [model, traces, files]);
   const traceCheck = traceState.checks.find((c) => c.view.id === traceId) ?? traceState.checks[0];
   const traceStep = traceCheck
@@ -237,12 +267,13 @@ function Explorer({
         pair,
         journey: tab === "journeys" ? journeyId : undefined,
         trace: tab === "traces" ? traceCheck?.view.id : undefined,
+        environment: tab === "infrastructure" ? environment : undefined,
         data:
           tab === "data" && (selected?.startsWith("data:") || selected?.startsWith("field:"))
             ? selected
             : undefined,
       }),
-    [tab, pair, journeyId, selected, traceCheck],
+    [tab, pair, journeyId, selected, traceCheck, environment],
   );
 
   // After a live reload, drop references to things that no longer exist.
@@ -251,6 +282,9 @@ function Explorer({
     setTables((prev) => new Set([...prev].filter((id) => model.elements.has(id))));
     setSelected((prev) => (prev && exists(model, prev, landscape) ? prev : undefined));
     setJourneyId((prev) => (prev && model.journeys.has(prev) ? prev : undefined));
+    setEnvironment((prev) =>
+      prev && model.environments.has(prev) ? prev : defaultEnvironment(model),
+    );
   }, [model, landscape]);
 
   // The Journeys tab always has a journey open: the most important one, to start.
@@ -385,6 +419,15 @@ function Explorer({
         if (tab !== "data") onTab("data");
         return;
       }
+      // An environment or a node in one lives on the Infrastructure tab.
+      if (key.startsWith("env:") || key.startsWith("deploy:")) {
+        const env = key.startsWith("env:")
+          ? key.slice(4)
+          : model.deploymentNodes.get(key.slice(7))?.environment;
+        if (env) setEnvironment(env);
+        if (tab !== "infrastructure") onTab("infrastructure");
+        return;
+      }
       if (key.startsWith("element:")) {
         const hidden = ancestorsOf(model, key.slice(8));
         setExpanded((prev) =>
@@ -463,6 +506,15 @@ function Explorer({
     [effective, context],
   );
   const toggle = useCallback((id: string) => flip("e:", id), [flip]);
+  /** Opens the boxes a C4 level shows, and closes the rest. */
+  const showLevel = useCallback(
+    (level: Level) => {
+      setExpanded(levelExpansion(model, level));
+      setClosed(undefined);
+      setFocused(false);
+    },
+    [model],
+  );
   const toggleTables = useCallback((id: string) => flip("t:", id), [flip]);
   const toggleFields = useCallback((entry: string) => {
     setOpenFields((prev) => {
@@ -559,7 +611,13 @@ function Explorer({
       compare={compare}
       preview={tab === "overview" ? preview : undefined}
       recheck={seals?.facts}
-      direction={journeyOnMap ? "RIGHT" : "DOWN"}
+      direction={direction}
+      onDirection={setDirection}
+      level={
+        journeyOnMap || tab === "data"
+          ? undefined
+          : { current: levelOf(model, effective.expanded), onLevel: showLevel }
+      }
     />
   );
 
@@ -601,14 +659,26 @@ function Explorer({
               </span>
             </p>
           </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={onMap}
-              onChange={(e) => setOnMap(e.currentTarget.checked)}
-            />{" "}
-            Show on map
-          </label>
+          <fieldset className="segmented story-view" aria-label="Show the journey as">
+            <legend>Show as</legend>
+            {(
+              [
+                [false, "Map", "Each step on the map of the system, one at a time"],
+                [true, "Sequence", "Each step as a row, between a column per participant"],
+              ] as const
+            ).map(([seq, label, title]) => (
+              <button
+                key={label}
+                type="button"
+                className={sequence === seq ? "is-on" : undefined}
+                aria-pressed={sequence === seq}
+                title={title}
+                onClick={() => setSequence(seq)}
+              >
+                {label}
+              </button>
+            ))}
+          </fieldset>
         </header>
         <div className="story-body">
           {onMap ? (
@@ -700,6 +770,38 @@ function Explorer({
           code={code}
         />
       ) : null;
+  } else if (tab === "infrastructure") {
+    side = (
+      <EnvironmentList
+        model={model}
+        environment={environment}
+        selected={selected}
+        onEnvironment={(id) => {
+          setEnvironment(id);
+          setSelected(undefined);
+        }}
+        onSelect={select}
+      />
+    );
+    main = environment ? (
+      <InfraCanvas
+        key={environment}
+        model={model}
+        environment={environment}
+        selected={selected}
+        onSelect={(key) => setSelected(key)}
+      />
+    ) : (
+      <div className="empty-main">
+        <InfraIntro />
+      </div>
+    );
+    panel =
+      selected?.startsWith("env:") || selected?.startsWith("deploy:") ? (
+        <InfraDetails model={model} selected={selected} onSelect={select} />
+      ) : (
+        details
+      );
   } else if (tab === "data") {
     side = <DataList model={model} selected={selected} onSelect={select} />;
     panel = details ?? (
@@ -736,6 +838,12 @@ function Explorer({
         ]
       : []),
     ...(hasData ? [{ id: "data" as const, label: "Data" }] : []),
+    {
+      id: "infrastructure" as const,
+      label: "Infrastructure",
+      title:
+        "Where the system is deployed: each environment, its infrastructure, and what runs on it",
+    },
     ...(changes
       ? [
           {
@@ -971,6 +1079,8 @@ function exists(model: Model, key: string, landscape?: LandscapeInfo): boolean {
   if (key.startsWith("domain:")) return !!landscape?.domains.some((d) => d.id === key.slice(7));
   if (key.startsWith("actor:")) return model.actors.has(key.slice(6));
   if (key.startsWith("element:")) return model.elements.has(key.slice(8));
+  if (key.startsWith("env:")) return model.environments.has(key.slice(4));
+  if (key.startsWith("deploy:")) return model.deploymentNodes.has(key.slice(7));
   return model.relationships.some(
     (r) => r.to.type === "external" && `external:${r.to.ref}` === key,
   );

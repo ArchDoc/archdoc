@@ -1,4 +1,5 @@
 import { type CodeMap, locate, resolveCodeMap } from "../codemap/codemap.js";
+import { compileGlob, normalizePath } from "../codemap/glob.js";
 import { findSnippet, isSnippet, snippetLabel } from "../codemap/snippet.js";
 import { evaluateDataRules } from "../data/rules.js";
 import { type ImportedSchema, schemaDrift } from "../data/schemas.js";
@@ -198,6 +199,37 @@ export function check(model: Model, options: CheckOptions = {}): CheckResult {
         files: e?.location ? [e.location.file] : [],
         location: e?.location,
       });
+    }
+  }
+
+  // Deployment definitions: the infrastructure code a node or a deployment points at.
+  if (options.files) {
+    const files = options.files.map(normalizePath);
+    const sites = [
+      ...[...model.deploymentNodes.values()]
+        .filter((n) => n.spec.status !== "planned")
+        .map((n) => ({ what: `Deployment node ${n.id}`, code: n.code, location: n.location })),
+      ...model.deployments
+        .filter((d) => d.status !== "planned")
+        .map((d) => ({
+          what: `${d.element}'s deployment to ${d.to}`,
+          code: d.code,
+          location: d.location,
+        })),
+    ];
+    for (const site of sites) {
+      for (const ref of site.code) {
+        const re = compileGlob(ref.path);
+        if (files.some((f) => re.test(f))) continue;
+        findings.push({
+          severity: "warning",
+          code: "drift/stale-path",
+          message: `${site.what} maps "${ref.path}", which matches no file. Update its code paths.`,
+          evidence: [],
+          files: site.location ? [site.location.file] : [],
+          location: site.location,
+        });
+      }
     }
   }
 

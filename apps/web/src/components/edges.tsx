@@ -1,5 +1,11 @@
-import { BaseEdge, type Edge, type EdgeProps, getSmoothStepPath } from "@xyflow/react";
-import type { Point } from "../graph/layout.js";
+import {
+  BaseEdge,
+  type Edge,
+  EdgeLabelRenderer,
+  type EdgeProps,
+  getSmoothStepPath,
+} from "@xyflow/react";
+import type { Box, Point } from "../graph/layout.js";
 import { pointAlong, roundedPath } from "../graph/route.js";
 
 export interface RoutedData extends Record<string, unknown> {
@@ -9,6 +15,21 @@ export interface RoutedData extends Record<string, unknown> {
   labelAt?: number | undefined;
   /** A message travelling the edge, such as the current journey step's. */
   packet?: { label: string; missing?: boolean | undefined } | undefined;
+  /**
+   * What the use is for, always shown: wrapped lines in the box the layout
+   * kept for them beside the line, or, without one, at the label point.
+   */
+  note?:
+    | {
+        lines: string[];
+        text: string;
+        box?: Box | undefined;
+        /** Lines drawn faint, like their edge. */
+        className?: string | undefined;
+        /** Pointing at the label lights its line, so it's clear which line it's for. */
+        onHover?: ((on: boolean) => void) | undefined;
+      }
+    | undefined;
 }
 
 export type RoutedEdge = Edge<RoutedData, "routed">;
@@ -45,7 +66,40 @@ export function Routed(props: EdgeProps<RoutedEdge>) {
         interactionWidth={props.interactionWidth}
       />
       {packet ? <Packet path={path} at={at} {...packet} /> : null}
+      {props.data?.note ? <Note {...props.data.note} at={at} /> : null}
     </>
+  );
+}
+
+/** A use's description, beside its line. */
+function Note(props: {
+  lines: string[];
+  text: string;
+  box?: Box | undefined;
+  at: Point;
+  className?: string | undefined;
+  onHover?: ((on: boolean) => void) | undefined;
+}) {
+  const { box } = props;
+  const style: React.CSSProperties = box
+    ? { transform: `translate(${box.x}px, ${box.y}px)`, width: box.width, minHeight: box.height }
+    : { transform: `translate(-50%, -50%) translate(${props.at.x}px, ${props.at.y}px)` };
+  return (
+    <EdgeLabelRenderer>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: pointing at a label only lights its line; the text is the same either way. */}
+      <div
+        className={["edge-note", props.className].filter(Boolean).join(" ")}
+        style={style}
+        title={props.lines.join(" ") === props.text ? undefined : props.text}
+        onMouseEnter={() => props.onHover?.(true)}
+        onMouseLeave={() => props.onHover?.(false)}
+      >
+        {props.lines.map((l, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: lines of one label, in order.
+          <span key={i}>{l}</span>
+        ))}
+      </div>
+    </EdgeLabelRenderer>
   );
 }
 
