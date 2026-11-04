@@ -21,6 +21,11 @@ export interface ViewState {
   focus?: string | undefined;
   /** For a landscape: the team or domain boxes elements are drawn in. */
   grouping?: Grouping | undefined;
+  /**
+   * A model without a system element, at the C4 context: its own parts drawn
+   * as one closed box, with the people who use it and what it talks to.
+   */
+  system?: SystemBox | undefined;
   /** Datastore element IDs opened to show their tables. */
   tables?: ReadonlySet<string> | undefined;
   /** Qualified entries whose tables show their fields; the rest show only their names. */
@@ -35,6 +40,15 @@ export interface ViewState {
   extra?: ReadonlySet<string> | undefined;
   /** Opened datastores that show their rows instead of their tables, and the rows, by qualified entry. */
   rows?: { stores: ReadonlySet<string>; data: ReadonlyMap<string, RowInfo[]> } | undefined;
+}
+
+/** The box a model without a system element is drawn as at the C4 context. */
+export interface SystemBox {
+  /** Node key: `system:<namespace>`. */
+  key: string;
+  label: string;
+  /** Top-level element IDs inside it. */
+  members: ReadonlySet<string>;
 }
 
 /** A record in a datastore, as a journey has it at the current step. */
@@ -61,6 +75,7 @@ export type GraphNodeKind =
   | "element"
   | "external"
   | "group"
+  | "system"
   | "table"
   | "rowtable"
   | "others";
@@ -150,6 +165,7 @@ export interface JourneyEdge {
 export function liftKey(model: Model, state: ViewState, target: Target): string {
   if (target.type !== "element") return nodeKey(target);
   const chain = ancestorsOf(model, target.id);
+  if (state.system?.members.has(chain[0] ?? target.id)) return state.system.key;
   // The first collapsed ancestor (from the top) hides everything below it.
   for (const id of chain) {
     if (!isOpen(state, id)) return `element:${id}`;
@@ -179,6 +195,16 @@ export function buildGraph(model: Model, state: ViewState): Graph {
     nodes.set(g.key, { id: g.key, kind: "group", isGroup: true, hiddenChildren: 0, depth: 0 });
   }
 
+  if (state.system) {
+    nodes.set(state.system.key, {
+      id: state.system.key,
+      kind: "system",
+      isGroup: false,
+      hiddenChildren: state.system.members.size,
+      depth: 0,
+    });
+  }
+
   for (const actor of model.actors.values()) {
     nodes.set(`actor:${actor.id}`, {
       id: `actor:${actor.id}`,
@@ -192,6 +218,7 @@ export function buildGraph(model: Model, state: ViewState): Graph {
   for (const el of model.elements.values()) {
     if (grouping?.dissolved.has(el.id)) continue;
     const ancestors = ancestorsOf(model, el.id);
+    if (state.system?.members.has(ancestors[0] ?? el.id)) continue;
     if (!ancestors.every((a) => isOpen(state, a))) continue;
     const open = state.expanded.has(el.id) && el.childIds.length > 0;
     const tables = state.tables?.has(el.id) && Object.keys(el.spec.stores ?? {}).length > 0;
@@ -617,33 +644,67 @@ export function journeyExpansion(model: Model, journey: JourneyNode): string[] {
   return [...out];
 }
 
-/** A C4 level: the system in its context, its containers, or their components. */
-export type Level = "context" | "containers" | "components";
+/**
+ * A C4 level: the system in its context, or its containers. Components show
+ * by opening a container, or by focusing on one.
+ */
+export type Level = "context" | "containers";
+
+/** Whether the model has a system element of its own at the top. */
+export function hasSystem(model: Model): boolean {
+  return [...model.elements.values()].some((e) => e.depth === 0 && e.spec.kind === "system");
+}
+
+/**
+ * The box a model without a system element is drawn as at the context: every
+ * top-level element that isn't an external, named after the model.
+ */
+export function systemBox(model: Model): SystemBox | undefined {
+  if (hasSystem(model)) return undefined;
+  const members = [...model.elements.values()]
+    .filter((e) => e.depth === 0 && e.spec.kind !== "external")
+    .map((e) => e.id);
+  if (!members.length) return undefined;
+  return {
+    key: `system:${model.namespace}`,
+    label: model.name ?? model.namespace,
+    members: new Set(members),
+  };
+}
 
 /**
  * What's open to show a C4 level: nothing for the context (each system one
- * box, with the people who use it and the systems it talks to), the systems
- * for their containers, and the systems and containers for their components.
+ * box, with the people who use it and the systems it talks to), and the
+ * systems for their containers. A model without a system element shows its
+ * context as one box instead (see systemBox), and its containers with nothing open.
  */
 export function levelExpansion(model: Model, level: Level): Set<string> {
   if (level === "context") return new Set();
-  const kinds = level === "containers" ? ["system"] : ["system", "container"];
   return new Set(
     [...model.elements.values()]
-      .filter((e) => e.childIds.length > 0 && kinds.includes(e.spec.kind))
+      .filter((e) => e.childIds.length > 0 && e.spec.kind === "system")
       // Only what can be seen: a box inside a closed one stays closed.
       .filter((e) =>
-        ancestorsOf(model, e.id).every((a) =>
-          kinds.includes(model.elements.get(a)?.spec.kind ?? ""),
-        ),
+        ancestorsOf(model, e.id).every((a) => model.elements.get(a)?.spec.kind === "system"),
       )
       .map((e) => e.id),
   );
 }
 
-/** The C4 level the open boxes show exactly, if they show one. */
-export function levelOf(model: Model, expanded: ReadonlySet<string>): Level | undefined {
-  return (["context", "containers", "components"] as const).find((l) => {
+/**
+ * The C4 level the open boxes show exactly, if they show one. Without a
+ * system element, nothing open is the containers; the context is the box.
+ */
+export function levelOf(
+  model: Model,
+  expanded: ReadonlySet<string>,
+  boxed = false,
+): Level | undefined {
+  if (boxed) return "context";
+  const levels = hasSystem(model)
+    ? (["context", "containers"] as const)
+    : (["containers"] as const);
+  return levels.find((l) => {
     const want = levelExpansion(model, l);
     return want.size === expanded.size && [...want].every((id) => expanded.has(id));
   });

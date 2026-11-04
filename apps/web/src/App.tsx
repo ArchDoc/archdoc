@@ -41,6 +41,7 @@ import {
   type Level,
   levelExpansion,
   levelOf,
+  systemBox,
 } from "./graph/graph.js";
 import { type GroupBy, type Grouping, groupLandscape } from "./graph/groups.js";
 import { type Compare, compareModels } from "./model/compare.js";
@@ -192,6 +193,12 @@ function Explorer({
   // to. A landscape starts with its repos open, grouped.
   const [expanded, setExpanded] = useState<Set<string>>(() =>
     landscape ? defaultExpanded(model) : levelExpansion(model, "context"),
+  );
+  // A model without a system element shows its context as one closed box, until something opens.
+  const [boxed, setBoxed] = useState(() => !landscape);
+  const box = useMemo(
+    () => (boxed && !landscape ? systemBox(model) : undefined),
+    [boxed, landscape, model],
   );
   // Which way the map runs: left to right, or top down. This browser remembers.
   const [direction, setDirection] = useStoredChoice(
@@ -368,6 +375,7 @@ function Explorer({
       expanded: effective.expanded,
       focus: focused && !journeyOnMap ? selected : undefined,
       grouping,
+      system: journeyOnMap || tab === "data" || effective.expanded.size ? undefined : box,
       tables: effective.tables,
       openFields: effective.fields,
       rows: rows && { stores: rowStores, data: rows },
@@ -381,6 +389,8 @@ function Explorer({
       journeyOnMap,
       selected,
       grouping,
+      tab,
+      box,
       rows,
       rowStores,
       involved,
@@ -429,6 +439,7 @@ function Explorer({
         return;
       }
       if (key.startsWith("element:")) {
+        setBoxed(false);
         const hidden = ancestorsOf(model, key.slice(8));
         setExpanded((prev) =>
           hidden.every((a) => prev.has(a)) ? prev : new Set([...prev, ...hidden]),
@@ -492,8 +503,10 @@ function Explorer({
         else next.add(id);
         return next;
       };
-      if (prefix === "e:") setExpanded(change);
-      else setTables(change);
+      if (prefix === "e:") {
+        setExpanded(change);
+        setBoxed(false);
+      } else setTables(change);
       setClosed((prev) => {
         const ids = new Set(prev?.context === context ? prev.ids : []);
         if (open) ids.add(`${prefix}${id}`);
@@ -510,6 +523,7 @@ function Explorer({
   const showLevel = useCallback(
     (level: Level) => {
       setExpanded(levelExpansion(model, level));
+      setBoxed(level === "context");
       setClosed(undefined);
       setFocused(false);
     },
@@ -616,7 +630,10 @@ function Explorer({
       level={
         journeyOnMap || tab === "data"
           ? undefined
-          : { current: levelOf(model, effective.expanded), onLevel: showLevel }
+          : {
+              current: levelOf(model, effective.expanded, !!box && effective.expanded.size === 0),
+              onLevel: showLevel,
+            }
       }
     />
   );

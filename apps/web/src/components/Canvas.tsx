@@ -462,7 +462,11 @@ export function Canvas(props: CanvasProps) {
             entered: crossings.get(at) === n.id,
             stores: focus?.stores.has(n.id),
             onToggle:
-              element && element.childIds.length > 0 ? () => props.onToggle(element.id) : undefined,
+              element && element.childIds.length > 0
+                ? () => props.onToggle(element.id)
+                : n.kind === "system"
+                  ? () => props.level?.onLevel("containers")
+                  : undefined,
             onTables:
               element && Object.keys(element.spec.stores ?? {}).length > 0
                 ? () => props.onTables(element.id)
@@ -508,6 +512,7 @@ export function Canvas(props: CanvasProps) {
     props.onShowTable,
     props.onShowAll,
     recheckOf,
+    props.level?.onLevel,
   ]);
 
   const edges = useMemo<RoutedEdge[]>(() => {
@@ -855,12 +860,15 @@ export function Canvas(props: CanvasProps) {
         if (node.type === "table") {
           return props.onSelect(`data:${(node as TableNode).data.table.entry}`);
         }
+        if (node.id.startsWith("system:")) return;
         if (!node.id.startsWith("group:")) return props.onSelect(node.id);
         // A team's box selects the team; a domain's box, the domain.
         const g = grouping?.groups.get(node.id);
         if (g?.id) props.onSelect(g.by === "team" ? `actor:${g.id}` : `domain:${g.id}`);
       }}
       onNodeDoubleClick={(_, node) => {
+        // The box a model without a system is drawn as opens to its containers.
+        if (node.id.startsWith("system:")) return props.level?.onLevel("containers");
         if (!node.id.startsWith("element:")) return;
         const el = model.elements.get(node.id.slice(8));
         // A datastore with nothing inside opens into its tables.
@@ -948,6 +956,16 @@ export function describe(model: Model, key: string, grouping?: Grouping) {
       status: undefined,
     };
   }
+  if (key.startsWith("system:")) {
+    return {
+      family: "element" as const,
+      shape: "box" as Shape,
+      label: model.name ?? model.namespace,
+      kind: "system",
+      detail: model.description,
+      status: undefined,
+    };
+  }
   if (key.startsWith("actor:")) {
     const a = model.actors.get(key.slice(6));
     return {
@@ -1027,8 +1045,12 @@ const LEVELS: { id: Level; label: string; title: string }[] = [
     title:
       "C4 level 1: each system as one box, with the people who use it and the systems it talks to",
   },
-  { id: "containers", label: "Containers", title: "C4 level 2: what each system is made of" },
-  { id: "components", label: "Components", title: "C4 level 3: what each container is made of" },
+  {
+    id: "containers",
+    label: "Containers",
+    title:
+      "C4 level 2: what each system is made of. Open a container, or focus on it, for its components",
+  },
 ];
 
 /** The C4 level the map shows, and which way it runs. */

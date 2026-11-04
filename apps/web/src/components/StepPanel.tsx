@@ -103,8 +103,19 @@ export function StepPanel(props: StepPanelProps) {
           <Payload key={x.label} entries={props.payload} onSelect={props.onSelect} />
         </section>
       ) : (
-        <p className="muted" title="Add sends: to the step, or to the use it travels along">
-          The model doesn't say what this step sends.
+        <p className="muted">
+          {x.store ? (
+            <>
+              The model doesn't say what this step stores. Add <code>creates:</code> or{" "}
+              <code>changes:</code> to the step, and <code>stores:</code> to the datastore, naming
+              an entry under <code>data:</code>.
+            </>
+          ) : (
+            <>
+              The model doesn't say what this step sends. Add <code>sends:</code> to the step, or to
+              the use it travels along, naming an entry under <code>data:</code>.
+            </>
+          )}
         </p>
       )}
 
