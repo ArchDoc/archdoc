@@ -105,7 +105,7 @@ describe("archdoc MCP server", () => {
         "TypeError: x is undefined\n    at diffModels (/ci/repo/packages/core/dist/diff/diff.js:12:3)\n    at report (/ci/repo/packages/cli/dist/commands/report.js:50:20)",
     });
     expect(r.isError).toBe(false);
-    expect(r.text).toMatch(/^Where this error belongs, best first:\n {2}1\. review-ai-change#4/);
+    expect(r.text).toMatch(/^Where this error belongs, best first:\n {2}1\. review-ai-change#5/);
     expect(r.text).toContain("toolchain.core.differ · packages/core/src/diff/diff.ts:12");
     expect(r.text).toContain("  - from: toolchain.cli.commands\n    to: toolchain.core.differ");
   });

@@ -272,11 +272,11 @@ elements:
               graph: Hands the model to the canvas
           graph:
             kind: component
-            description: Decides what's visible (the C4 context and containers, with one box for a model without a system; expand, focus, journeys, a landscape's boxes by repo, team, or domain, and an environment's infrastructure), lifts relationships to visible boxes, sizes each use's description, and lays them out with ELK, keeping room for the descriptions.
+            description: Decides what's visible (the C4 context and containers, with one box for a model without a system; expand, focus, journeys, a landscape's boxes by repo, team, or domain, and an environment's infrastructure), lifts relationships to visible boxes, sizes each use's description, and lays them out with ELK, keeping room for the descriptions; routes a journey step no use joins straight across between its boxes; and gathers the Data tab's catalog (each store's tables and who reaches it, each entry's stores, producers, and journey steps).
             code: [{ path: apps/web/src/graph/** }]
           ui:
             kind: component
-            description: Tabs, the map (cards colored by kind, its key and minimap, descriptions on the lines, level and layout controls), journey lanes and the step panel, the side lists, and the details panel with code links.
+            description: Tabs, the map (cards colored by kind, one box for its key, layout, and descriptions, the level control, and the minimap), journey lanes and the step panel, the Data tab's pages, the side lists, and the details panel with code links.
             code: [{ path: apps/web/src/components/**, description: Components }, apps/web/src/App.tsx, { path: apps/web/src/styles.css, description: Styles and tokens }]
             uses:
               graph: Renders the laid-out graph

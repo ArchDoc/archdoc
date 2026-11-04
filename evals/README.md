@@ -70,6 +70,11 @@ runs:
   `creates`, or `changes`).
 - **Store data**: the share of datastores that say what they store, and of
   queues something sends through.
+- **Data fields**: the share of data entries that say what's in them, with
+  fields or a schema source to read them from.
+- **Journey flow**: the share of journey steps after the first that start
+  where the flow already is: at an element an earlier step reached, an actor,
+  or an external.
 - **Deployed**: the share of containers, datastores, and queues an environment
   places, when the repository has deployment files (CDK, Terraform, compose,
   Kubernetes, and the like).

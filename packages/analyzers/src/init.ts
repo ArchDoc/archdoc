@@ -1269,7 +1269,7 @@ async function infrastructure(
       const unit = fnUnit.get(fn.id);
       if (t.kind === "schedule" && unit) {
         extras.actors.scheduler ??= {
-          kind: "agent",
+          kind: "system",
           description: `What runs the scheduled jobs (${iac.tool === "cdk" ? "EventBridge rules in the CDK app" : "EventBridge rules in Terraform"}).`,
           uses: {},
           provenance: INFERRED,

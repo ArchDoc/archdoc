@@ -12,7 +12,7 @@ actors:
     description: Books a table and looks up their bookings.
     uses: { web: Books a table and follows their bookings }
   scheduler:
-    kind: agent
+    kind: system
     description: The EventBridge rule that runs the nightly report at 02:00.
     uses: { reports: Runs the nightly report }
 elements:

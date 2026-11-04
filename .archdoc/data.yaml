@@ -134,6 +134,15 @@ data:
       version: { type: string }
       sources: { type: "ModelFile[]" }
 
+  PullRequest:
+    kind: message
+    description: A branch pushed with its model edits and a pull request opened against the base.
+    fields:
+      base: { type: string }
+      head: { type: string }
+      title: { type: string }
+    provenance: { source: suggested, by: agent:claude-code }
+
   PullRequestEvent:
     kind: event
     description: A pull request opened or updated.

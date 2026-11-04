@@ -51,6 +51,41 @@ ${root(6)}
   });
 
 describe("deployments", () => {
+  it("asks for one place per service: the most specific node, and one node for each", () => {
+    const m = model({
+      "archdoc.yaml": `
+${root(8)}
+        elements:
+          api: { kind: container, deploy: [dev.aws.lambda] }
+          jobs: { kind: container, deploy: [dev] }
+          table: { kind: datastore, deploy: [dev.aws] }
+          cache: { kind: datastore, deploy: [dev.lambda] }
+        environments:
+          dev:
+            nodes:
+              aws:
+                kind: account
+                nodes:
+                  lambda: { kind: serverless, technology: AWS Lambda }
+                  dynamodb: { kind: managed, technology: DynamoDB }
+              lambda: { kind: serverless, technology: AWS Lambda }
+          prod:
+            nodes:
+              east: { nodes: { lambda: { technology: AWS Lambda } } }
+              west: { nodes: { lambda: { technology: AWS Lambda } } }
+      `,
+    });
+    const found = m.diagnostics.filter((d) => d.code.startsWith("deploy/"));
+    expect(found.map((d) => [d.code, d.message.split(",")[0]])).toEqual([
+      ["deploy/loose-placement", "jobs is deployed to dev"],
+      ["deploy/loose-placement", "table is deployed to dev.aws"],
+      [
+        "deploy/split-node",
+        "dev.aws.lambda and dev.lambda are both AWS Lambda in dev. Keep one node for each service in an environment",
+      ],
+    ]);
+  });
+
   it("reads environments as a tree of nodes, and each element's deploy", () => {
     const m = shop();
     expect(codes(m)).toEqual([]);

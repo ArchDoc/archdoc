@@ -48,16 +48,65 @@ describe("journey validation", () => {
     const m = model(
       journey(`
       - { from: passenger, to: app }
-      - { from: db, to: app }
+      - { from: app, to: db }
       `),
     );
     expect(diagnostics(m)).toMatchObject([
       {
         code: "journey/broken-step",
-        message: expect.stringContaining("step 2: platform.db → app"),
+        message: expect.stringContaining("step 2: app → platform.db"),
         location: { file: "journeys/j.yaml", line: 7 },
       },
     ]);
+  });
+
+  it("warns when a step starts at an element no earlier step reached", () => {
+    const m = model(
+      journey(`
+      - { from: passenger, to: app }
+      - { from: platform.api, to: db }
+      `),
+    );
+    expect(diagnostics(m)).toMatchObject([
+      {
+        severity: "warning",
+        code: "journey/disconnected-step",
+        message: expect.stringContaining(
+          "step 2: starts at platform.api, which no earlier step reaches (step 1 ended at app)",
+        ),
+        location: { file: "journeys/j.yaml", line: 7 },
+      },
+    ]);
+  });
+
+  it("lets a journey drill into what it reached, go back, and hear from actors and externals", () => {
+    const m = model({
+      "archdoc.yaml": root(`
+        actors:
+          passenger: { kind: person, uses: { app: Books } }
+          support: { kind: team, uses: { platform.api: Looks up } }
+        elements:
+          bank: { kind: external, uses: { platform.api: Reports payments } }
+          app: { kind: container, uses: { platform: Calls } }
+          platform:
+            kind: system
+            elements:
+              api: { kind: container, uses: { db: Writes } }
+              db: { kind: datastore }
+      `),
+      "journeys/j.yaml": `
+        journey: j
+        actor: passenger
+        goal: Test
+        steps:
+          - { from: app, to: platform }
+          - { from: platform.api, to: db }
+          - { from: app, to: passenger }
+          - { from: support, to: platform.api }
+          - { from: bank, to: platform.api }
+      `,
+    });
+    expect(codes(m)).toEqual([]);
   });
 
   it("rejects actor-to-actor steps and unknown endpoints", () => {

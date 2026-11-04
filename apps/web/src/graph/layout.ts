@@ -248,3 +248,22 @@ function barycenters(graph: Graph, boxes: Map<string, Box>): Map<string, number[
   }
   return order;
 }
+
+/** Each box in absolute coordinates, like the routes: its own position plus its groups'. */
+export function absoluteBoxes(graph: Graph, boxes: ReadonlyMap<string, Box>): Map<string, Box> {
+  const parent = new Map(graph.nodes.map((n) => [n.id, n.parentId]));
+  const out = new Map<string, Box>();
+  const at = (id: string): Box | undefined => {
+    const done = out.get(id);
+    if (done) return done;
+    const own = boxes.get(id);
+    if (!own) return undefined;
+    const p = parent.get(id);
+    const base = p ? at(p) : undefined;
+    const box = base ? { ...own, x: own.x + base.x, y: own.y + base.y } : own;
+    out.set(id, box);
+    return box;
+  };
+  for (const id of boxes.keys()) at(id);
+  return out;
+}

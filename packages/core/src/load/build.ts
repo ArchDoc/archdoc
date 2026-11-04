@@ -521,6 +521,7 @@ function resolveDeployments(
       });
     }
   }
+  out.push(...placement(model));
   if (model.environments.size > 0) {
     const deployed = new Set(model.deployments.map((d) => d.element));
     for (const el of model.elements.values()) {
@@ -531,6 +532,60 @@ function resolveDeployments(
         code: "deploy/not-deployed",
         message: `Container ${el.id} doesn't say where it's deployed. Add deploy with the environment or node it runs on, such as deploy: ${model.deploymentNodes.keys().next().value ?? envs[0]}.`,
         location: el.location,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Infrastructure in one logical place: in each environment, every element sits
+ * on the most specific node it runs on (not on the environment or an account
+ * that has nodes inside it), and each service has one node, not one at the
+ * top and another under the account.
+ */
+function placement(model: Model): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  const childrenOf = (target: string): string[] =>
+    model.environments.get(target)?.nodeIds ?? model.deploymentNodes.get(target)?.childIds ?? [];
+  for (const d of model.deployments) {
+    const inside = childrenOf(d.to);
+    if (!inside.length) continue;
+    const leaves = [...model.deploymentNodes.values()]
+      .filter((n) => n.id.startsWith(`${d.to}.`) && !n.childIds.length)
+      .map((n) => n.id);
+    out.push({
+      severity: "warning",
+      code: "deploy/loose-placement",
+      message: `${d.element} is deployed to ${d.to}, which has nodes inside it (${leaves.slice(0, 5).join(", ")}${leaves.length > 5 ? ", …" : ""}). Put it on the node it runs on, the most specific one, so everything in ${d.environment} sits in one place; add a node under ${d.to} if none fits.`,
+      location: d.location,
+    });
+  }
+  // The same service twice in one environment: dev.lambda beside dev.aws.lambda.
+  const norm = (v: string | undefined) => v?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+  for (const env of model.environments.keys()) {
+    const nodes = [...model.deploymentNodes.values()].filter((n) => n.environment === env);
+    const seen = new Map<string, DeploymentNode>();
+    for (const n of nodes) {
+      const tech = norm(n.spec.technology);
+      const key = tech || norm(n.key);
+      const other = seen.get(key);
+      if (!other) {
+        seen.set(key, n);
+        continue;
+      }
+      // Siblings may share a technology (two clusters), and so may nodes in two regions; the same
+      // one at two depths of one branch, such as dev.lambda and dev.aws.lambda, is a split.
+      const above = (a: string | undefined, b: string | undefined) =>
+        a === undefined || b?.startsWith(`${a}.`) === true;
+      if (other.parentId === n.parentId) continue;
+      if (!above(other.parentId, n.parentId) && !above(n.parentId, other.parentId)) continue;
+      if (!tech && n.key !== other.key) continue;
+      out.push({
+        severity: "warning",
+        code: "deploy/split-node",
+        message: `${other.id} and ${n.id} are both ${n.spec.technology ?? n.key} in ${env}. Keep one node for each service in an environment, nested where it runs (account or region, then the service), and deploy everything that runs on it there.`,
+        location: n.location,
       });
     }
   }

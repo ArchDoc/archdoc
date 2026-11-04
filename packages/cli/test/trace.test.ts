@@ -34,14 +34,14 @@ describe("archdoc trace list and show", () => {
   it("lists traces", async () => {
     const r = await run(repo, "trace", "list");
     expect(r.out).toContain(
-      "report-false-data-changes · The PR report says data changed when it didn't · expands review-ai-change#4 (.archdoc/traces/report-false-data-changes.yaml)",
+      "report-false-data-changes · The PR report says data changed when it didn't · expands review-ai-change#5 (.archdoc/traces/report-false-data-changes.yaml)",
     );
   });
 
   it("shows a trace through archdoc show", async () => {
     const r = await run(repo, "show", "report-false-data-changes");
     expect(r.code).toBe(0);
-    expect(r.out).toContain("Opens up review-ai-change step 4 (critical)");
+    expect(r.out).toContain("Opens up review-ai-change step 5 (critical)");
     expect(r.out).toContain(
       "missing: toolchain.cli → toolchain.analyzers (applySchemas), never called",
     );
@@ -55,7 +55,7 @@ describe("archdoc context --error", () => {
     const r = await run(repo, "context", "--error", file);
     expect(r.code).toBe(0);
     expect(r.out).toMatch(
-      /^Where this error belongs, best first:\n {2}1\. review-ai-change#4 \(critical\)/,
+      /^Where this error belongs, best first:\n {2}1\. review-ai-change#5 \(critical\)/,
     );
     expect(r.out).toContain(
       "toolchain.core.loader · packages/core/src/load/git.ts:93 (frame 1, in readModelSourcesAtRef)",

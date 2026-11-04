@@ -37,12 +37,14 @@ import {
 import { boundaryKey, crossingOf, type Grouping } from "../graph/groups.js";
 import { type EdgeLabel, edgeLabels, labelFor } from "../graph/labels.js";
 import {
+  absoluteBoxes,
   layoutGraph,
   NODE_HEIGHT,
   NODE_WIDTH,
   type Point,
   type UntangledLayout,
 } from "../graph/layout.js";
+import { directRoute } from "../graph/route.js";
 import { edgeTypes, type RoutedEdge } from "./edges.js";
 import { Legend, type LegendKind, toneOf } from "./Legend.js";
 import {
@@ -144,17 +146,30 @@ export function Canvas(props: CanvasProps) {
     if (!notesOn) return new Map<string, EdgeLabel>();
     if (!journey) return edgeLabels(graph);
     const said = new Map<string, string[]>();
+    // The way the first step between two boxes goes: its line carries the note, once.
+    const way = new Map<string, string>();
     for (const s of steps) {
       if (s.source === s.target) continue;
       const pair = [s.source, s.target].sort().join("|");
       const action = interactions[s.at]?.action;
       said.set(pair, [...(said.get(pair) ?? []), action ? `${s.label}. ${action}` : s.label]);
+      if (!way.has(pair)) way.set(pair, `${s.source}->${s.target}`);
     }
     const out = new Map<string, EdgeLabel>();
-    for (const e of graph.edges) {
-      if (e.reference || e.rows) continue;
-      const label = labelFor(said.get([e.source, e.target].sort().join("|")) ?? []);
-      if (label) out.set(e.id, label);
+    const lines = graph.edges.filter((e) => !e.reference && !e.rows);
+    const noted = new Set<string>();
+    // Two lines between the same boxes (a use and a subscription) show the note on one of them.
+    const ordered = [
+      ...lines.filter((e) => way.get([e.source, e.target].sort().join("|")) === e.id),
+      ...lines,
+    ];
+    for (const e of ordered) {
+      const pair = [e.source, e.target].sort().join("|");
+      if (noted.has(pair)) continue;
+      const label = labelFor(said.get(pair) ?? []);
+      if (!label) continue;
+      out.set(e.id, label);
+      noted.add(pair);
     }
     return out;
   }, [graph, notesOn, journey, steps, interactions]);
@@ -527,6 +542,16 @@ export function Canvas(props: CanvasProps) {
         routeBetween.set(`${e.target}->${e.source}`, [...points].reverse());
       }
     }
+    // A step between boxes no line joins (it doesn't follow a use) goes straight across, from
+    // the side that faces the other box, not around the map.
+    const absolute = absoluteBoxes(layout.graph, layout.boxes);
+    const routeOf = (source: string, target: string): { points?: Point[]; undeclared: boolean } => {
+      const points = routeBetween.get(`${source}->${target}`);
+      if (points) return { points, undeclared: false };
+      const a = absolute.get(source);
+      const b = absolute.get(target);
+      return a && b ? { points: directRoute(a, b), undeclared: true } : { undeclared: true };
+    };
     // Interactions that share a route spread their numbers along it, so none hides another.
     const sharing = new Map<string, number[]>();
     for (const s of steps) {
@@ -632,13 +657,14 @@ export function Canvas(props: CanvasProps) {
       .filter((s) => s.source !== s.target)
       .map((s) => {
         const shared = sharing.get([s.source, s.target].sort().join("|")) ?? [s.at];
+        const route = routeOf(s.source, s.target);
         return {
           id: `step:${s.id}`,
           type: "routed" as const,
           source: s.source,
           target: s.target,
           data: {
-            points: routeBetween.get(`${s.source}->${s.target}`),
+            points: route.points,
             labelAt: (shared.indexOf(s.at) + 1) / (shared.length + 1),
             packet:
               s.at === at
@@ -649,12 +675,13 @@ export function Canvas(props: CanvasProps) {
           },
           markerEnd: arrowHead(
             s.at === at ? 16 : 20,
-            s.at === at ? "journey is-current" : "journey",
+            `journey${s.at === at ? " is-current" : ""}${route.undeclared ? " is-undeclared" : ""}`,
           ),
           className: [
             "journey",
             s.at === at ? "is-current" : "",
             crossings.has(s.at) ? "is-crossing" : "",
+            route.undeclared ? "is-undeclared" : "",
             props.simulation && props.simulation.steps[s.step]?.ran === false ? "is-skipped" : "",
           ]
             .filter(Boolean)
@@ -687,7 +714,7 @@ export function Canvas(props: CanvasProps) {
         type: "routed" as const,
         source: s.source,
         target: s.target,
-        data: { points: routeBetween.get(`${s.source}->${s.target}`) },
+        data: { points: routeOf(s.source, s.target).points },
         markerEnd: arrowHead(20, "rel is-lit"),
         className: "rel is-lit is-preview",
         zIndex: 5,
@@ -900,6 +927,13 @@ export function Canvas(props: CanvasProps) {
               },
             }
           }
+        />
+      </Panel>
+      <Panel position="top-right">
+        <Legend
+          kinds={kinds}
+          notes={notesOn}
+          onNotes={setNotesOn}
           direction={direction}
           onDirection={
             props.onDirection &&
@@ -909,9 +943,6 @@ export function Canvas(props: CanvasProps) {
             })
           }
         />
-      </Panel>
-      <Panel position="top-right">
-        <Legend kinds={kinds} notes={notesOn} onNotes={setNotesOn} />
       </Panel>
       {nodes.length > 12 ? (
         <MiniMap
@@ -1053,54 +1084,27 @@ const LEVELS: { id: Level; label: string; title: string }[] = [
   },
 ];
 
-/** The C4 level the map shows, and which way it runs. */
-function MapControls(props: {
-  level: CanvasProps["level"];
-  direction: "RIGHT" | "DOWN";
-  onDirection: CanvasProps["onDirection"];
-}) {
-  const { level, onDirection } = props;
+/** The C4 level the map shows. Which way it runs is in the key. */
+function MapControls(props: { level: CanvasProps["level"] }) {
+  const { level } = props;
+  if (!level) return null;
   return (
     <div className="map-controls">
-      {level ? (
-        <fieldset className="segmented" aria-label="C4 level">
-          <legend>Level</legend>
-          {LEVELS.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              className={level.current === l.id ? "is-on" : undefined}
-              aria-pressed={level.current === l.id}
-              title={l.title}
-              onClick={() => level.onLevel(l.id)}
-            >
-              {l.label}
-            </button>
-          ))}
-        </fieldset>
-      ) : null}
-      {onDirection ? (
-        <fieldset className="segmented" aria-label="Layout direction">
-          <legend>Layout</legend>
-          {(
-            [
-              ["RIGHT", "LR", "Left to right"],
-              ["DOWN", "TD", "Top down"],
-            ] as const
-          ).map(([d, label, title]) => (
-            <button
-              key={d}
-              type="button"
-              className={props.direction === d ? "is-on" : undefined}
-              aria-pressed={props.direction === d}
-              title={title}
-              onClick={() => onDirection(d)}
-            >
-              {label}
-            </button>
-          ))}
-        </fieldset>
-      ) : null}
+      <fieldset className="segmented" aria-label="C4 level">
+        <legend>Level</legend>
+        {LEVELS.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            className={level.current === l.id ? "is-on" : undefined}
+            aria-pressed={level.current === l.id}
+            title={l.title}
+            onClick={() => level.onLevel(l.id)}
+          >
+            {l.label}
+          </button>
+        ))}
+      </fieldset>
     </div>
   );
 }
@@ -1170,9 +1174,11 @@ function arrowHead(size: number, className: string) {
   const color = has.has("fk")
     ? "var(--line-strong)"
     : has.has("journey")
-      ? has.has("is-current")
-        ? "var(--accent)"
-        : "var(--muted)"
+      ? has.has("is-undeclared")
+        ? "var(--removed)"
+        : has.has("is-current")
+          ? "var(--accent)"
+          : "var(--muted)"
       : has.has("is-flow")
         ? "var(--accent)"
         : has.has("change-removed")

@@ -6,6 +6,9 @@ steps:
   - from: coding-agent
     to: mcp
     action: Edits the model with the code, marking what it adds as suggested, and checks the change
+  - from: coding-agent
+    to: github
+    action: Pushes the change with its model edits and opens the pull request
   - from: github
     to: github-action
     action: Runs on the pull request

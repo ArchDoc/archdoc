@@ -55,6 +55,8 @@ export function formatDiscoveryScore(d: DiscoveryScore, verbose = false): string
     `  ${"System".padEnd(14)} ${d.system ? "yes" : "no"}`,
     `  ${"Step data".padEnd(14)} ${pct(d.stepData)} of steps across a boundary say what they carry`,
     `  ${"Store data".padEnd(14)} ${pct(d.storeData)} of datastores and queues say what they hold`,
+    `  ${"Data fields".padEnd(14)} ${pct(d.dataFields)} of data entries have fields or a schema source`,
+    `  ${"Journey flow".padEnd(14)} ${pct(d.journeyFlow)} of steps start where the flow already is`,
     ...(d.deployed === undefined
       ? []
       : [

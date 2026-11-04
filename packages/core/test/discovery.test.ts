@@ -294,6 +294,81 @@ describe("data names and descriptions", () => {
     const g = assessDiscovery(m, []).gaps.find((x) => x.code === "done/data-undescribed");
     expect(g?.message).toContain("Data entry Refund doesn't say what it is");
   });
+
+  it("asks for the fields of each entry, unless a schema source has them", () => {
+    const m = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: d
+        data:
+          Order: { kind: entity, description: An order., fields: { id: { type: uuid } } }
+          Charge: { kind: entity, description: A charge., source: { sql: "db/schema.sql#charges" } }
+          CheckoutForm: { kind: message, description: What the shopper submits. }
+      `,
+    });
+    const a = assessDiscovery(m, []);
+    const g = a.gaps.find((x) => x.code === "done/data-fields");
+    expect(g?.message).toMatch(
+      /^Data entry CheckoutForm has no fields\. Find where the code defines/,
+    );
+    expect([a.stats.dataDefined, a.stats.dataEntries]).toEqual([2, 3]);
+  });
+});
+
+describe("actors", () => {
+  it("keeps kind: agent for AI agents, and asks for kind: system for software that calls in", () => {
+    const m = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: d
+        actors:
+          scheduler: { kind: agent, description: The CronJob that runs the nightly report. }
+          reviewer: { kind: agent, description: An LLM that reviews pull requests. }
+          coding-agent: { kind: agent, description: Claude Code editing the repository. }
+          billing: { kind: system, description: The billing service that posts invoices. }
+      `,
+    });
+    const g = assessDiscovery(m, []).gaps.filter((x) => x.code === "done/agent-actor");
+    expect(g).toHaveLength(1);
+    expect(g[0]?.message).toMatch(/^scheduler is kind: agent, which is for AI agents/);
+    expect(g[0]?.message).toContain("make it kind: system");
+  });
+});
+
+describe("journey flow", () => {
+  it("counts the steps that start where the flow already is", () => {
+    const m = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: d
+        actors:
+          user: { kind: person, uses: { web: Uses } }
+        elements:
+          web: { kind: container, uses: { api: Calls } }
+          api: { kind: container, uses: { db: Saves } }
+          db: { kind: datastore }
+          bank: { kind: external, uses: { api: Reports } }
+        journeys:
+          j:
+            actor: user
+            goal: Test
+            steps:
+              - { from: user, to: web }
+              - { from: web, to: api }
+              - { from: bank, to: api }
+              - { from: user, to: web }
+              - { from: api, to: db }
+          gap:
+            actor: user
+            goal: Test
+            steps:
+              - { from: user, to: web }
+              - { from: api, to: db }
+      `,
+    });
+    const s = assessDiscovery(m, []).stats;
+    expect([s.flowStepsConnected, s.flowSteps]).toEqual([4, 5]);
+  });
 });
 
 describe("warnings a done model has fixed", () => {

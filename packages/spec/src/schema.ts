@@ -98,7 +98,11 @@ export const LinkSchema = z.strictObject({
   title: z.string().optional(),
 });
 
-export const ActorKindSchema = z.enum(["person", "role", "team", "organization", "agent"]);
+export const ActorKindSchema = z
+  .enum(["person", "role", "team", "organization", "agent", "system"])
+  .describe(
+    "person, role, team, or organization for people; agent for an AI agent (an LLM acting on its own); system for software that calls in on its own, such as another service, a scheduler, a CI job, or a webhook sender",
+  );
 
 export const ActorSchema = z.strictObject({
   kind: ActorKindSchema,
