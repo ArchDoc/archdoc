@@ -7,6 +7,7 @@ import {
   showValue,
   type TableInfo,
 } from "../graph/graph.js";
+import { toneOf } from "./Legend.js";
 
 export type Emphasis = "normal" | "highlight" | "current" | "dim";
 
@@ -72,10 +73,13 @@ function Icon({ kind }: { kind: string }) {
 
 /** One card renderer for actors, elements, other repos' elements, and groups. */
 export function Card({ data }: NodeProps<CardNode>) {
+  const tone = toneOf(data);
   const classes = [
     "card",
     `shape-${data.shape}`,
     `family-${data.family}`,
+    `kind-${data.kind.replace(/\s+/g, "-")}`,
+    tone ? `tone-${tone.id}` : "",
     data.dashed ? "is-dashed" : "",
     data.isGroup ? "is-group" : "",
     data.status && data.status !== "active" ? `status-${data.status}` : "",
@@ -105,8 +109,15 @@ export function Card({ data }: NodeProps<CardNode>) {
         <div className="card-label">
           {data.family === "actor" ? <Icon kind={data.kind} /> : null}
           <span>{data.label}</span>
+          {data.isGroup && tone ? <span className="card-kind">{data.kind}</span> : null}
         </div>
-        {data.detail && !data.isGroup ? <div className="card-detail">{data.detail}</div> : null}
+        {!data.isGroup && (tone || data.detail) ? (
+          <div className="card-detail">
+            {tone ? <span className="card-kind">{data.kind}</span> : null}
+            {tone && data.detail ? " · " : null}
+            {data.detail}
+          </div>
+        ) : null}
       </div>
       <div className="card-tools">
         {data.version ? <span className="card-note">{data.version}</span> : null}

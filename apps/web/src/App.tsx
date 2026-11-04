@@ -10,7 +10,7 @@ import {
 } from "@archdoc/core/browser";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas } from "./components/Canvas.js";
+import { Canvas, useStoredFlag } from "./components/Canvas.js";
 import { Details } from "./components/Details.js";
 import { Lanes } from "./components/Lanes.js";
 import { Overview } from "./components/Overview.js";
@@ -189,7 +189,9 @@ function Explorer({
   const [journeyId, setJourneyId] = useState<string | undefined>(initial.journey);
   // The interaction the journey is at: a step's arrow, or its writer storing what it wrote.
   const [at, setAt] = useState(0);
-  const [onMap, setOnMap] = useState(false);
+  // A journey shows on the map unless someone picks its sequence, which this browser remembers.
+  const [sequence, setSequence] = useStoredFlag("archdoc:journey-sequence", false);
+  const onMap = !sequence;
   const [preview, setPreview] = useState<string>();
   const [centerOn, setCenterOn] = useState<string>();
   const [panelWidth, setPanelWidth] = usePanelWidth();
@@ -601,14 +603,26 @@ function Explorer({
               </span>
             </p>
           </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={onMap}
-              onChange={(e) => setOnMap(e.currentTarget.checked)}
-            />{" "}
-            Show on map
-          </label>
+          <fieldset className="segmented story-view" aria-label="Show the journey as">
+            <legend>Show as</legend>
+            {(
+              [
+                [false, "Map", "Each step on the map of the system, one at a time"],
+                [true, "Sequence", "Each step as a row, between a column per participant"],
+              ] as const
+            ).map(([seq, label, title]) => (
+              <button
+                key={label}
+                type="button"
+                className={sequence === seq ? "is-on" : undefined}
+                aria-pressed={sequence === seq}
+                title={title}
+                onClick={() => setSequence(seq)}
+              >
+                {label}
+              </button>
+            ))}
+          </fieldset>
         </header>
         <div className="story-body">
           {onMap ? (

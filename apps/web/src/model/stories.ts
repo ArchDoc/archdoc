@@ -154,6 +154,8 @@ export interface Lane {
   /** The repo it's in, or an actor's kind. */
   sub?: string | undefined;
   actor: boolean;
+  /** What it is, for its color: an actor's kind, or an element's (another repo's too). */
+  kind?: string | undefined;
 }
 
 /** One arrow of a journey in its lanes. */
@@ -254,6 +256,12 @@ export function journeyLanes(
               ? repoName(model, repo, landscape)
               : undefined,
         actor: t.type === "actor",
+        kind:
+          t.type === "external"
+            ? otherKind(model, t.ref)
+            : t.type === "actor"
+              ? model.actors.get(t.id)?.spec.kind
+              : model.elements.get(t.id)?.spec.kind,
       });
     }
     return i;
@@ -339,4 +347,10 @@ export function stepUses(model: Model, from: Target, to: Target): Relationship |
   return other?.relationships.find(
     (r) => same(r, strip(from), strip(to)) || same(r, strip(to), strip(from)),
   );
+}
+
+/** The kind of another repo's element, when its model is pinned here. */
+function otherKind(model: Model, ref: string): string | undefined {
+  const ns = ref.split(".")[0] ?? ref;
+  return new DataRegistry(model).models.get(ns)?.elements.get(ref.slice(ns.length + 1))?.spec.kind;
 }

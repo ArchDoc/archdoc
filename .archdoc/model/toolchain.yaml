@@ -247,7 +247,7 @@ elements:
       web:
         kind: container
         technology: React 19, Vite, @xyflow/react, elkjs
-        description: Explorer. Tabs for Overview (journeys as cards, owners, a top-level map), Journeys (lanes per participant, branches by outcome, one step at a time), Traces (a bug's path as lanes beneath the modeled step, checked in the browser), Data (entries, tables, lineage), and Changes (the PR comment's verdict and what changed on the map). The map opens one level at a time; a box's kind is its shape. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain.
+        description: Explorer. Tabs for Overview (journeys as cards, owners, a top-level map), Journeys (on the map by default, or as a sequence with lanes per participant, branches by outcome, one step at a time), Traces (a bug's path as lanes beneath the modeled step, checked in the browser), Data (entries, tables, lineage), and Changes (the PR comment's verdict and what changed on the map). The map opens one level at a time; a box's kind is its shape and its color, with a key, and every use says what it's for beside its line. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain.
         code: [{ path: apps/web/** }]
         uses:
           core:
@@ -262,11 +262,11 @@ elements:
               graph: Hands the model to the canvas
           graph:
             kind: component
-            description: Decides what's visible (expand, focus, journeys, and a landscape's boxes by repo, team, or domain), lifts relationships to visible boxes, and lays them out with ELK.
+            description: Decides what's visible (expand, focus, journeys, and a landscape's boxes by repo, team, or domain), lifts relationships to visible boxes, sizes each use's description, and lays them out with ELK, keeping room for the descriptions.
             code: [{ path: apps/web/src/graph/** }]
           ui:
             kind: component
-            description: Tabs, the map, journey lanes and the step panel, the side lists, and the details panel with code links.
+            description: Tabs, the map (cards colored by kind, its key and minimap, descriptions beside the lines), journey lanes and the step panel, the side lists, and the details panel with code links.
             code: [{ path: apps/web/src/components/**, description: Components }, apps/web/src/App.tsx, { path: apps/web/src/styles.css, description: Styles and tokens }]
             uses:
               graph: Renders the laid-out graph

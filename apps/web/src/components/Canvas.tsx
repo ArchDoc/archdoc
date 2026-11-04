@@ -7,8 +7,16 @@ import {
   type Simulation,
   toReview,
 } from "@archdoc/core/browser";
-import { Background, Controls, MarkerType, ReactFlow, useReactFlow } from "@xyflow/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Background,
+  Controls,
+  MarkerType,
+  MiniMap,
+  Panel,
+  ReactFlow,
+  useReactFlow,
+} from "@xyflow/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type DataFocus,
   dataFocus,
@@ -21,6 +29,7 @@ import {
 import { buildDiffGraph, type DiffGraph } from "../graph/diff.js";
 import { buildGraph, type Graph, journeyEdges, type ViewState } from "../graph/graph.js";
 import { boundaryKey, crossingOf, type Grouping } from "../graph/groups.js";
+import { clearOf, type EdgeLabel, edgeLabels, labelFor } from "../graph/labels.js";
 import {
   layoutGraph,
   NODE_HEIGHT,
@@ -29,6 +38,7 @@ import {
   type UntangledLayout,
 } from "../graph/layout.js";
 import { edgeTypes, type RoutedEdge } from "./edges.js";
+import { Legend, type LegendKind, toneOf } from "./Legend.js";
 import {
   type CardNode,
   type Emphasis,
@@ -102,25 +112,6 @@ export function Canvas(props: CanvasProps) {
   const pane_ = useRef<HTMLDivElement>(null);
   const direction = props.direction ?? "RIGHT";
 
-  useEffect(() => {
-    let cancelled = false;
-    // Top to bottom, as the Overview lays out, rows sit closer: more of the map fits, still readable.
-    const options: Record<string, string> =
-      direction === "DOWN"
-        ? {
-            "elk.direction": "DOWN",
-            "elk.layered.spacing.nodeNodeBetweenLayers": "64",
-            "elk.spacing.nodeNode": "24",
-          }
-        : { "elk.direction": direction };
-    void layoutGraph(graph, options).then((result) => {
-      if (!cancelled) setLayout({ source: graph, ...result });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [graph, direction]);
-
   // A journey shown without opening it: the boxes its steps go between, as drawn now.
   const previewSteps = useMemo(() => {
     const j = preview ? model.journeys.get(preview) : undefined;
@@ -132,6 +123,48 @@ export function Canvas(props: CanvasProps) {
     () => (journey ? journeyEdges(model, view, journey.id, interactions) : []),
     [model, view, journey, interactions],
   );
+
+  // Each use says what it's for, beside its line, unless someone turns that off.
+  const [notesOn, setNotesOn] = useStoredFlag(NOTES_KEY, true);
+  // On a journey's map, only the lines its steps go along say anything: what each step does.
+  const notes = useMemo(() => {
+    if (!notesOn) return new Map<string, EdgeLabel>();
+    if (!journey) return edgeLabels(graph);
+    const said = new Map<string, string[]>();
+    for (const s of steps) {
+      if (s.source === s.target) continue;
+      const pair = [s.source, s.target].sort().join("|");
+      const action = interactions[s.at]?.action;
+      said.set(pair, [...(said.get(pair) ?? []), action ? `${s.label}. ${action}` : s.label]);
+    }
+    const out = new Map<string, EdgeLabel>();
+    for (const e of graph.edges) {
+      if (e.reference || e.rows) continue;
+      const label = labelFor(said.get([e.source, e.target].sort().join("|")) ?? []);
+      if (label) out.set(e.id, label);
+    }
+    return out;
+  }, [graph, notesOn, journey, steps, interactions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Top to bottom, as the Overview lays out, rows sit a little closer: more of the map fits,
+    // with room left for each line's arrowhead and description.
+    const options: Record<string, string> =
+      direction === "DOWN"
+        ? {
+            "elk.direction": "DOWN",
+            "elk.layered.spacing.nodeNodeBetweenLayers": "84",
+            "elk.spacing.nodeNode": "40",
+          }
+        : { "elk.direction": direction };
+    void layoutGraph(graph, options, 4, notes).then((result) => {
+      if (!cancelled) setLayout({ source: graph, ...result });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph, direction, notes]);
   // Interactions that go from one repo (or team, or domain) to another, and the box each enters.
   const crossings = useMemo(() => {
     const out = new Map<number, string>();
@@ -482,6 +515,9 @@ export function Canvas(props: CanvasProps) {
       const pair = [s.source, s.target].sort().join("|");
       sharing.set(pair, [...(sharing.get(pair) ?? []), s.at]);
     }
+    // The line the current step goes along, either way.
+    const now = steps.find((s) => s.at === at);
+    const currentPair = now ? [now.source, now.target].sort().join("|") : undefined;
     // A previewed journey lights the uses its steps go along, either way.
     const previewPairs = new Set(
       (previewSteps ?? []).flatMap((s) => [`${s.source}|${s.target}`, `${s.target}|${s.source}`]),
@@ -517,13 +553,8 @@ export function Canvas(props: CanvasProps) {
         : previewSteps
           ? previewPairs.has(`${e.source}|${e.target}`)
           : !journey && (touches(selected) || touches(hoverNode));
-      // A subscription names its channel and how it travels.
-      const channel = e.subscription
-        ? `${e.subscription.channel}${e.subscription.transport ? ` (${e.subscription.transport})` : ""}`
-        : "";
-      const label = [channel, ...e.relationships.map((r) => r.description)]
-        .filter(Boolean)
-        .join(" · ");
+      const note = notes.get(e.id);
+      const hovered = e.id === hoverEdge || touches(hoverNode);
       const className = [
         "rel",
         e.planned ? "is-planned" : "",
@@ -545,14 +576,37 @@ export function Canvas(props: CanvasProps) {
         type: "routed" as const,
         source: e.source,
         target: e.target,
-        data: { points: layout.routes.get(e.id) },
-        markerEnd: arrowHead(16, className),
-        className,
-        label: e.id === hoverEdge && label ? truncate(label, 60) : undefined,
+        data: {
+          points: layout.routes.get(e.id),
+          // A journey step drawn along the same line says what happens there instead.
+          note: note
+            ? {
+                lines: note.lines,
+                text: note.text,
+                box: (() => {
+                  const placed = layout.labels.get(e.id);
+                  // A journey's step numbers and message sit on the line: keep its note clear.
+                  return placed && journey ? clearOf(placed, layout.routes.get(e.id), 26) : placed;
+                })(),
+                onHover: (on: boolean) => setHoverEdge(on ? e.id : undefined),
+                className: [
+                  journey ? "is-step" : "",
+                  journey && currentPair === [e.source, e.target].sort().join("|")
+                    ? "is-current"
+                    : "",
+                  lit ? "is-lit" : "",
+                  hovered ? "is-hover" : "",
+                  dimming && !lit && !hovered && !journey ? "is-dim" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              }
+            : undefined,
+        },
+        markerEnd: arrowHead(22, className),
+        className: [className, hovered ? "is-hover" : ""].filter(Boolean).join(" "),
         interactionWidth: 14,
-        labelBgPadding: [6, 3] as [number, number],
-        labelBgBorderRadius: 4,
-        zIndex: lit || e.id === hoverEdge ? 5 : 2,
+        zIndex: lit || hovered ? 5 : 2,
       };
     });
     // A step inside a collapsed group has nowhere to go; the group is still highlighted.
@@ -575,7 +629,10 @@ export function Canvas(props: CanvasProps) {
                   : { label: "no message", missing: true }
                 : undefined,
           },
-          markerEnd: arrowHead(18, s.at === at ? "journey is-current" : "journey"),
+          markerEnd: arrowHead(
+            s.at === at ? 16 : 20,
+            s.at === at ? "journey is-current" : "journey",
+          ),
           className: [
             "journey",
             s.at === at ? "is-current" : "",
@@ -612,7 +669,7 @@ export function Canvas(props: CanvasProps) {
         source: s.source,
         target: s.target,
         data: { points: routeBetween.get(`${s.source}->${s.target}`) },
-        markerEnd: arrowHead(14, "rel is-lit"),
+        markerEnd: arrowHead(20, "rel is-lit"),
         className: "rel is-lit is-preview",
         zIndex: 5,
       }));
@@ -635,7 +692,19 @@ export function Canvas(props: CanvasProps) {
     emphasis,
     lines,
     props.simulation,
+    notes,
   ]);
+
+  // Which kinds of box are on the map, for the legend.
+  const kinds = useMemo(() => {
+    const seen = new Map<string, LegendKind>();
+    for (const n of nodes) {
+      if (n.type !== "card") continue;
+      const tone = toneOf(n.data as { family: string; kind: string });
+      if (tone && !seen.has(tone.id)) seen.set(tone.id, tone);
+    }
+    return [...seen.values()];
+  }, [nodes]);
 
   // Fit everything on the first layout; afterwards only move when asked to.
   useEffect(() => {
@@ -647,12 +716,19 @@ export function Canvas(props: CanvasProps) {
         void flow
           .fitView({ padding: 0.08, duration: 0, minZoom: READABLE, maxZoom: 1 })
           .then(() => {
-            // Still too wide at a readable zoom: start from the left edge, where the map begins.
+            // Still too big at a readable zoom: start from the left edge and the top, where the
+            // map begins and the people who use it are.
             const pane = pane_.current?.getBoundingClientRect();
             const bounds = flow.getNodesBounds(flow.getNodes());
-            const { y, zoom } = flow.getViewport();
-            if (pane && bounds.width * zoom > pane.width) {
-              void flow.setViewport({ x: 16 - bounds.x * zoom, y, zoom });
+            const { x, y, zoom } = flow.getViewport();
+            const wide = pane && bounds.width * zoom > pane.width;
+            const tall = pane && bounds.height * zoom > pane.height;
+            if (wide || tall) {
+              void flow.setViewport({
+                x: wide ? 16 - bounds.x * zoom : x,
+                y: tall ? 16 - bounds.y * zoom : y,
+                zoom,
+              });
             }
           });
       });
@@ -743,6 +819,8 @@ export function Canvas(props: CanvasProps) {
         nodes: targets.map((id) => ({ id })),
         duration: 450,
         padding: written.length ? 0.35 : 0.5,
+        // Far-apart boxes stay readable: the camera centers on the step instead of zooming out.
+        minZoom: 0.8,
         maxZoom: 1.1,
       });
     });
@@ -785,6 +863,25 @@ export function Canvas(props: CanvasProps) {
     >
       <Background gap={24} size={1} />
       <Controls showInteractive={false} position="bottom-left" />
+      <Panel position="top-right">
+        <Legend kinds={kinds} notes={notesOn} onNotes={setNotesOn} />
+      </Panel>
+      {nodes.length > 12 ? (
+        <MiniMap
+          position="bottom-right"
+          pannable
+          zoomable
+          ariaLabel="Overview of the map"
+          nodeClassName={(n) => {
+            const d = n.data as { family?: string; kind?: string; isGroup?: boolean };
+            const tone =
+              d.family && d.kind ? toneOf({ family: d.family, kind: d.kind }) : undefined;
+            return [d.isGroup ? "is-group" : "", tone ? `tone-${tone.id}` : ""]
+              .filter(Boolean)
+              .join(" ");
+          }}
+        />
+      ) : null}
     </ReactFlow>
   );
 }
@@ -792,7 +889,7 @@ export function Canvas(props: CanvasProps) {
 /**
  * How a box reads on the map: its name, one line under it, and its shape. Kind
  * is the shape (actors are pills, datastores have a lid, what lives elsewhere
- * is dashed), not a label or a color; the kind itself is in the tooltip.
+ * is dashed) and the color (see Legend's toneOf), named on the box too.
  */
 export function describe(model: Model, key: string, grouping?: Grouping) {
   if (key.startsWith("group:")) {
@@ -882,8 +979,31 @@ function fitActors(model: Model, graph: Graph): Graph {
 /** The smallest zoom the map opens at, so a box's name is still at least 13px tall. */
 const READABLE = 0.75;
 
-function truncate(s: string, n: number): string {
-  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+const NOTES_KEY = "archdoc:edge-notes";
+
+/** A switch remembered in this browser, such as whether lines show their descriptions. */
+export function useStoredFlag(key: string, initial: boolean): [boolean, (on: boolean) => void] {
+  const [on, setOn] = useState(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved === "1" || saved === "0") return saved === "1";
+    } catch {
+      // Storage can be unavailable; the default is fine.
+    }
+    return initial;
+  });
+  const set = useCallback(
+    (next: boolean) => {
+      setOn(next);
+      try {
+        localStorage.setItem(key, next ? "1" : "0");
+      } catch {
+        // Ignore: the choice just won't be remembered.
+      }
+    },
+    [key],
+  );
+  return [on, set];
 }
 
 /**

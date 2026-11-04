@@ -922,7 +922,7 @@ seals:
         - default
   element:toolchain.web.graph:
     kind: structure
-    hash: fnv-d9a335b4da1203b2
+    hash: fnv-28604a0b28d5e255
     files:
       apps/web/src/graph/data.ts:
         - DataFocus
@@ -988,9 +988,19 @@ seals:
         - boundaryOf
         - crossingOf
         - groupLandscape
+      apps/web/src/graph/labels.ts:
+        - EdgeLabel
+        - LABEL_LINES
+        - LABEL_WIDTH
+        - clearOf
+        - edgeLabels
+        - edgeText
+        - labelFor
+        - wrap
       apps/web/src/graph/layout.ts:
         - Box
         - GROUP_HEADER
+        - LabelSizes
         - Layout
         - NODE_HEIGHT
         - NODE_WIDTH
@@ -1001,6 +1011,7 @@ seals:
         - countCrossings
         - pointAlong
         - roundedPath
+    by: agent:claude
   element:toolchain.web.model-loader:
     kind: structure
     hash: fnv-ec21bedb05a35305
@@ -1066,7 +1077,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-f45ea09e0a899082
+    hash: fnv-100bb7fabced4648
     files:
       apps/web/src/App.tsx:
         - App
@@ -1074,6 +1085,7 @@ seals:
         - Canvas
         - CanvasProps
         - describe
+        - useStoredFlag
       apps/web/src/components/DataPanels.tsx:
         - DataDetails
         - FieldDetails
@@ -1084,6 +1096,11 @@ seals:
       apps/web/src/components/Lanes.tsx:
         - Lanes
         - LanesProps
+      apps/web/src/components/Legend.tsx:
+        - Legend
+        - LegendKind
+        - LegendProps
+        - toneOf
       apps/web/src/components/Overview.tsx:
         - Overview
         - OverviewProps
@@ -1134,7 +1151,7 @@ seals:
         - TableNode
         - nodeTypes
       apps/web/src/styles.css: []
-    by: agent:claude-code
+    by: agent:claude
   step:agent-preflight#1:
     kind: structure
     hash: fnv-b5eb9a68eba1ed3e
