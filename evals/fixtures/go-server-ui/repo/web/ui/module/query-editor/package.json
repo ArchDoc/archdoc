@@ -1,0 +1,15 @@
+{
+  "name": "@pulse/query-editor",
+  "description": "A query input with completion for Pulse's query language",
+  "version": "0.4.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

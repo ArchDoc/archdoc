@@ -1,0 +1,13 @@
+{
+  "name": "@pulse/legacy-app",
+  "description": "The old web UI, still served at /classic",
+  "private": true,
+  "scripts": {
+    "build": "react-scripts build"
+  },
+  "dependencies": {
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-scripts": "^5.0.1"
+  }
+}

@@ -1,0 +1,112 @@
+archdoc: "2.0"
+namespace: pulse
+elements:
+  pulse:
+    kind: container
+    technology: Go
+    description: The Pulse server, which probes targets, stores the results, evaluates alert rules, and serves the API and the web UI.
+    code: [go.mod, cmd/pulse/**, config/**, probe/**, store/**, query/**, rules/**, notify/**, web/*.go, web/api/**]
+    elements:
+      config:
+        kind: component
+        description: Loads and validates pulse.json.
+        code: config/**
+      probe:
+        kind: component
+        description: Probes each target on its interval and appends the result to the store.
+        code: probe/**
+        uses: { config: Reads the targets, store: Appends samples, endpoints: Probes over HTTP }
+      store:
+        kind: component
+        description: Keeps samples in memory and in a write-ahead log on disk.
+        code: store/**
+      query:
+        kind: component
+        description: Parses and evaluates queries over the stored samples.
+        code: query/**
+        uses: { store: Selects samples }
+      rules:
+        kind: component
+        description: Evaluates the alert rules every 15 seconds and sends the ones that fire.
+        code: rules/**
+        uses: { config: Reads the rules, query: Evaluates rule expressions, store: Reads samples, notify: Sends firing alerts }
+      notify:
+        kind: component
+        description: Posts alerts to the webhook.
+        code: notify/**
+        uses: { webhook: Posts alerts }
+      web-api:
+        kind: component
+        description: The HTTP server and the API for queries and alerts.
+        code: [web/*.go, web/api/**]
+        uses: { query: Runs queries, store: Reads samples, rules: Lists firing alerts }
+  pulsectl:
+    kind: container
+    technology: Go
+    description: The command-line tool that checks a config file and runs a query against a store offline.
+    code: cmd/pulsectl/**
+    uses: { config: Checks the config, query: Runs a query, store: Opens a store }
+  web-ui:
+    kind: container
+    technology: TypeScript, React
+    description: The web UI for status, queries, and alerts, with the legacy UI and the query editor it embeds.
+    code: web/ui/**
+    uses: { web-api: Calls the HTTP API }
+    elements:
+      app:
+        kind: component
+        description: The current UI's pages and its API client.
+        code: web/ui/app/**
+        uses: { query-editor: Embeds the editor, web-api: Runs queries and lists alerts }
+      legacy-app:
+        kind: component
+        description: The old UI, still served at /classic.
+        code: web/ui/legacy-app/**
+        uses: { web-api: Runs queries }
+      query-editor:
+        kind: component
+        description: A query input with completion for Pulse's query language.
+        code: web/ui/module/**
+  endpoints:
+    kind: external
+    description: The HTTP endpoints Pulse checks.
+  webhook:
+    kind: external
+    description: Receives the alerts that fire.
+actors:
+  operator:
+    kind: role
+    description: Watches the endpoints, runs queries, and checks the config.
+    uses: { web-ui.app: Sees status and alerts and runs queries, pulsectl: Checks the config }
+journeys:
+  probe-endpoints:
+    actor: operator
+    goal: Have every endpoint checked on its interval
+    steps:
+      - { from: pulse.probe, to: pulse.config, action: Reads the targets, code: probe/targets.go#Targets }
+      - { from: pulse.probe, to: endpoints, action: Probes the endpoint, code: probe/probe.go#Run }
+      - { from: pulse.probe, to: pulse.store, action: Appends the result, code: probe/probe.go#Run }
+  alert-on-down-endpoint:
+    actor: operator
+    goal: Hear about an endpoint that's down
+    importance: critical
+    steps:
+      - { from: pulse.rules, to: pulse.query, action: Evaluates the rule's expression, code: rules/rules.go#Run }
+      - { from: pulse.query, to: pulse.store, action: Selects the samples in the window, code: query/engine.go#Eval }
+      - { from: pulse.rules, to: pulse.notify, action: Sends the firing alert, code: rules/rules.go#Run }
+      - { from: pulse.notify, to: webhook, action: Posts the alert, code: notify/notify.go#Send }
+  run-a-query:
+    actor: operator
+    goal: See how an endpoint is doing
+    steps:
+      - { from: operator, to: web-ui.app, action: Types a query, code: web/ui/app/src/pages/Query.tsx }
+      - { from: web-ui.app, to: web-ui.query-editor, action: Completes and runs the query, code: web/ui/module/query-editor/src/index.tsx }
+      - { from: web-ui.app, to: pulse.web-api, action: GETs /api/query, code: web/ui/app/src/api.ts#runQuery }
+      - { from: pulse.web-api, to: pulse.query, action: Evaluates the query, code: web/api/api.go#Register }
+      - { from: pulse.query, to: pulse.store, action: Selects the samples, code: query/engine.go#Eval }
+  check-the-config:
+    actor: operator
+    goal: Know a config file is valid before deploying it
+    steps:
+      - { from: operator, to: pulsectl, action: Runs pulsectl check, code: cmd/pulsectl/main.go }
+      - { from: pulsectl, to: pulse.config, action: Loads and validates the config, code: config/config.go#Load }

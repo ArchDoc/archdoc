@@ -1,0 +1,13 @@
+{
+  "name": "pulse-ui",
+  "description": "Workspace for the Pulse web UI",
+  "private": true,
+  "workspaces": [
+    "app",
+    "legacy-app",
+    "module/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r run build"
+  }
+}

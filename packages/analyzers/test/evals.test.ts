@@ -50,6 +50,19 @@ const floors: Record<string, Floor> = {
     nesting: 1,
     code: 0.9,
   },
+  // A Go server whose packages sit beside cmd/pulse, a CLI that borrows a few of
+  // them, and a web UI that's a pnpm workspace below the top. Init makes the
+  // module and the binary named after it one container, and the workspace one
+  // container with its packages as components.
+  "go-server-ui": {
+    overall: 0.93,
+    containers: 1,
+    components: 1,
+    datastores: 1,
+    uses: 0.57,
+    nesting: 1,
+    code: 1,
+  },
   polyglot: {
     overall: 0.93,
     containers: 1,

@@ -11,6 +11,7 @@ person would write for it (`golden.yaml`):
 |---|---|
 | `ts-monorepo` | A pnpm workspace: a React storefront, an Express API with five components, a shared library, Postgres and Redis in compose |
 | `go-service` | One Go module with two binaries under `cmd/`, packages under `internal/`, Postgres migrations, NATS |
+| `go-server-ui` | A Go server whose packages sit beside its `cmd/` binary, a CLI that borrows some of them, and a web UI that's a pnpm workspace under `web/ui` (an app, a legacy app, and an editor module): one container each, not one per package |
 | `python-fastapi` | A FastAPI app in one package, split into api, services, models, and persistence |
 | `polyglot` | A TypeScript frontend, a Go backend with components, a Python worker, RabbitMQ and Postgres |
 | `single-package` | A TypeScript CLI that's one package, which the model has to split into components |
