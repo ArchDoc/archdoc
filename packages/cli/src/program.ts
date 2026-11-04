@@ -9,6 +9,7 @@ import { publish, sync } from "./commands/federation.js";
 import { init } from "./commands/init.js";
 import { landscapeBuild } from "./commands/landscape.js";
 import { migrate } from "./commands/migrate.js";
+import { paths } from "./commands/paths.js";
 import { report } from "./commands/report.js";
 import { schema } from "./commands/schema.js";
 import { seal } from "./commands/seal.js";
@@ -148,6 +149,19 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
           verbose?: boolean;
         },
       ) => run(evalCommand(ref, opts, io)),
+    );
+
+  program
+    .command("paths")
+    .description(
+      "Where flows start (routes, consumers, schedules, CLI commands, from code and from Terraform and CDK) and the calls each makes, by function, file, and line",
+    )
+    .argument("[entry]", 'an entry point\'s label, file, or handler, such as "POST /bookings"')
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("--depth <n>", "how deep to follow calls (default 5)")
+    .option("--all", "with an entry, list every entry point too")
+    .action((entry: string | undefined, opts: { model?: string; depth?: string; all?: boolean }) =>
+      run(paths(entry, opts, io)),
     );
 
   program

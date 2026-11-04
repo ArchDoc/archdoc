@@ -7,6 +7,8 @@ export {
   contextAnswer,
   type InitInput,
   initAnswer,
+  type PathsInput,
+  pathsAnswer,
   readRepoFile,
   repoPath,
   type SealInput,
@@ -42,6 +44,15 @@ export {
 } from "./iac.js";
 export { formatInit, type InitResult, inferModel, initModel } from "./init.js";
 export { manifests } from "./manifests.js";
+export {
+  type EntryPath,
+  FLOW_KINDS,
+  findEntryPoints,
+  findPaths,
+  formatPaths,
+  type PathNode,
+  type PathsOptions,
+} from "./paths.js";
 export {
   indexPythonSource,
   pythonImports,

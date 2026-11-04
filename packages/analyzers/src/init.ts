@@ -5,6 +5,7 @@ import {
   buildModel,
   type CodeIndex,
   type EntryPoint,
+  isDeploymentFile,
   isDevTooling,
   isVerificationCode,
   listRepoFiles,
@@ -14,6 +15,7 @@ import {
 import { parse, stringify } from "yaml";
 import { type AnalyzerContext, contextFor } from "./api.js";
 import { type IacFindings, readIac } from "./iac.js";
+import { findEntryPoints } from "./paths.js";
 import { analyze } from "./run.js";
 import { indexCode } from "./symbols.js";
 
@@ -48,8 +50,10 @@ export interface InitResult {
     /** Environments, from compose files and infrastructure as code. */
     environments: number;
   };
-  /** Where flows start, from infrastructure as code: routes, queue consumers, schedules. */
+  /** Where flows start: routes, queue consumers, schedules, CLI commands. */
   entryPoints: EntryPoint[];
+  /** What to read before reshaping the model: the docs, and the files that say how it's deployed. */
+  brief: { docs: string[]; deployment: string[] };
   /** Problems the model would have; init writes nothing when there are errors. */
   problems: string[];
 }
@@ -198,15 +202,35 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     from.uses.set(to.key, `Imports ${e.dependencies[0]?.specifier ?? to.key}`);
   }
 
+  // Where flows start: what the agent traces as journeys.
+  extras.entryPoints = await findEntryPoints(ctx, iac).catch(() => []);
+
   // 4. Data and contracts, from schema files.
   const data = { ...extras.data, ...(await schemas(ctx, units, add)) };
 
   // The model, as YAML, and checked before it's written.
   const namespace = sanitize(name ?? (await rootName(ctx)) ?? basename(root));
-  const doc = modelDoc(namespace, units, extras);
+  // Who starts the system and where it runs get files of their own, as journeys do
+  // (.archdoc/journeys/<id>.yaml), so each edit is to a small file.
+  const { actors, environments, ...doc } = modelDoc(namespace, units, extras) as Record<
+    string,
+    unknown
+  >;
   const files_: InitResult["files"] = [
     { path: ".archdoc/archdoc.yaml", text: HEADER + stringify(doc, YAML) + NEXT },
   ];
+  if (actors) {
+    files_.push({
+      path: ".archdoc/actors.yaml",
+      text: `# Who and what uses the system. Init only knows the schedulers infrastructure as code declares: add the people and systems behind each entry point.\n${stringify({ actors }, YAML)}`,
+    });
+  }
+  if (environments) {
+    files_.push({
+      path: ".archdoc/environments.yaml",
+      text: `# Where the system runs, from compose files and infrastructure as code. Elements say which node they run on with deploy:.\n${stringify({ environments }, YAML)}`,
+    });
+  }
   if (Object.keys(data).length) {
     files_.push({
       path: ".archdoc/data.yaml",
@@ -223,7 +247,8 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     .filter((d) => d.severity === "error")
     .map((d) => `${d.code}: ${d.message}`);
 
-  const source = files.filter((f) => SOURCE.test(f) && !SKIP_DIR.test(f));
+  // A CDK app's code is how the system is deployed: the environments point at it.
+  const source = files.filter((f) => SOURCE.test(f) && !SKIP_DIR.test(f) && !iacFiles.has(f));
   const claimed = source.filter((f) => locate(model, f).element).length;
   const all: Unit[] = [];
   const flat = (list: Unit[]) => {
@@ -247,6 +272,18 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
       environments: Object.keys(extras.environments).length,
     },
     entryPoints: extras.entryPoints,
+    brief: {
+      docs: files
+        .filter(
+          (f) =>
+            /^(README|ARCHITECTURE|DESIGN)[^/]*\.md$/i.test(f) ||
+            /^(docs?|architecture|adr|design)\/[^/]*\.md$/i.test(f) ||
+            /^[^/]+\/[^/]+\/README\.md$|^[^/]+\/README\.md$/i.test(f),
+        )
+        .filter((f) => !SKIP_DIR.test(f) || /^docs?\//.test(f))
+        .slice(0, 12),
+      deployment: [...new Set([...files.filter(isDeploymentFile), ...iacFiles])].slice(0, 15),
+    },
     problems,
   };
 }
@@ -280,16 +317,45 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
   const pct = s.coverage.total ? Math.round((100 * s.coverage.claimed) / s.coverage.total) : 100;
   const out = [
     r.written
-      ? `✓ Wrote ${r.files.map((f) => f.path).join(" and ")}.`
+      ? `✓ Wrote ${list(r.files.map((f) => f.path))}.`
       : r.problems.length
         ? "✗ Wrote nothing: the model init inferred doesn't validate."
-        : `Would write ${r.files.map((f) => f.path).join(" and ")}:`,
+        : `Would write ${list(r.files.map((f) => f.path))}:`,
     `  ${s.elements} container${s.elements === 1 ? "" : "s"}, ${s.components} component${s.components === 1 ? "" : "s"} in them, ${s.code} code element${s.code === 1 ? "" : "s"} in those`,
     `  ${s.uses} use${s.uses === 1 ? "" : "s"}, ${s.datastores} datastore${s.datastores === 1 ? "" : "s"} or queue${s.datastores === 1 ? "" : "s"}, ${s.contracts} contract${s.contracts === 1 ? "" : "s"}, ${s.data} data entr${s.data === 1 ? "y" : "ies"}`,
     `  ${s.coverage.claimed} of ${s.coverage.total} source files (${pct}%) belong to an element`,
   ];
+  if (s.environments) {
+    out.push(
+      `  ${s.environments} environment${s.environments === 1 ? "" : "s"}, from compose files and infrastructure as code`,
+    );
+  }
   for (const p of r.problems) out.push(`  ✗ ${p}`);
   if (!r.problems.length) {
+    const b = r.brief;
+    if (b.docs.length) out.push("", "Read first:", ...b.docs.map((d) => `  ${d}`));
+    if (b.deployment.length) {
+      out.push(
+        "",
+        "How it's deployed (the environments, and the datastores, queues, and services each part reaches):",
+        ...b.deployment.map((d) => `  ${d}`),
+      );
+    }
+    const flows = r.entryPoints.filter((e) => e.kind !== "main");
+    if (r.entryPoints.length) {
+      out.push(
+        "",
+        `Where flows start (${r.entryPoints.length}); archdoc_paths shows the calls each one makes:`,
+      );
+      const width = Math.min(36, Math.max(...r.entryPoints.map((e) => e.label.length)));
+      for (const e of r.entryPoints.slice(0, 30)) {
+        out.push(
+          `  ${e.kind.padEnd(8)} ${e.label.padEnd(width)}  ${e.file}${e.symbol ? `#${e.symbol}` : ""}`,
+        );
+      }
+      if (r.entryPoints.length > 30)
+        out.push(`  … and ${r.entryPoints.length - 30} more (archdoc paths lists them all)`);
+    }
     out.push(
       "",
       "Everything is marked inferred, and tests and other verification code are left out. Next, with the code open:",
@@ -299,11 +365,13 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
       "     over HTTP, queues, and schedulers. Find how each unconnected element is reached.",
       "  3. Describe each element: what it does, not what it's called (archdoc show <id> --code).",
       "     Keep the layers nested: a component inside a container, code inside a component.",
-      "  4. Add actors from the entry points (routes, pages, CLI commands, consumers, scheduled jobs),",
-      "     and trace the two to four main flows through the code as journeys, a step per hop,",
-      "     each with an action and the code where it happens.",
-      "  5. archdoc check --done until it says the model is done, then ask a person to review it.",
-      "  6. Once they accept it, remove the provenance blocks and run archdoc seal --all.",
+      `  4. Add actors from the entry points, and trace ${flows.length >= 3 ? "a journey for each main flow above" : "the main flows"} through the`,
+      "     code with archdoc_paths (not grep), a step per hop, each with an action, the code where it",
+      "     happens, and the data it carries (sends:, creates:, changes:).",
+      "  5. Say what each datastore stores and each queue carries (data:, stores:, sends:), and where each",
+      "     part runs (environments:, deploy:) from the deployment files.",
+      "  6. archdoc check --done until it says the model is done, then ask a person to review it.",
+      "  7. Once they accept it, remove the provenance blocks and run archdoc seal --all.",
     );
     if (!r.written) out.push("", ...r.files.flatMap((f) => [`# ${f.path}`, f.text]));
   }
@@ -311,13 +379,14 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
 }
 
 const HEADER = `# Written by archdoc init from the repository's manifests, compose files,
-# imports, and schema files. Everything is marked inferred: check it against
+# imports, schema files, and infrastructure as code. Everything is marked inferred: check it against
 # the code, describe what each element does, then remove the provenance blocks.
 `;
 
 const NEXT = `
 # Who uses this system, and how: init can't tell. Trace the main flows through the
-# code, a step per hop, then run archdoc check --done.
+# code (archdoc paths), a step per hop, one journey per file in .archdoc/journeys/,
+# then run archdoc check --done.
 # actors:
 #   customer: { kind: person, uses: { web: Shops } }
 # journeys:
@@ -1029,6 +1098,7 @@ function emptyResult(): InitResult {
       environments: 0,
     },
     entryPoints: [],
+    brief: { docs: [], deployment: [] },
     problems: [],
   };
 }
@@ -1172,16 +1242,9 @@ async function infrastructure(
     }
 
     // Where flows start, and who starts the scheduled ones.
-    const queueName = (id: string) => iac.queues.find((q) => q.id === id)?.name ?? id;
     for (const t of iac.triggers) {
       const fn = iac.functions.find((f) => f.id === t.function);
       if (!fn?.handler) continue;
-      extras.entryPoints.push({
-        kind: t.kind,
-        label: t.kind === "consumer" ? `consumes ${queueName(t.queue ?? t.label)}` : t.label,
-        file: fn.handler,
-        symbol: fn.symbol,
-      });
       const unit = fnUnit.get(fn.id);
       if (t.kind === "schedule" && unit) {
         extras.actors.scheduler ??= {
@@ -1294,4 +1357,11 @@ function uniqueEntity(data: Record<string, unknown>, name: string): string {
   let k = name;
   for (let i = 2; data[k]; i++) k = `${name}${i}`;
   return k;
+}
+
+/** a, b, and c. */
+function list(items: string[]): string {
+  return items.length <= 2
+    ? items.join(" and ")
+    : `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }

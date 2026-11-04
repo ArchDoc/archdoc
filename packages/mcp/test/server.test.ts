@@ -37,6 +37,7 @@ describe("archdoc MCP server", () => {
       "archdoc_check",
       "archdoc_context",
       "archdoc_init",
+      "archdoc_paths",
       "archdoc_seal",
       "archdoc_show",
     ]);
@@ -45,6 +46,15 @@ describe("archdoc MCP server", () => {
     expect(tools.find((t) => t.name === "archdoc_seal")?.annotations?.destructiveHint).toBe(false);
     // Every agent session reads this list, so it stays small.
     expect(JSON.stringify(tools).length).toBeLessThan(6000);
+  });
+
+  it("lists where flows start, and follows one through its calls", async () => {
+    const all = await call("archdoc_paths", {});
+    expect(all.isError).toBe(false);
+    expect(all.text).toMatch(/command\s+init\s+packages\/cli\/src\/program\.ts/);
+    const one = await call("archdoc_paths", { entry: "nothing-matches-this" });
+    expect(one.isError).toBe(true);
+    expect(one.text).toContain('No entry point matches "nothing-matches-this"');
   });
 
   it("finds where an area lives, by its words, file names, and tool names", async () => {

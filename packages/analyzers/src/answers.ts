@@ -38,8 +38,10 @@ import {
   traceSkeleton,
   tracesInChange,
 } from "@archdoc/core";
+import { contextFor } from "./api.js";
 import { checkRepository } from "./check.js";
 import { formatInit, initModel } from "./init.js";
+import { FLOW_KINDS, findEntryPoints, findPaths, formatPaths } from "./paths.js";
 import { resealedSince, sealReport } from "./seals.js";
 import { indexRepository } from "./symbols.js";
 
@@ -245,7 +247,10 @@ export async function checkAnswer(where: Where, input: CheckInput = {}): Promise
   if (input.done) {
     const files = await listRepoFiles(checked.model.baseDir);
     const errors = findings.filter((f) => f.severity === "error");
-    const assessment = assessDiscovery(checked.model, files);
+    const entryPoints = (
+      await findEntryPoints(contextFor(checked.model.baseDir, files)).catch(() => [])
+    ).filter((e) => FLOW_KINDS.has(e.kind));
+    const assessment = assessDiscovery(checked.model, files, { entryPoints });
     const text = [formatDiscovery(assessment, errors.length)];
     if (errors.length) text.push("", formatCheck(errors, { all: input.all }));
     return {
@@ -417,4 +422,49 @@ export async function initAnswer(where: Where, input: InitInput = {}): Promise<A
   const root = resolve(where.cwd, where.model ?? ".");
   const r = await initModel(root, input);
   return { ok: !r.refused && !r.problems.length, text: formatInit(r) };
+}
+
+export interface PathsInput {
+  /** Only entry points whose label, file, or symbol contains this, such as "POST /bookings". */
+  entry?: string | undefined;
+  /** How deep to follow calls; 5 by default. */
+  depth?: number | undefined;
+  /** With entry, list every entry point too. */
+  all?: boolean | undefined;
+}
+
+/**
+ * Where flows start (routes, consumers, schedules, CLI commands, from code and
+ * infrastructure as code) and the calls each makes, by function name, file,
+ * and line, with what each reaches outside the code. Works with or without a
+ * model; with one, it names the element each function is in.
+ */
+export async function pathsAnswer(where: Where, input: PathsInput = {}): Promise<Answer> {
+  const root = resolve(where.cwd, where.model ?? ".");
+  const loaded = await loadModel(where.model ?? ".", { cwd: where.cwd });
+  const found = !loaded.diagnostics.some((d) => d.code === "model/not-found");
+  const base = found ? loaded.baseDir : root.replace(/\/\.archdoc(\/.*)?$/, "");
+  const files = await listRepoFiles(base);
+  const r = await findPaths(contextFor(base, files), {
+    entry: input.entry,
+    depth: input.depth,
+    model: found ? loaded : undefined,
+  });
+  if (input.entry && !r.paths.length) {
+    return {
+      ok: false,
+      text: `No entry point matches "${input.entry}".\n\n${formatPaths({ entryPoints: r.entryPoints, paths: [] }, true)}`,
+    };
+  }
+  // With no entry named, list them all and show the trees of the first few.
+  const shown = input.entry ? r.paths : r.paths.slice(0, 6);
+  const more = r.paths.length - shown.length;
+  const text = formatPaths({ entryPoints: r.entryPoints, paths: shown }, input.all || !input.entry);
+  return {
+    ok: true,
+    text:
+      more > 0
+        ? `${text}\n\n${more} more entry point${more === 1 ? "" : "s"}: pass entry to see one's calls.`
+        : text,
+  };
 }

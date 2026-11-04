@@ -44,7 +44,12 @@ function unwrapSystem(text: string): string {
 /** The model init wrote to disk, without its system (see unwrapSystem). */
 async function loadUnwrapped(dir: string): Promise<Model> {
   const files: { path: string; text: string }[] = [];
-  for (const path of [".archdoc/archdoc.yaml", ".archdoc/data.yaml"]) {
+  for (const path of [
+    ".archdoc/archdoc.yaml",
+    ".archdoc/data.yaml",
+    ".archdoc/actors.yaml",
+    ".archdoc/environments.yaml",
+  ]) {
     const text = await readFile(join(dir, path), "utf8").catch(() => undefined);
     if (text !== undefined)
       files.push({ path, text: path.endsWith("archdoc.yaml") ? unwrapSystem(text) : text });
@@ -228,7 +233,9 @@ describe("archdoc init on a Go service with compose and SQL migrations", () => {
 
   it("says what it found and what to do next", async () => {
     const out = formatInit({ ...(await inferModel(dir)), written: true });
-    expect(out).toMatch(/^✓ Wrote \.archdoc\/archdoc\.yaml and \.archdoc\/data\.yaml\./);
+    expect(out).toMatch(
+      /^✓ Wrote \.archdoc\/archdoc\.yaml, \.archdoc\/environments\.yaml, and \.archdoc\/data\.yaml\./,
+    );
     expect(out).toContain("3 containers, 0 components in them, 0 code elements in those");
     expect(out).toContain("5 uses, 3 datastores or queues, 0 contracts, 1 data entry");
     expect(out).toContain("4. Add actors");

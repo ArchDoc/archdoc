@@ -3,6 +3,7 @@ import {
   checkAnswer,
   contextAnswer,
   initAnswer,
+  pathsAnswer,
   sealAnswer,
   showAnswer,
   type Where,
@@ -21,6 +22,7 @@ export interface ArchdocServerOptions {
 export const INSTRUCTIONS = `This repository's architecture is modeled in .archdoc/: actors, elements mapped to code, journeys, and data. People own it. Use it before you grep. With no .archdoc/ yet, archdoc_init starts one.
 
 - archdoc_context: start every task here, with the task in words, the files you'll change, or an error. It says which files and functions to open, what else does the same job, the journeys, data, rules, tests, owners, and who uses it. Name the affected journeys in your plan; ask before changing a critical one.
+- archdoc_paths: where flows start (routes, consumers, jobs, commands) and the calls each makes. Trace a flow with it, not grep.
 - archdoc_show: one thing by ID (element, actor, journey, data entry, Entry.field, trace, or a fact like element:<id>).
 - archdoc_check: after you edit, with base "main". It lists what your change broke or made stale, each with its fix, and facts whose code changed. Edit .archdoc/ to fix the model, with provenance: { source: suggested, by: agent:<name> } on what you add.
 - archdoc_seal: once you've checked each changed fact against its code, seal it. Never seal a fact you haven't read.`;
@@ -69,6 +71,32 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
   );
 
   server.registerTool(
+    "archdoc_paths",
+    {
+      title: "Where flows start, and the calls they make",
+      description:
+        "The repository's entry points (HTTP routes, queue consumers, scheduled jobs, CLI commands, from the code and from Terraform and CDK) and, for each, the calls it makes: function names, files, and lines, the model element each is in, and what each reaches outside the code (a DynamoDB table, a queue, an HTTP call). Pass entry to see one flow. Read only the files on the path you need; works before a model exists.",
+      inputSchema: {
+        entry: z
+          .string()
+          .optional()
+          .describe(
+            'An entry point\'s label, file, or handler, such as "POST /bookings" or "consumer"',
+          ),
+        depth: z
+          .number()
+          .int()
+          .min(1)
+          .max(10)
+          .optional()
+          .describe("How deep to follow calls; 5 by default"),
+      },
+      annotations: READ_ONLY,
+    },
+    (input) => respond(pathsAnswer(where, input)),
+  );
+
+  server.registerTool(
     "archdoc_check",
     {
       title: "What's wrong or stale",
@@ -82,7 +110,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
           .boolean()
           .optional()
           .describe(
-            "For a model you're starting: what it still lacks before it's done (level sizes, descriptions, test code, unconnected elements, actors, journeys, step detail), each with what to do",
+            "For a model you're starting: what it still lacks before it's done (level sizes, descriptions, test code, unconnected elements, the system, actors, journeys for the entry points, step detail, the data steps carry and stores hold, environments and deploy), each with what to do",
           ),
       },
       annotations: READ_ONLY,
@@ -116,7 +144,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "Start a model",
       description:
-        "Only for a repository with no .archdoc/: writes a starting model from its packages, compose services, imports, and schema files, all marked inferred: containers, the components inside each, the code (files, functions, classes) inside each component, and the uses between them at each level. Says what to add (descriptions, actors, journeys). Never writes over a model.",
+        "Only for a repository with no .archdoc/: writes a starting model from its packages, compose services, imports, schema files, and infrastructure as code (Terraform, CDK), all marked inferred: a system with containers, the components inside each, the code inside each component, the uses between them at each level, datastores and queues with the data they hold, and environments. Answers with a brief: the entry points, deployment files, and docs to read first, and what to add (descriptions, actors, journeys). Never writes over a model.",
       inputSchema: {
         name: z.string().optional().describe("The namespace; defaults to the root package's name"),
         dryRun: z.boolean().optional().describe("Return the model without writing it"),
