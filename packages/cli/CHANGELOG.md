@@ -1,5 +1,23 @@
 # @archdoc/cli
 
+## 0.6.0
+
+### Minor Changes
+
+- eef9e90: Better system discovery for a new model. `archdoc check --done` (`archdoc_check` with `done: true`) says whether a model is done and what it still lacks, each with what to do: levels over the limits, elements with no description of their own, test and verification code modeled as elements, elements nothing connects to, missing actors, too few or too short journeys, and steps without an action or code, or on a container where a component would lead to the code. `archdoc init` leaves out tests, test packages, mocks, fixtures, benchmarks, smoke checks, and test-runner config. The archdoc skill has the agent find how each unconnected element is reached at runtime, list the entry points, trace the main flows through the code as journeys with a step per hop, and run the done check before it hands the model over. `scoreDiscovery` scores the same things for the evals.
+- 6b61b6f: The explorer's map is easier to read. Boxes are colored by what they are (people and teams, agents, systems, containers, components, datastores, queues, externals), with the kind named on each box and a key on the map; the journey lanes and the minimap use the same colors. Every use says what it's for, centered on its line, without hovering: the layout keeps room for each description, and rows of boxes sit far enough apart to see which way each arrow points. Turn descriptions off from the key for a tighter map. Journeys open on the map, each line labeled with what its steps do there; switch to Sequence for the lanes, and the explorer remembers which you picked. The map starts at the C4 context (each system as one box, with its people and the external systems it talks to); Containers and Components open it a level at a time, and LR / TD switch the layout between left to right (now the default) and top down.
+- f668b61: Model where the system runs, and see it in the explorer. A new `environments:` section holds each environment (production, staging, local) and its infrastructure as nodes inside nodes (cloud, region, cluster, namespace, managed service), each with `kind`, `technology`, and the `code` that defines it. Containers, datastores, and queues say where they run with `deploy`: a node's path such as `production.aws.eks`, a list of them, or `{ to, replicas, url, technology, code }`. The explorer's new Infrastructure tab draws one environment at a time, with each container on its node and the uses between them, and nodes colored by what they are (cloud and network, compute, managed service, client) with a key; `archdoc show` prints an environment or a node with what runs on it, and where an element is deployed. `validate` fails on a `deploy` that names nothing and warns about containers that don't say where they run once a model has environments; `check` warns about deployment code that matches no file, and seals flag a node's or deployment's code when it changes.
+
+### Patch Changes
+
+- Updated dependencies [eef9e90]
+- Updated dependencies [f668b61]
+  - @archdoc/core@0.6.0
+  - @archdoc/analyzers@0.6.0
+  - @archdoc/mcp@0.6.0
+  - @archdoc/spec@0.6.0
+  - @archdoc/federation@0.6.0
+
 ## 0.5.1
 
 ### Patch Changes
