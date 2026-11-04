@@ -49,7 +49,7 @@ before this change, the same judge). $2.05 for the agents, $3.21 for judging.
 
 Mean digestibility 37% → **60%**; the judge's journeys score went from 2.6 to
 3.8 of 5. Every run now ends with the done check clean or nearly so, with two
-to three journeys of 7 to 17 steps on components (eShop's were two steps
+to three journeys, 7 to 17 steps in all, on components (eShop's were two steps
 each), no test elements (eShop had 8, Prometheus 23), and no unconnected
 elements (Prometheus had 27, the Stripe sample 22).
 
