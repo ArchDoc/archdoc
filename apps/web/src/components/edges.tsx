@@ -103,9 +103,16 @@ function Note(props: {
   );
 }
 
+/** The widest a message chip gets. */
+const PACKET_WIDTH = 220;
+
 /** A chip with the message's name, moving along the edge from source to target. */
 function Packet(props: { path: string; at: Point; label: string; missing?: boolean | undefined }) {
-  const width = Math.min(220, props.label.length * 7 + 22);
+  // A long name is cut to fit the chip; the full name is its tooltip.
+  const fits = Math.floor((PACKET_WIDTH - 22) / 7);
+  const text =
+    props.label.length > fits ? `${props.label.slice(0, fits - 1).trimEnd()}…` : props.label;
+  const width = Math.min(PACKET_WIDTH, text.length * 7 + 22);
   const still =
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -125,9 +132,10 @@ function Packet(props: { path: string; at: Point; label: string; missing?: boole
         />
       )}
       <g transform={still ? undefined : "translate(0 -14)"}>
+        <title>{props.label}</title>
         <rect x={-width / 2} y={-10} width={width} height={20} rx={10} />
         <text textAnchor="middle" dominantBaseline="central">
-          {props.label}
+          {text}
         </text>
       </g>
     </g>

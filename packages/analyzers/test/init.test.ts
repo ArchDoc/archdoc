@@ -267,6 +267,7 @@ describe("archdoc init on flat Go and Python layouts", () => {
     await w("main.go", 'package main\n\nimport "github.com/acme/blog/articles"\n');
     await w("articles/models.go", 'package articles\n\nimport "github.com/acme/blog/common"\n');
     await w("articles/routers.go", "package articles\n");
+    await w("articles/comments.go", "package articles\n");
     await w("common/db.go", 'package common\n\nimport "database/sql"\n');
     await w("common/errors.go", "package common\n");
     const { model } = await inferred(root);
@@ -274,6 +275,7 @@ describe("archdoc init on flat Go and Python layouts", () => {
     expect(kinds).toEqual({
       blog: "container",
       "blog.articles": "component",
+      "blog.articles.comments": "code",
       "blog.articles.models": "code",
       "blog.articles.routers": "code",
       "blog.common": "component",
@@ -293,6 +295,7 @@ describe("archdoc init on flat Go and Python layouts", () => {
     await w("backend/app/api/deps.py", "from app.core import config\n");
     await w("backend/app/core/security.py", "def hash_password(p): ...\n");
     await w("backend/app/core/config.py", "settings = {}\n");
+    await w("backend/app/core/db.py", "engine = None\n");
     const { model } = await inferred(root);
     expect([...model.elements.values()].map((e) => `${e.id} ${e.spec.technology}`)).toContain(
       "app Python, FastAPI",
@@ -315,6 +318,9 @@ describe("archdoc init on flat Go and Python layouts", () => {
     );
     await w("api/src/orders/service.spec.ts", 'import { s } from "./service";\n');
     await w("api/src/storage/db.ts", "export const db = {};\n");
+    await w("api/src/storage/cache.ts", "export const cache = {};\n");
+    await w("api/src/orders/refund.ts", "export const refund = {};\n");
+    await w("api/src/orders/totals.ts", "export const totals = {};\n");
     await w("api/src/testing/fake-db.ts", 'import { db } from "../storage/db";\n');
     await w("api/test/orders.test.ts", 'import { s } from "../src/orders/service";\n');
     await w("api/vitest.config.ts", "export default {};\n");
@@ -330,8 +336,11 @@ describe("archdoc init on flat Go and Python layouts", () => {
     expect([...model.elements.keys()].sort()).toEqual([
       "api",
       "api.orders",
+      "api.orders.refund",
       "api.orders.service",
+      "api.orders.totals",
       "api.storage",
+      "api.storage.cache",
       "api.storage.db",
     ]);
     expect(uses(model)).toEqual(["api.orders->api.storage"]);
@@ -367,12 +376,32 @@ describe("archdoc init, layer by layer", () => {
       "packages/api/src/orders/price.ts",
       "export function price() {}\nexport function tax() {}\n",
     );
-    await write("packages/api/src/users/login.ts", "export function login() {}\n");
+    await write(
+      "packages/api/src/users/login.ts",
+      'import { open } from "./session.js";\nexport function login() {\n  return open();\n}\n',
+    );
+    await write("packages/api/src/users/session.ts", "export function open() {}\n");
+    await write(
+      "packages/api/src/users/logout.ts",
+      'import { open } from "./session.js";\nexport function logout() {\n  return open();\n}\n',
+    );
     await write("packages/util/package.json", JSON.stringify({ name: "@shop/util" }));
     await write("packages/util/src/strings.ts", "export function pad() {}\nexport class Slug {}\n");
     await write(
       "packages/util/src/dates.ts",
-      'import { pad } from "./strings.js";\nexport function day() {\n  return pad();\n}\n',
+      'import { pad } from "./strings.js";\nimport { round } from "./numbers.js";\nexport function day() {\n  return pad() + round();\n}\n',
+    );
+    await write(
+      "packages/util/src/numbers.ts",
+      'import { pad } from "./strings.js";\nexport function round() {\n  return pad();\n}\n',
+    );
+    await write(
+      "packages/util/src/money.ts",
+      'import { round } from "./numbers.js";\nexport function cents() {\n  return round();\n}\n',
+    );
+    await write(
+      "packages/util/src/ids.ts",
+      'import { pad } from "./strings.js";\nexport function newId() {\n  return pad();\n}\n',
     );
     execFileSync("git", ["init", "-q"], { cwd: dir });
     execFileSync("git", ["add", "."], { cwd: dir });
@@ -392,9 +421,14 @@ describe("archdoc init, layer by layer", () => {
       "api.orders.price": "code",
       "api.users": "component",
       "api.users.login": "code",
+      "api.users.logout": "code",
+      "api.users.session": "code",
       util: "container",
       // A flat package: its files are the components, their functions and classes the code.
       "util.dates": "component",
+      "util.ids": "component",
+      "util.money": "component",
+      "util.numbers": "component",
       "util.strings": "component",
       "util.strings.pad": "code",
       "util.strings.Slug": "code",
@@ -412,10 +446,17 @@ describe("archdoc init, layer by layer", () => {
     expect(uses).toEqual([
       "api.orders->api.users",
       "api.orders.place->api.orders.price",
+      "api.users.login->api.users.session",
+      "api.users.logout->api.users.session",
+      "util.dates->util.numbers",
       "util.dates->util.strings",
+      "util.ids->util.strings",
+      "util.money->util.numbers",
+      "util.numbers->util.strings",
       "web->api",
     ]);
-    expect(r.stats).toMatchObject({ elements: 3, components: 4, code: 5, uses: 4 });
+    // web has one file: a container that small stays lean, with no components.
+    expect(r.stats).toMatchObject({ elements: 3, components: 7, code: 7, uses: 10 });
 
     // check agrees: every import is declared, and every layer sits inside the one above it.
     const checked = await checkRepository({ cwd: dir });

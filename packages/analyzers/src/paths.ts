@@ -42,6 +42,10 @@ export interface PathsOptions {
   model?: Model | undefined;
   /** Entry points already found (by init), to skip reading the IaC again. */
   iac?: IacFindings[] | undefined;
+  /** Build call trees for at most this many of the chosen entry points. Default: all. */
+  trees?: number | undefined;
+  /** Fold calls that stay inside one element (or, with no model, one directory): only the hops between them. */
+  hops?: boolean | undefined;
 }
 
 /** Kinds of entry point that start a flow a journey should follow. */
@@ -534,7 +538,8 @@ function tsFunctions(file: string, text: string, src: IndexedSource | undefined)
       // A function made inside is part of this one: its calls are this one's.
       n.forEachChild(visit);
     };
-    for (const n of nodes) n.forEachChild(visit);
+    // A concise arrow body is itself the call: (req) => save(req).
+    for (const n of nodes) visit(n);
     // new X inside a .send() was counted with the send; leave the bare constructor out.
     return calls.filter(
       (c, i) =>
@@ -773,20 +778,23 @@ export async function findPaths(
   const index = await indexCode(ctx).catch(
     (): CodeIndex => ({ files: [...ctx.files], sources: [] }),
   );
-  const entries = (await findEntryPoints(ctx, options.iac)).map((e) => ({
-    ...e,
-    element: options.model ? locate(options.model, e.file).element?.id : undefined,
-  }));
+  const entries = placeEntries(
+    (await findEntryPoints(ctx, options.iac)).map((e) => ({
+      ...e,
+      element: options.model ? locate(options.model, e.file).element?.id : undefined,
+    })),
+    ctx.files,
+    options.model,
+  );
   const reader = new Reader(ctx, index);
-  const want = options.entry?.toLowerCase();
-  const chosen = want
-    ? entries.filter((e) =>
-        `${e.kind} ${e.label} ${e.file} ${e.symbol ?? ""}`.toLowerCase().includes(want),
-      )
-    : entries;
+  const chosen = options.entry ? matchEntries(entries, options.entry) : entries;
   const paths: EntryPath[] = [];
   const sources = new Map(index.sources.map((s) => [s.path, s]));
-  for (const entry of chosen) {
+  for (const [i, entry] of chosen.entries()) {
+    if (i >= (options.trees ?? Number.POSITIVE_INFINITY)) {
+      paths.push({ entry });
+      continue;
+    }
     const fns = await reader.functions(entry.file);
     // A handler from another file: postings.Handler, or an imported name.
     let imported: Fn | undefined;
@@ -818,9 +826,192 @@ export async function findPaths(
           model: options.model,
         })
       : undefined;
-    paths.push({ entry, root });
+    paths.push({ entry, root: root && options.hops ? hopsOf(root, options.model) : root });
   }
   return { entryPoints: entries, paths };
+}
+
+// --- Many entry points: places, resources, and hops ---
+
+/** With more entry points than this, paths and init summarize them by place instead of listing each. */
+export const SUMMARY_AT = 60;
+
+/** Files that make a directory a package: its entry points are grouped under it. */
+const MANIFEST =
+  /(^|\/)(package\.json|go\.mod|pyproject\.toml|setup\.py|pom\.xml|build\.gradle(\.kts)?|Cargo\.toml|[^/]+\.csproj|Gemfile|composer\.json)$/;
+
+/**
+ * Says where each entry point lives: the container its file is in when
+ * there's a model, or the nearest package directory above it (the one
+ * holding its package.json, go.mod, pyproject.toml, and the like), or its
+ * first directory.
+ */
+export function placeEntries<T extends EntryPoint & { element?: string | undefined }>(
+  entries: T[],
+  files: readonly string[],
+  model?: Model,
+): T[] {
+  const packages = new Set(
+    files
+      .filter((f) => MANIFEST.test(f) && !SKIP.test(f) && !isVerificationCode(f))
+      .map((f) => f.split("/").slice(0, -1).join("/")),
+  );
+  const container = (id: string): string => {
+    let e = model?.elements.get(id);
+    while (e?.parentId && model?.elements.get(e.parentId)?.spec.kind !== "system")
+      e = model?.elements.get(e.parentId);
+    return e?.id ?? id;
+  };
+  const packageOf = (file: string): string => {
+    const dirs = file.split("/").slice(0, -1);
+    for (let i = dirs.length; i > 0; i--) {
+      const d = dirs.slice(0, i).join("/");
+      if (packages.has(d)) return d;
+    }
+    return dirs[0] ?? ".";
+  };
+  return entries.map((e) => ({
+    ...e,
+    place: e.element ? container(e.element) : packageOf(e.file),
+  }));
+}
+
+/**
+ * The entry points `entry` names: by label, file, handler, element, or
+ * place, so "POST /orders", "/orders", "apps/api", and "api" all work.
+ */
+export function matchEntries<T extends EntryPoint & { element?: string | undefined }>(
+  entries: T[],
+  entry: string,
+): T[] {
+  const want = entry.toLowerCase();
+  const exact = entries.filter(
+    (e) => e.label.toLowerCase() === want || `${e.kind} ${e.label}`.toLowerCase() === want,
+  );
+  if (exact.length) return exact;
+  const text = (e: T) =>
+    `${e.kind} ${e.label} ${e.file} ${e.symbol ?? ""} ${e.element ?? ""} ${e.place ?? ""}`.toLowerCase();
+  const found = entries.filter((e) => text(e).includes(want));
+  if (found.length) return found;
+  // A place and a resource together, such as "services/orders /refunds": each word matches.
+  const words = want.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return [];
+  // A word that names a place picks that place, not every place it's a prefix of.
+  const places = new Set(entries.map((e) => e.place?.toLowerCase()));
+  const isPlace = (w: string, e: T) => {
+    const p = e.place?.toLowerCase() ?? "";
+    return p === w || p.endsWith(`/${w}`);
+  };
+  const placed = (w: string) => [...places].some((p) => p === w || p?.endsWith(`/${w}`));
+  return entries.filter((e) =>
+    words.every((w) => (placed(w) ? isPlace(w, e) : text(e).includes(w))),
+  );
+}
+
+/** A route's resource: its first path segment that isn't api, a version, or a parameter. */
+export function resourceOf(e: EntryPoint): string {
+  if (e.kind !== "route") return e.label;
+  const path = e.label.replace(/^[A-Z]+\s+/, "");
+  const seg = path
+    .split("/")
+    .find((s) => /\w/.test(s) && !/^(api|rest|v\d+(\.\d+)?)$/i.test(s) && !/^[:{<*]/.test(s));
+  return seg ? `/${seg}` : "/";
+}
+
+/** Entry points by place, the biggest first. */
+export function groupEntries<T extends EntryPoint>(
+  entries: T[],
+): { place: string; entries: T[] }[] {
+  const by = new Map<string, T[]>();
+  for (const e of entries) {
+    const p = e.place ?? ".";
+    by.set(p, [...(by.get(p) ?? []), e]);
+  }
+  return [...by]
+    .map(([place, list]) => ({ place, entries: list }))
+    .sort((a, b) => b.entries.length - a.entries.length || a.place.localeCompare(b.place));
+}
+
+/**
+ * Many entry points as a summary: how many each place has of each kind, and
+ * its routes by resource, the biggest first. Each line is a journey's worth
+ * of flows; pass one as entry to list it.
+ */
+export function formatEntrySummary(entries: readonly EntryPoint[], opts: { places?: number } = {}) {
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const groups = groupEntries([...entries]);
+  const cap = opts.places ?? 25;
+  const out = [
+    `${entries.length} entry points, where flows start, in ${plural(groups.length, "place")} (the most first):`,
+  ];
+  for (const g of groups.slice(0, cap)) {
+    const kinds = new Map<string, EntryPoint[]>();
+    for (const e of g.entries) kinds.set(e.kind, [...(kinds.get(e.kind) ?? []), e]);
+    const counts = [...kinds].map(([k, l]) => plural(l.length, k)).join(", ");
+    out.push(`  ${g.place}  ${counts}`);
+    for (const [kind, list] of kinds) {
+      const by = new Map<string, number>();
+      for (const e of list) {
+        const k = resourceOf(e);
+        by.set(k, (by.get(k) ?? 0) + 1);
+      }
+      const top = [...by].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      const shown = top
+        .slice(0, 8)
+        .map(([k, n]) => (n > 1 ? `${k} (${n})` : k))
+        .join(", ");
+      out.push(
+        `    ${kind.padEnd(8)} ${shown}${top.length > 8 ? `, and ${top.length - 8} more` : ""}`,
+      );
+    }
+  }
+  if (groups.length > cap) {
+    const rest = groups.slice(cap);
+    out.push(
+      `  … and ${plural(rest.length, "more place")} with ${rest.reduce((n, g) => n + g.entries.length, 0)} entry points`,
+    );
+  }
+  out.push(
+    "",
+    'Each line is a group of flows, usually one journey: the routes of one resource, a consumer, a job. Pass entry with a place, a resource, or one label to list them or see the calls ("apps/api", "/orders", "POST /orders"), and hops: true to see only the calls that cross from one element to another.',
+  );
+  return out.join("\n");
+}
+
+/**
+ * A call tree with only its hops: calls that stay inside the element (or,
+ * with no model, the directory) of the function that makes them are folded
+ * into it, with what they reach outside the code.
+ */
+export function hopsOf(root: PathNode, model?: Model): PathNode {
+  // Code elements are inside a component: a hop is between components, containers, and the rest.
+  const unit = (id: string): string => {
+    let e = model?.elements.get(id);
+    while (e?.spec.kind === "code" && e.parentId) e = model?.elements.get(e.parentId);
+    return e?.id ?? id;
+  };
+  const owner = (n: PathNode) =>
+    n.element ? unit(n.element) : n.file.split("/").slice(0, -1).join("/");
+  const fold = (n: PathNode): PathNode => {
+    const at = owner(n);
+    const touches = [...n.touches];
+    const kids: PathNode[] = [];
+    const seen = new Set<string>();
+    const walk = (children: PathNode[]) => {
+      for (const c of children) {
+        if (owner(c) === at) {
+          touches.push(...c.touches);
+          walk(c.children);
+        } else if (!seen.has(`${c.file}#${c.name}`)) {
+          seen.add(`${c.file}#${c.name}`);
+          kids.push(fold(c));
+        }
+      }
+    };
+    walk(n.children);
+    return { ...n, touches: [...new Set(touches)], children: kids };
+  };
+  return fold(root);
 }
 
 /** The entry points and call paths as text: what `archdoc paths` prints and archdoc_paths answers. */

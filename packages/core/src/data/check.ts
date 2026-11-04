@@ -78,6 +78,15 @@ export function checkData(model: Model, scope: "local" | "imported"): Diagnostic
 
   if (scope === "local") {
     for (const d of model.data.values()) {
+      const label = d.spec.name ?? d.id.slice(d.id.lastIndexOf(".") + 1);
+      if (isLongDataName(label)) {
+        out.push({
+          severity: "warning",
+          code: "data/long-name",
+          message: `${d.id} is named "${label}", too long to read where a step shows what it carries. Name it with a short noun of one to three words, such as ChargeProjection, and say what it is in description.`,
+          location: d.location,
+        });
+      }
       if (!d.spec.source) {
         const untyped = Object.entries(d.spec.fields ?? {}).filter(([, f]) => f.type === undefined);
         if (untyped.length) {
@@ -351,4 +360,16 @@ function shortData(model: Model, entry: string): string {
 function list(items: string[]): string {
   if (items.length < 3) return items.join(" and ");
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+/** The most a data entry's name may run to: it's drawn on a chip that moves along a step. */
+export const DATA_NAME_LIMIT = { chars: 28, words: 4 } as const;
+
+/** Whether a data entry's name is too long for a chip: more than four words or 28 characters. */
+export function isLongDataName(name: string): boolean {
+  const words = name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[\s_-]+/)
+    .filter(Boolean);
+  return name.length > DATA_NAME_LIMIT.chars || words.length > DATA_NAME_LIMIT.words;
 }

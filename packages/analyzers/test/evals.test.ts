@@ -35,7 +35,8 @@ interface Floor {
 
 // Measured: init finds every container and datastore, splits containers into
 // components by their code directories, and sees uses in imports and compose
-// files. It misses components that are one file (python-fastapi's db.py,
+// files, and keeps a container with fewer than five source files lean, with
+// no components. It misses components that are one file (python-fastapi's db.py,
 // single-package's cli.ts and config.ts), python-fastapi's services/, and
 // uses that compose puts on a container when the golden model has them on a
 // component. What it misses is what the agent is there to add.
@@ -50,7 +51,7 @@ const floors: Record<string, Floor> = {
     code: 0.9,
   },
   polyglot: {
-    overall: 0.86,
+    overall: 0.93,
     containers: 1,
     components: 1,
     datastores: 1,
@@ -80,7 +81,7 @@ const floors: Record<string, Floor> = {
   // don't show, plus tests, mocks, smoke checks, and a load test that init
   // leaves out. Init finds the services; the uses between them are the agent's.
   "order-flows": {
-    overall: 0.8,
+    overall: 0.89,
     containers: 1,
     components: 1,
     datastores: 1,
@@ -93,7 +94,7 @@ const floors: Record<string, Floor> = {
   // IaC: the tables with their keys, the queue, SES, which component calls each,
   // the environments, and the routes, consumer, and schedule as entry points.
   "serverless-aws": {
-    overall: 0.91,
+    overall: 0.97,
     containers: 1,
     components: 1,
     datastores: 1,
@@ -102,7 +103,7 @@ const floors: Record<string, Floor> = {
     code: 1,
   },
   "serverless-aws-tf": {
-    overall: 0.91,
+    overall: 0.97,
     containers: 1,
     components: 1,
     datastores: 1,
@@ -111,7 +112,7 @@ const floors: Record<string, Floor> = {
     code: 1,
   },
   "ts-monorepo": {
-    overall: 0.91,
+    overall: 0.95,
     containers: 1,
     components: 1,
     datastores: 1,

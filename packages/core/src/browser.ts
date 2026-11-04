@@ -13,6 +13,7 @@ export {
 } from "./check/check.js";
 export {
   assessDiscovery,
+  COMPONENT_SIZE,
   type DiscoveryAssessment,
   type DiscoveryGap,
   type DiscoveryOptions,
@@ -21,6 +22,8 @@ export {
   isDeploymentFile,
   isVerificationCode,
   LEVEL_LIMITS,
+  needsPerson,
+  openWarnings,
 } from "./check/discovery.js";
 export { validateJourneys } from "./check/journeys.js";
 export { evidenceOf, isDevTooling, type ObservedDependency } from "./check/observed.js";
@@ -61,7 +64,7 @@ export {
   type NewSensitiveStore,
   sensitiveDataChanges,
 } from "./data/changes.js";
-export { checkData } from "./data/check.js";
+export { checkData, DATA_NAME_LIMIT, isLongDataName } from "./data/check.js";
 export {
   type DataFlow,
   type DataStore,

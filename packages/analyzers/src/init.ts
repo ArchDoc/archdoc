@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, posix } from "node:path";
 import {
   buildModel,
+  COMPONENT_SIZE,
   type CodeIndex,
   type EntryPoint,
   isDeploymentFile,
@@ -15,7 +16,7 @@ import {
 import { parse, stringify } from "yaml";
 import { type AnalyzerContext, contextFor } from "./api.js";
 import { type IacFindings, readIac } from "./iac.js";
-import { findEntryPoints } from "./paths.js";
+import { findEntryPoints, formatEntrySummary, placeEntries } from "./paths.js";
 import { analyze } from "./run.js";
 import { indexCode } from "./symbols.js";
 
@@ -163,7 +164,11 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     const sources = files.filter(
       (f) => isSource(f) && inside(unit.dir, f) && ownerOf(units, f) === unit,
     );
-    unit.components = components(unit.dir, sources, exportsOf);
+    // A small container stays lean: its few files are read as one part.
+    unit.components =
+      sources.filter((f) => !ENTRY_FILE.test(f)).length >= COMPONENT_SIZE.lean
+        ? components(unit.dir, sources, exportsOf)
+        : [];
   }
 
   // 2. Datastores, queues, and dependencies, from compose files and infrastructure as code.
@@ -203,7 +208,7 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
   }
 
   // Where flows start: what the agent traces as journeys.
-  extras.entryPoints = await findEntryPoints(ctx, iac).catch(() => []);
+  extras.entryPoints = placeEntries(await findEntryPoints(ctx, iac).catch(() => []), ctx.files);
 
   // 4. Data and contracts, from schema files.
   const data = { ...extras.data, ...(await schemas(ctx, units, add)) };
@@ -320,7 +325,7 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
       ? `✓ Wrote ${list(r.files.map((f) => f.path))}.`
       : r.problems.length
         ? "✗ Wrote nothing: the model init inferred doesn't validate."
-        : `Would write ${list(r.files.map((f) => f.path))}:`,
+        : `Dry run: wrote nothing. It would write ${list(r.files.map((f) => f.path))}. To model the system, run archdoc init again without --dry-run, then follow the steps below.`,
     `  ${s.elements} container${s.elements === 1 ? "" : "s"}, ${s.components} component${s.components === 1 ? "" : "s"} in them, ${s.code} code element${s.code === 1 ? "" : "s"} in those`,
     `  ${s.uses} use${s.uses === 1 ? "" : "s"}, ${s.datastores} datastore${s.datastores === 1 ? "" : "s"} or queue${s.datastores === 1 ? "" : "s"}, ${s.contracts} contract${s.contracts === 1 ? "" : "s"}, ${s.data} data entr${s.data === 1 ? "y" : "ies"}`,
     `  ${s.coverage.claimed} of ${s.coverage.total} source files (${pct}%) belong to an element`,
@@ -342,25 +347,33 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
       );
     }
     const flows = r.entryPoints.filter((e) => e.kind !== "main");
-    if (r.entryPoints.length) {
+    if (r.entryPoints.length > 30) {
+      // Many: by place and resource, each line a journey's worth of flows.
+      out.push(
+        "",
+        formatEntrySummary(r.entryPoints, { places: 15 }).replace(
+          /^(\d+) entry points/,
+          "Where flows start: $1 entry points",
+        ),
+      );
+    } else if (r.entryPoints.length) {
       out.push(
         "",
         `Where flows start (${r.entryPoints.length}); archdoc_paths shows the calls each one makes:`,
       );
       const width = Math.min(36, Math.max(...r.entryPoints.map((e) => e.label.length)));
-      for (const e of r.entryPoints.slice(0, 30)) {
+      for (const e of r.entryPoints) {
         out.push(
           `  ${e.kind.padEnd(8)} ${e.label.padEnd(width)}  ${e.file}${e.symbol ? `#${e.symbol}` : ""}`,
         );
       }
-      if (r.entryPoints.length > 30)
-        out.push(`  … and ${r.entryPoints.length - 30} more (archdoc paths lists them all)`);
     }
     out.push(
       "",
       "Everything is marked inferred, and tests and other verification code are left out. Next, with the code open:",
       "  1. Reshape it to the parts the README and deployment files name: about 3 to 12 per level.",
       "     Fold per-file code into its component, group variants, rename what's named after build files.",
+      "     Give a big container (many directories, dozens of files) components; keep a small one lean.",
       "  2. Add what imports don't show: datastores, queues, externals, and the uses between services",
       "     over HTTP, queues, and schedulers. Find how each unconnected element is reached.",
       "  3. Describe each element: what it does, not what it's called (archdoc show <id> --code).",
@@ -370,10 +383,18 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
       "     happens, and the data it carries (sends:, creates:, changes:).",
       "  5. Say what each datastore stores and each queue carries (data:, stores:, sends:), and where each",
       "     part runs (environments:, deploy:) from the deployment files.",
-      "  6. archdoc check --done until it says the model is done, then ask a person to review it.",
+      "  6. archdoc check --done until it says the model is done: fix each line and each warning the code",
+      "     can answer (a missing schema: find it and map its fields), and leave only what needs a person.",
+      "     Then ask a person to review it.",
       "  7. Once they accept it, remove the provenance blocks and run archdoc seal --all.",
     );
-    if (!r.written) out.push("", ...r.files.flatMap((f) => [`# ${f.path}`, f.text]));
+    if (!r.written) {
+      out.push("", ...r.files.flatMap((f) => [`# ${f.path}`, f.text]));
+      out.push(
+        "",
+        "That was a dry run: nothing is in .archdoc/ yet. Run archdoc init without --dry-run to write it.",
+      );
+    }
   }
   return out.join("\n");
 }
