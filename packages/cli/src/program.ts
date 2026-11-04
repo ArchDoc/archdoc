@@ -156,12 +156,19 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     .description(
       "Where flows start (routes, consumers, schedules, CLI commands, from code and from Terraform and CDK) and the calls each makes, by function, file, and line",
     )
-    .argument("[entry]", 'an entry point\'s label, file, or handler, such as "POST /bookings"')
+    .argument(
+      "[entry]",
+      'an entry point\'s label, file, or handler, such as "POST /bookings", or a place or resource, such as "apps/api" or "/orders"',
+    )
     .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
     .option("--depth <n>", "how deep to follow calls (default 5)")
-    .option("--all", "with an entry, list every entry point too")
-    .action((entry: string | undefined, opts: { model?: string; depth?: string; all?: boolean }) =>
-      run(paths(entry, opts, io)),
+    .option("--hops", "fold calls inside one element: show only the hops between elements")
+    .option("--all", "list every entry point, even when there are many")
+    .action(
+      (
+        entry: string | undefined,
+        opts: { model?: string; depth?: string; all?: boolean; hops?: boolean },
+      ) => run(paths(entry, opts, io)),
     );
 
   program

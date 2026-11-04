@@ -49,9 +49,16 @@ export {
   FLOW_KINDS,
   findEntryPoints,
   findPaths,
+  formatEntrySummary,
   formatPaths,
+  groupEntries,
+  hopsOf,
+  matchEntries,
   type PathNode,
   type PathsOptions,
+  placeEntries,
+  resourceOf,
+  SUMMARY_AT,
 } from "./paths.js";
 export {
   indexPythonSource,

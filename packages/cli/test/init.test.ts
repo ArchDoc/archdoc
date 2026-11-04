@@ -46,7 +46,8 @@ describe("archdoc init", () => {
   it("prints the model with --dry-run, and writes nothing", async () => {
     const r = await run("init", "--dry-run");
     expect(r.code).toBe(0);
-    expect(r.out).toMatch(/^Would write \.archdoc\/archdoc\.yaml:/);
+    expect(r.out).toMatch(/^Dry run: wrote nothing\. It would write \.archdoc\/archdoc\.yaml\./);
+    expect(r.out).toContain("Run archdoc init without --dry-run to write it.");
     expect(r.out).toContain("description: The storefront");
     expect((await run("check")).err).toContain("Run archdoc init to start one");
   });

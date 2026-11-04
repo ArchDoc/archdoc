@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   assessDiscovery,
   formatDiscovery,
+  isLongDataName,
   isVerificationCode,
+  openWarnings,
   scoreDiscovery,
   scoreModel,
 } from "../src/index.js";
@@ -215,7 +217,7 @@ describe("assessDiscovery", () => {
     expect(text).toMatch(/^✗ Not done yet/);
     expect(text).toContain("e2e is test or verification code");
     expect(text).toContain("worker connects to nothing");
-    expect(formatDiscovery(a, 2)).toContain("archdoc check has 2 errors");
+    expect(formatDiscovery(a, 2)).toContain("archdoc check has 2 errors to fix");
   });
 
   it("flags a level that's too wide", () => {
@@ -229,6 +231,96 @@ describe("assessDiscovery", () => {
     });
     const g = assessDiscovery(wide, []).gaps.find((x) => x.code === "done/level-too-wide");
     expect(g?.message).toContain("The top of the model holds 14 elements");
+  });
+});
+
+describe("components by size", () => {
+  const big = Array.from({ length: 32 }, (_, i) => `core/src/part${i % 4}/file${i}.ts`);
+  const m = model({
+    "archdoc.yaml": `
+      archdoc: "2.0"
+      namespace: sized
+      elements:
+        core: { kind: container, description: The engine., code: core/** }
+        tiny:
+          kind: container
+          description: A small helper.
+          code: tiny/**
+          elements:
+            a: { kind: component, description: One part., code: tiny/a.ts }
+            b: { kind: component, description: Another., code: tiny/b.ts }
+        mid: { kind: container, description: Ten files and no parts., code: mid/** }
+    `,
+  });
+  const files = [
+    ...big,
+    "tiny/a.ts",
+    "tiny/b.ts",
+    ...Array.from({ length: 10 }, (_, i) => `mid/src/f${i}.ts`),
+  ];
+  const gaps = assessDiscovery(m, files).gaps;
+
+  it("asks for components in a big container, and none in a small one", () => {
+    expect(gaps.find((g) => g.code === "done/flat-container")?.element).toBe("core");
+    expect(gaps.find((g) => g.code === "done/flat-container")?.message).toContain(
+      "32 source files in 4 directories",
+    );
+    expect(gaps.find((g) => g.code === "done/thin-container")?.element).toBe("tiny");
+    // In between, it's the agent's call.
+    expect(gaps.some((g) => g.element === "mid" && /container/.test(g.code))).toBe(false);
+  });
+});
+
+describe("data names and descriptions", () => {
+  it("keeps names short enough for the chip a step shows", () => {
+    expect(isLongDataName("OrderPlaced")).toBe(false);
+    expect(isLongDataName("CustomerInvoiceLineItem")).toBe(false);
+    expect(isLongDataName("Tenant-partitioned Stripe object projections")).toBe(true);
+    expect(isLongDataName("TenantPartitionedStripeObjectProjections")).toBe(true);
+  });
+
+  it("asks for a description of each data entry", () => {
+    const m = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: d
+        elements:
+          api: { kind: container, description: The API. }
+        data:
+          OrderPlaced: { kind: event, description: Announces a new order. }
+          Refund: { kind: entity }
+      `,
+    });
+    const g = assessDiscovery(m, []).gaps.find((x) => x.code === "done/data-undescribed");
+    expect(g?.message).toContain("Data entry Refund doesn't say what it is");
+  });
+});
+
+describe("warnings a done model has fixed", () => {
+  const a = assessDiscovery(unfinished, files);
+  const findings = [
+    { severity: "warning", code: "data/missing-type" },
+    { severity: "warning", code: "model/orphan-element" },
+    { severity: "warning", code: "seal/unsealed" },
+    { severity: "warning", code: "ref/unresolved-owner" },
+    { severity: "error", code: "schema/invalid" },
+  ];
+
+  it("leaves only the ones a person settles", () => {
+    const w = openWarnings(findings, a);
+    // The orphan is listed as a line of its own, so it isn't counted twice.
+    expect(w.fix.map((f) => f.code)).toEqual(["data/missing-type"]);
+    expect(w.person.map((f) => f.code)).toEqual(["seal/unsealed", "ref/unresolved-owner"]);
+  });
+
+  it("isn't done while a warning is left to fix", () => {
+    const done = assessDiscovery(unfinished, files);
+    done.gaps = [];
+    expect(formatDiscovery(done, 0, 1)).toMatch(
+      /^✗ Not done yet: 0 things to finish, and archdoc check has 1 warning to fix\./,
+    );
+    expect(formatDiscovery(done, 2, 3)).toContain("2 errors and 3 warnings to fix");
+    expect(formatDiscovery(done)).toMatch(/^✓ The model is done/);
   });
 });
 

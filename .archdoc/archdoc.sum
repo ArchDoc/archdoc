@@ -50,7 +50,7 @@ seals:
     by: agent:claude-code
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-46bfe17cf6209b9a
+    hash: fnv-98308c7a1c10bde0
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -118,9 +118,16 @@ seals:
         - FLOW_KINDS
         - PathNode
         - PathsOptions
+        - SUMMARY_AT
         - findEntryPoints
         - findPaths
+        - formatEntrySummary
         - formatPaths
+        - groupEntries
+        - hopsOf
+        - matchEntries
+        - placeEntries
+        - resourceOf
       packages/analyzers/src/python.ts:
         - indexPythonCode
         - indexPythonSource
@@ -307,7 +314,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.checker:
     kind: structure
-    hash: fnv-225156f10e697ce7
+    hash: fnv-eeb8cf29d7a91377
     files:
       packages/core/src/check/check.ts:
         - CheckOptions
@@ -318,6 +325,7 @@ seals:
         - observedEdges
         - orphanElements
       packages/core/src/check/discovery.ts:
+        - COMPONENT_SIZE
         - DiscoveryAssessment
         - DiscoveryGap
         - DiscoveryOptions
@@ -327,6 +335,8 @@ seals:
         - formatDiscovery
         - isDeploymentFile
         - isVerificationCode
+        - needsPerson
+        - openWarnings
       packages/core/src/check/journeys.ts:
         - validateJourneys
       packages/core/src/check/observed.ts:
@@ -384,7 +394,7 @@ seals:
         lines: 22
   element:toolchain.core.data:
     kind: structure
-    hash: fnv-5fc1d2831eeaa16b
+    hash: fnv-209c15baeaddb27e
     files:
       packages/core/src/data/branches.ts:
         - BranchOutcome
@@ -402,7 +412,9 @@ seals:
         - SensitiveField
         - sensitiveDataChanges
       packages/core/src/data/check.ts:
+        - DATA_NAME_LIMIT
         - checkData
+        - isLongDataName
       packages/core/src/data/flows.ts:
         - DataFlow
         - DataStore
@@ -465,6 +477,7 @@ seals:
         - SimulatedStep
         - Simulation
         - simulate
+    by: agent:claude-code
   element:toolchain.core.data#packages/core/src/data/flows.ts:stepMessage:
     kind: content
     hash: fnv-2a26a3f780cfde67
@@ -472,6 +485,7 @@ seals:
       packages/core/src/data/flows.ts (stepMessage):
         hash: fnv-6332a0c6c42b1e7c
         lines: 5
+    by: agent:claude-code
   element:toolchain.core.data#packages/core/src/data/simulate.ts:simulate:
     kind: content
     hash: fnv-e4dcabd563d159bf
@@ -479,6 +493,7 @@ seals:
       packages/core/src/data/simulate.ts (simulate):
         hash: fnv-7e2311dcd96803dc
         lines: 5
+    by: agent:claude-code
   element:toolchain.core.differ:
     kind: structure
     hash: fnv-08c07b4acf9c6e2a

@@ -75,14 +75,22 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "Where flows start, and the calls they make",
       description:
-        "The repository's entry points (HTTP routes, queue consumers, scheduled jobs, CLI commands, from the code and from Terraform and CDK) and, for each, the calls it makes: function names, files, and lines, the model element each is in, and what each reaches outside the code (a DynamoDB table, a queue, an HTTP call). Pass entry to see one flow. Read only the files on the path you need; works before a model exists.",
+        "The repository's entry points (HTTP routes, queue consumers, scheduled jobs, CLI commands, from the code and from Terraform and CDK) and, for each, the calls it makes: function names, files, and lines, the model element each is in, and what each reaches outside the code (a DynamoDB table, a queue, an HTTP call). With many, a summary by place and resource. Pass entry to see one flow, or a place or resource to list its entry points; hops: true shows only the calls between elements. Read only the files on the path you need; works before a model exists.",
       inputSchema: {
         entry: z
           .string()
           .optional()
           .describe(
-            'An entry point\'s label, file, or handler, such as "POST /bookings" or "consumer"',
+            'An entry point\'s label, file, or handler, such as "POST /bookings" or "consumer"; or a place or resource, such as "apps/api" or "/orders"',
           ),
+        hops: z
+          .boolean()
+          .optional()
+          .describe("Fold calls that stay inside one element: only the hops between elements"),
+        all: z
+          .boolean()
+          .optional()
+          .describe("List every entry point, even when there are many to summarize"),
         depth: z
           .number()
           .int()

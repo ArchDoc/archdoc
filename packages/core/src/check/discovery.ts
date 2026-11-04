@@ -39,6 +39,13 @@ const INIT_DESCRIPTION =
 export const LEVEL_LIMITS = { top: 12, children: 10 } as const;
 
 /**
+ * When a container needs components. With fewer than `lean` source files it
+ * is read as one part and has none; with `split` or more, spread over a few
+ * directories, a newcomer needs its parts named.
+ */
+export const COMPONENT_SIZE = { lean: 5, split: 30, directories: 3 } as const;
+
+/**
  * Files that say where and how the system is deployed: compose files,
  * Terraform, CDK apps, Kubernetes manifests and Helm charts, serverless and
  * SAM templates, Pulumi, Bicep, and app hosts.
@@ -61,6 +68,8 @@ export interface EntryPoint {
   file: string;
   symbol?: string | undefined;
   line?: number | undefined;
+  /** Where it lives: the container it's in, or before a model exists, its package's directory. */
+  place?: string | undefined;
 }
 
 export interface DiscoveryOptions {
@@ -73,7 +82,7 @@ const ENTRY_COVERAGE = 0.8;
 
 /** One thing a model still lacks before it's done. */
 export interface DiscoveryGap {
-  /** done/level-too-wide, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/step-elsewhere, done/coarse-step, done/store-data, done/no-environments, done/undeployed. */
+  /** done/level-too-wide, done/thin-container, done/flat-container, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/data-undescribed, done/step-elsewhere, done/coarse-step, done/store-data, done/no-environments, done/undeployed. */
   code: string;
   message: string;
   element?: string | undefined;
@@ -258,6 +267,36 @@ export function assessDiscovery(
     });
   }
 
+  // Components where a container is big enough to need them, and not where it's small.
+  const sourcesOf = (id: string) =>
+    filesUnder(model, map, id).filter(
+      (f) => SOURCE.test(f) && !isVerificationCode(f) && !NOT_ARCHITECTURE.test(f),
+    );
+  for (const e of elements) {
+    if (e.spec.kind !== "container" || testElements.includes(e.id)) continue;
+    const parts = e.childIds.filter((c) => model.elements.get(c)?.spec.kind === "component");
+    const own = sourcesOf(e.id);
+    if (parts.length && own.length < COMPONENT_SIZE.lean) {
+      gaps.push({
+        code: "done/thin-container",
+        element: e.id,
+        message: `${e.id} has ${parts.length} component${parts.length === 1 ? "" : "s"} but only ${own.length} source file${own.length === 1 ? "" : "s"}. Keep a container this small lean: fold its components into its code: and description, and point steps at the container.`,
+      });
+    }
+    const dirs = new Set(own.map((f) => f.split("/").slice(0, -1).join("/")));
+    if (
+      !parts.length &&
+      own.length >= COMPONENT_SIZE.split &&
+      dirs.size >= COMPONENT_SIZE.directories
+    ) {
+      gaps.push({
+        code: "done/flat-container",
+        element: e.id,
+        message: `${e.id} holds ${own.length} source files in ${dirs.size} directories, and no components. Give it 3 to 10 components for the parts its code is split into (each code: dir/**, described in the domain's words), so a newcomer can find their way inside it.`,
+      });
+    }
+  }
+
   // 4. Orphans: an element nothing connects to was usually reached in a way imports don't show.
   const orphans = orphanElements(model)
     .filter((e) => ARCHITECTURE.has(e.spec.kind) && !testElements.includes(e.id))
@@ -390,6 +429,16 @@ export function assessDiscovery(
     gaps.push({
       code: "done/store-data",
       message: `${emptyHolders.map((e) => e.id).join(", ")} ${emptyHolders.length === 1 ? "doesn't" : "don't"} say what ${emptyHolders.length === 1 ? "it holds" : "they hold"}. For a datastore, add stores: with each table or collection, its key, and the data entry it holds (from the schema, migrations, ORM models, or the IaC that creates it, such as a DynamoDB table's keys). For a queue, name the messages sent through it with sends: on the uses that publish and consume them.`,
+    });
+  }
+
+  // What each entry is: its name is short (it's drawn on a chip), so its description says the rest.
+  const unexplained = [...model.data.values()].filter((d) => !d.spec.description?.trim());
+  if (unexplained.length) {
+    const ids = unexplained.map((d) => d.id);
+    gaps.push({
+      code: "done/data-undescribed",
+      message: `${ids.length === 1 ? `Data entry ${ids[0]} doesn't` : `${ids.length} data entries don't`} say what ${ids.length === 1 ? "it is" : "they are"}${ids.length === 1 ? "" : `: ${ids.slice(0, 12).join(", ")}${ids.length > 12 ? `, and ${ids.length - 12} more` : ""}`}. Give each a description of a sentence: what it holds or announces, and who makes it. Keep the name itself short, one to three words, such as OrderPlaced.`,
     });
   }
 
@@ -540,15 +589,59 @@ export function assessDiscovery(
   };
 }
 
+/**
+ * Warnings only a person can settle: seals (their word that the model is
+ * right), other repositories' models, owners, and the rules the team set.
+ * Every other warning can be fixed from the code, so a done model has none.
+ */
+const FOR_A_PERSON =
+  /^(seal|import|landscape)\/|^ref\/(unresolved-owner|deprecated-target|deprecated-contract)$|^rule\/violation$/;
+
+/** Whether only a person can settle a warning `archdoc check` gives (see FOR_A_PERSON). */
+export function needsPerson(code: string): boolean {
+  return FOR_A_PERSON.test(code);
+}
+
+/** Warnings a done check already lists as a line of its own, and that line's code. */
+const LISTED_AS: Record<string, string> = {
+  "model/orphan-element": "done/orphan",
+  "deploy/not-deployed": "done/undeployed",
+  "journey/step-without-message": "done/step-data",
+};
+
+/**
+ * The warnings a model isn't done with: the ones the code can answer, less
+ * those the assessment already lists; and the ones to leave to a person.
+ */
+export function openWarnings<F extends { severity: string; code: string }>(
+  findings: readonly F[],
+  a: DiscoveryAssessment,
+): { fix: F[]; person: F[] } {
+  const gaps = new Set(a.gaps.map((g) => g.code));
+  const warnings = findings.filter((f) => f.severity === "warning");
+  return {
+    fix: warnings.filter((f) => {
+      if (needsPerson(f.code)) return false;
+      const listed = LISTED_AS[f.code];
+      return !(listed && gaps.has(listed));
+    }),
+    person: warnings.filter((f) => needsPerson(f.code)),
+  };
+}
+
 /** The assessment as text: what `archdoc check --done` prints and archdoc_check with done answers. */
-export function formatDiscovery(a: DiscoveryAssessment, errors = 0): string {
+export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0): string {
   const s = a.stats;
   const out: string[] = [];
-  const ok = !a.gaps.length && !errors;
+  const ok = !a.gaps.length && !errors && !warnings;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const found = [errors ? plural(errors, "error") : "", warnings ? plural(warnings, "warning") : ""]
+    .filter(Boolean)
+    .join(" and ");
   out.push(
     ok
       ? "✓ The model is done: every level is small, every element is described and connected, no test code is modeled, the main flows are journeys that say what they carry, and the model says where it runs."
-      : `✗ Not done yet: ${a.gaps.length} thing${a.gaps.length === 1 ? "" : "s"} to finish${errors ? `, and archdoc check has ${errors} error${errors === 1 ? "" : "s"}` : ""}.`,
+      : `✗ Not done yet: ${plural(a.gaps.length, "thing")} to finish${found ? `, and archdoc check has ${found} to fix` : ""}.`,
     "",
     `  ${s.described} of ${s.elements} elements described, ${s.orphans.length} unconnected, widest level ${s.widestLevel}`,
     `  ${s.sourceFiles - s.unmappedFiles} of ${s.sourceFiles} source files belong to an element`,
@@ -560,6 +653,8 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0): string {
   const order = [
     "done/test-code",
     "done/level-too-wide",
+    "done/thin-container",
+    "done/flat-container",
     "done/unmapped-code",
     "done/orphan",
     "done/no-system",
@@ -567,6 +662,7 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0): string {
     "done/no-environments",
     "done/undeployed",
     "done/store-data",
+    "done/data-undescribed",
     "done/no-actors",
     "done/few-journeys",
     "done/actor-without-journey",
@@ -588,7 +684,7 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0): string {
   if (!ok) {
     out.push(
       "",
-      "Fix only with what the code shows: never add a use or a step you haven't seen in the code to clear a line here. If one can't be fixed, say why when you hand the model over.",
+      "Fix only with what the code shows: never add a use or a step you haven't seen in the code to clear a line here. Work through every line and warning before you hand the model over (a warning that a schema or type is missing means finding it in the code and mapping its fields). If one can't be fixed from the code, say why when you hand it over.",
     );
   }
   return out.join("\n");

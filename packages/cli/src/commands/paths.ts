@@ -5,6 +5,7 @@ export interface PathsOptions {
   model?: string;
   depth?: string;
   all?: boolean;
+  hops?: boolean;
 }
 
 /**
@@ -25,7 +26,7 @@ export async function paths(
     }
     const r = await pathsAnswer(
       { model: options.model, cwd: io.cwd },
-      { entry, depth, all: options.all },
+      { entry, depth, all: options.all, hops: options.hops },
     );
     (r.ok ? io.out : io.err)(r.text);
     return r.ok ? 0 : 1;

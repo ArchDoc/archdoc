@@ -28,6 +28,7 @@ import {
   loadModel,
   loadTraces,
   type MarkedFinding,
+  openWarnings,
   prReport,
   readTraceSources,
   resolveRef,
@@ -41,7 +42,14 @@ import {
 import { contextFor } from "./api.js";
 import { checkRepository } from "./check.js";
 import { formatInit, initModel } from "./init.js";
-import { FLOW_KINDS, findEntryPoints, findPaths, formatPaths } from "./paths.js";
+import {
+  FLOW_KINDS,
+  findEntryPoints,
+  findPaths,
+  formatEntrySummary,
+  formatPaths,
+  SUMMARY_AT,
+} from "./paths.js";
 import { resealedSince, sealReport } from "./seals.js";
 import { indexRepository } from "./symbols.js";
 
@@ -251,12 +259,21 @@ export async function checkAnswer(where: Where, input: CheckInput = {}): Promise
       await findEntryPoints(contextFor(checked.model.baseDir, files)).catch(() => [])
     ).filter((e) => FLOW_KINDS.has(e.kind));
     const assessment = assessDiscovery(checked.model, files, { entryPoints });
-    const text = [formatDiscovery(assessment, errors.length)];
-    if (errors.length) text.push("", formatCheck(errors, { all: input.all }));
+    const warnings = openWarnings(findings, assessment);
+    const text = [formatDiscovery(assessment, errors.length, warnings.fix.length)];
+    const fix = [...errors, ...warnings.fix];
+    if (fix.length) text.push("", formatCheck(fix, { all: input.all }));
+    if (warnings.person.length) {
+      text.push(
+        "",
+        `Left for a person (${warnings.person.length}): owners, seals, other repositories, and the rules the team set. Don't fix these yourself; name them when you hand the model over.`,
+        formatCheck(warnings.person, { all: input.all }).replace(/^.*\n\n?/, ""),
+      );
+    }
     return {
       ok: true,
       text: text.join("\n"),
-      failing: errors.length > 0 || assessment.gaps.length > 0,
+      failing: fix.length > 0 || assessment.gaps.length > 0,
       findings,
     };
   }
@@ -429,8 +446,10 @@ export interface PathsInput {
   entry?: string | undefined;
   /** How deep to follow calls; 5 by default. */
   depth?: number | undefined;
-  /** With entry, list every entry point too. */
+  /** With entry, list every entry point too; with many, list them instead of summarizing. */
   all?: boolean | undefined;
+  /** Fold calls that stay inside one element: show only the hops between elements. */
+  hops?: boolean | undefined;
 }
 
 /**
@@ -449,22 +468,40 @@ export async function pathsAnswer(where: Where, input: PathsInput = {}): Promise
     entry: input.entry,
     depth: input.depth,
     model: found ? loaded : undefined,
+    hops: input.hops,
+    trees: TREES,
   });
+  const noModel = found
+    ? ""
+    : "\n\nThere's no .archdoc/ model yet. To model the system, run archdoc init (not --dry-run) to write one, then turn these flows into journeys.";
   if (input.entry && !r.paths.length) {
-    return {
-      ok: false,
-      text: `No entry point matches "${input.entry}".\n\n${formatPaths({ entryPoints: r.entryPoints, paths: [] }, true)}`,
-    };
+    const others =
+      r.entryPoints.length > SUMMARY_AT
+        ? formatEntrySummary(r.entryPoints)
+        : formatPaths({ entryPoints: r.entryPoints, paths: [] }, true);
+    return { ok: false, text: `No entry point matches "${input.entry}".\n\n${others}` };
   }
-  // With no entry named, list them all and show the trees of the first few.
-  const shown = input.entry ? r.paths : r.paths.slice(0, 6);
+  const chosen = input.entry ? r.paths.map((p) => p.entry) : r.entryPoints;
+  // Too many to list: a summary by place, and the entry to pass to see more.
+  if (chosen.length > SUMMARY_AT && !input.all) {
+    return { ok: true, text: `${formatEntrySummary(chosen)}${noModel}` };
+  }
+  // List them, and show the trees of the first few.
+  const shown = r.paths.filter((p) => p.root).slice(0, input.entry ? TREES : 6);
   const more = r.paths.length - shown.length;
-  const text = formatPaths({ entryPoints: r.entryPoints, paths: shown }, input.all || !input.entry);
+  const text = formatPaths(
+    { entryPoints: chosen, paths: shown },
+    input.all || !input.entry || chosen.length > 1,
+  );
   return {
     ok: true,
-    text:
+    text: `${
       more > 0
         ? `${text}\n\n${more} more entry point${more === 1 ? "" : "s"}: pass entry to see one's calls.`
-        : text,
+        : text
+    }${noModel}`,
   };
 }
+
+/** How many call trees one answer shows at most. */
+const TREES = 8;

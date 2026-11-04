@@ -1,7 +1,19 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listRepoFiles } from "@archdoc/core";
-import { describe, expect, it } from "vitest";
-import { contextFor, findPaths, formatPaths, parseHcl, readIac } from "../src/index.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  contextFor,
+  findPaths,
+  formatPaths,
+  matchEntries,
+  parseHcl,
+  pathsAnswer,
+  readIac,
+  resourceOf,
+} from "../src/index.js";
 
 const fixtures = fileURLToPath(new URL("../../../evals/fixtures/", import.meta.url));
 const ctxOf = async (name: string) => {
@@ -59,6 +71,78 @@ describe("archdoc paths", () => {
       "command fix fix",
     ]);
     expect(cli.paths[0]?.root?.file).toBe("src/commands/check.ts");
+  });
+});
+
+describe("archdoc paths in a big repository", () => {
+  let dir: string;
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), "archdoc-paths-big-"));
+    const write = async (path: string, text: string) => {
+      await mkdir(dirname(join(dir, path)), { recursive: true });
+      await writeFile(join(dir, path), text);
+    };
+    await write("package.json", '{ "name": "big", "private": true }');
+    for (const svc of ["orders", "billing", "users"]) {
+      await write(`services/${svc}/package.json`, `{ "name": "${svc}" }`);
+      for (const resource of ["items", "refunds"]) {
+        const routes = Array.from(
+          { length: 15 },
+          (_, i) => `router.get("/api/v1/${resource}/:id/r${i}", (req) => save(req));`,
+        );
+        await write(
+          `services/${svc}/src/routes/${resource}.ts`,
+          `import { Router } from "express";\nimport { save } from "../store";\nconst router = Router();\n${routes.join("\n")}\n`,
+        );
+      }
+      await write(
+        `services/${svc}/src/store.ts`,
+        'import pg from "pg";\nimport { audit } from "./audit";\nexport function save(x) {\n  audit(x);\n  return new pg.Pool().query("x");\n}\n',
+      );
+      await write(`services/${svc}/src/audit.ts`, "export function audit(x) {}\n");
+    }
+  });
+  afterAll(() => rm(dir, { recursive: true, force: true }));
+
+  it("summarizes many entry points by place and resource", async () => {
+    const r = await pathsAnswer({ cwd: dir });
+    expect(r.text).toMatch(/^90 entry points, where flows start, in 3 places/);
+    expect(r.text).toContain("  services/orders  30 routes");
+    expect(r.text).toContain("route    /items (15), /refunds (15)");
+    // No trees, and a word that there's no model yet.
+    expect(r.text).not.toContain("store.ts:");
+    expect(r.text).toContain("run archdoc init (not --dry-run)");
+  });
+
+  it("lists a place's entry points, and a place and resource together", async () => {
+    const r = await pathsAnswer({ cwd: dir }, { entry: "services/billing /refunds" });
+    expect(r.text).toMatch(/^15 entry points, where flows start:/);
+    expect(r.text).not.toContain("services/orders");
+  });
+
+  it("shows only the hops between elements", async () => {
+    const full = await pathsAnswer({ cwd: dir }, { entry: "GET /api/v1/items/:id/r3 users" });
+    const hops = await pathsAnswer(
+      { cwd: dir },
+      { entry: "GET /api/v1/items/:id/r3 users", hops: true },
+    );
+    expect(full.text).toContain("audit  services/users/src/audit.ts");
+    // audit is in the same directory as save, so it folds into it, and so does what it reaches.
+    expect(hops.text).not.toContain("audit  services/users/src/audit.ts");
+    expect(hops.text).toContain("→ SQL");
+  });
+
+  it("names a route's resource", () => {
+    const route = (label: string) => resourceOf({ kind: "route", label, file: "x.ts" });
+    expect(route("GET /api/v1/orders/:id")).toBe("/orders");
+    expect(route("POST /{tenant}/refunds")).toBe("/refunds");
+    expect(route("/-/healthy")).toBe("/healthy");
+    expect(route("GET /")).toBe("/");
+    const e = [
+      { kind: "route", label: "GET /a", file: "s/one/x.ts", place: "s/one" },
+      { kind: "route", label: "GET /a", file: "s/one2/x.ts", place: "s/one2" },
+    ];
+    expect(matchEntries(e, "one /a").map((x) => x.place)).toEqual(["s/one"]);
   });
 });
 
