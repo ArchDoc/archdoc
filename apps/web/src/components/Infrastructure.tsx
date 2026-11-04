@@ -94,7 +94,7 @@ export function InfraCanvas({ model, environment, selected, onSelect }: InfraCan
         return [
           {
             ...base,
-            className: `infra-box infra-${isEnv ? "environment" : "node"} infra-kind-${slug(kind)}`,
+            className: `infra-box infra-${isEnv ? "environment" : "node"} infra-kind-${slug(kind)} infra-tone-${toneOfNode(kind)}`,
             data: {
               ...common,
               family: "group" as const,
@@ -201,8 +201,63 @@ export function InfraCanvas({ model, environment, selected, onSelect }: InfraCan
     >
       <Background gap={24} size={1} />
       <Controls showInteractive={false} position="bottom-left" />
+      <InfraLegend kinds={["environment", ...infra.view.nodes.map((n) => n.spec.kind ?? "node")]} />
     </ReactFlow>
   );
+}
+
+/** What each color on the infrastructure map means: only the tones it shows. */
+function InfraLegend({ kinds }: { kinds: string[] }) {
+  const shown = new Set(kinds.map(toneOfNode));
+  const tones = INFRA_TONES.filter((t) => shown.has(t.id));
+  return (
+    <ul className="infra-legend" aria-label="Colors on the map">
+      {tones.map((t) => (
+        <li key={t.id} className={`infra-tone-${t.id}`} title={t.kinds}>
+          <span className="infra-swatch" aria-hidden="true" />
+          {t.label}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+type InfraTone = "environment" | "network" | "compute" | "service" | "client";
+
+const INFRA_TONES: { id: InfraTone; label: string; kinds: string }[] = [
+  { id: "environment", label: "Environment", kinds: "environment" },
+  {
+    id: "network",
+    label: "Cloud and network",
+    kinds: "cloud, account, region, zone, network, vpc, subnet",
+  },
+  {
+    id: "compute",
+    label: "Compute",
+    kinds: "cluster, namespace, host, vm, runner, serverless, node",
+  },
+  {
+    id: "service",
+    label: "Managed service",
+    kinds: "managed, cdn, registry, repository, saas, service",
+  },
+  { id: "client", label: "Client", kinds: "browser, device, mobile, desktop" },
+];
+
+const NETWORK =
+  /^(cloud|account|subscription|project|region|zone|az|availability-zone|network|vpc|vnet|subnet|datacenter|data-center)$/;
+const SERVICE =
+  /^(managed|cdn|registry|repository|saas|service|paas|storage|bucket|database|queue)$/;
+const CLIENT = /^(browser|device|mobile|desktop|client|phone|tablet)$/;
+
+/** The color family of a deployment node, from its kind. Anything else runs code: compute. */
+export function toneOfNode(kind: string): InfraTone {
+  const k = slug(kind);
+  if (k === "environment") return "environment";
+  if (NETWORK.test(k)) return "network";
+  if (SERVICE.test(k)) return "service";
+  if (CLIENT.test(k)) return "client";
+  return "compute";
 }
 
 export interface EnvironmentListProps {
@@ -246,7 +301,13 @@ export function EnvironmentList(props: EnvironmentListProps) {
             style={{ paddingLeft: `${8 + depth * 14}px` }}
             onClick={() => props.onSelect(deployKey(id))}
           >
-            <span>{n.spec.name ?? n.key}</span>
+            <span>
+              <span
+                className={`infra-swatch infra-tone-${toneOfNode(n.spec.kind ?? "node")}`}
+                aria-hidden="true"
+              />
+              {n.spec.name ?? n.key}
+            </span>
             <span className="muted">
               {[n.spec.kind, here.length ? `${here.length} running` : undefined]
                 .filter(Boolean)

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { buildModel } from "@archdoc/core/browser";
 import { describe, expect, it } from "vitest";
+import { toneOfNode } from "../src/components/Infrastructure.js";
 import { buildInfraGraph } from "../src/graph/infra.js";
 import { layoutGraph } from "../src/graph/layout.js";
 import { hashOf, readHash } from "../src/model/useCompare.js";
@@ -44,6 +45,23 @@ describe("the infrastructure view", () => {
     if (!infra) throw new Error("no staging");
     const layout = await layoutGraph(infra.graph);
     for (const n of infra.graph.nodes) expect(layout.boxes.has(n.id)).toBe(true);
+  });
+
+  it("colors each node by what it is", () => {
+    expect(
+      ["region", "VPC", "cluster", "namespace", "managed", "cdn", "browser", "anything"].map(
+        toneOfNode,
+      ),
+    ).toEqual([
+      "network",
+      "network",
+      "compute",
+      "compute",
+      "service",
+      "service",
+      "client",
+      "compute",
+    ]);
   });
 
   it("has an address", () => {

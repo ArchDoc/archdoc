@@ -1123,7 +1123,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-bd30519ad2ebbcb4
+    hash: fnv-64b728311f078685
     files:
       apps/web/src/App.tsx:
         - App
@@ -1149,6 +1149,7 @@ seals:
         - InfraDetailsProps
         - InfraIntro
         - defaultEnvironment
+        - toneOfNode
       apps/web/src/components/Lanes.tsx:
         - Lanes
         - LanesProps
