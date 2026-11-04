@@ -1,0 +1,51 @@
+# Where ArchDoc runs. It has no servers: each release is published to npm and
+# tagged on GitHub, and then runs where people and agents work.
+environments:
+  release:
+    provenance: { source: suggested, by: agent:claude-code }
+    name: Release
+    description: Where each version is published. Everything else installs it from here.
+    nodes:
+      npm:
+        kind: registry
+        name: npm
+        technology: npm registry, trusted publishing (staged)
+        description: The published packages. A maintainer approves each staged version.
+        code: [.github/workflows/release.yml, scripts/release.mjs]
+      github:
+        kind: repository
+        name: GitHub
+        technology: GitHub repository, release tags
+        description: The action, the plugin marketplace, and the landscape template are used from the repository at a tag.
+        code: [.claude-plugin/marketplace.json]
+
+  workstation:
+    provenance: { source: suggested, by: agent:claude-code }
+    name: Developer machine
+    description: Where a person or a coding agent works on a repository with a model.
+    nodes:
+      node:
+        kind: host
+        name: Node.js
+        technology: Node.js 22.12+
+        description: The archdoc command, run with npx or from a project's dependencies.
+      browser:
+        kind: browser
+        name: Browser
+        description: Opens the explorer that archdoc view serves on localhost.
+      agent:
+        kind: host
+        name: Coding agent
+        technology: Claude Code, Codex, or another MCP client
+        description: Loads the skill and starts the MCP server over stdio.
+
+  ci:
+    provenance: { source: suggested, by: agent:claude-code }
+    name: CI
+    description: Pull request checks in a repository with a model.
+    nodes:
+      actions:
+        kind: runner
+        name: GitHub Actions
+        technology: ubuntu-latest runner
+        code: [.github/workflows/archdoc.yml]

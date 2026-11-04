@@ -149,6 +149,37 @@ export const StoreSchema = z.strictObject({
   description: z.string().optional(),
 });
 
+/** Where an element runs: a deployment node such as production.aws.eks, and what's true of it there. */
+export const DeploymentSchema = z.strictObject({
+  to: RefSchema.describe(
+    "The environment, or a node inside it, as a dotted path: production, production.aws.eks",
+  ),
+  description: z.string().optional(),
+  technology: z
+    .string()
+    .optional()
+    .describe("How it's deployed there, such as Helm chart, ECS service, or Lambda"),
+  replicas: z
+    .union([z.number().int().nonnegative(), z.string()])
+    .optional()
+    .describe("How many instances run, such as 3 or 2-10"),
+  url: z.string().optional().describe("Where it's reached in that environment"),
+  code: z
+    .union([CodeRefSchema, z.array(CodeRefSchema)])
+    .optional()
+    .describe(
+      "The deployment definition: a Helm chart, manifest, Terraform module, or compose file",
+    ),
+  status: StatusSchema.optional(),
+  provenance: ProvenanceSchema.optional(),
+});
+
+export const DeploySchema = z
+  .union([RefSchema, DeploymentSchema, z.array(z.union([RefSchema, DeploymentSchema]))])
+  .describe(
+    "Where a container, datastore, or queue is deployed: a node path such as production.aws.eks, a list of them, or { to, replicas, url, code }",
+  );
+
 export type ElementSpec = {
   kind: z.infer<typeof ElementKindSchema>;
   name?: string | undefined;
@@ -163,6 +194,7 @@ export type ElementSpec = {
   uses?: z.infer<typeof UsesSchema> | undefined;
   provides?: z.infer<typeof ProvideSchema>[] | undefined;
   stores?: Record<string, z.infer<typeof StoreSchema>> | undefined;
+  deploy?: z.infer<typeof DeploySchema> | undefined;
   provenance?: z.infer<typeof ProvenanceSchema> | undefined;
   elements?: Record<string, ElementSpec> | undefined;
 };
@@ -189,10 +221,67 @@ export const ElementSchema: z.ZodType<ElementSpec> = z.strictObject({
     .record(z.string(), StoreSchema)
     .optional()
     .describe("Tables or collections in a datastore, mapped to data entities"),
+  deploy: DeploySchema.optional(),
   provenance: ProvenanceSchema.optional(),
   get elements() {
     return z.record(IdSchema, ElementSchema).optional().describe("Child elements");
   },
+});
+
+export type DeploymentNodeSpec = {
+  kind?: string | undefined;
+  name?: string | undefined;
+  description?: string | undefined;
+  technology?: string | undefined;
+  tags?: string[] | undefined;
+  owners?: string[] | undefined;
+  status?: z.infer<typeof StatusSchema> | undefined;
+  code?: z.infer<typeof CodeSchema> | undefined;
+  links?: z.infer<typeof LinkSchema>[] | undefined;
+  provenance?: z.infer<typeof ProvenanceSchema> | undefined;
+  nodes?: Record<string, DeploymentNodeSpec> | undefined;
+};
+
+/** Infrastructure that elements are deployed to: a cloud account, region, cluster, host, or service. */
+export const DeploymentNodeSchema: z.ZodType<DeploymentNodeSpec> = z.strictObject({
+  kind: z
+    .string()
+    .optional()
+    .describe(
+      "cloud, region, zone, network, cluster, namespace, host, vm, serverless, managed, cdn, device, browser, or another",
+    ),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  technology: z.string().optional().describe("Such as AWS, EKS 1.30, Cloud Run, or Docker Compose"),
+  tags: StringList.optional(),
+  owners: StringList.optional().describe("Actors (usually teams) that run it"),
+  status: StatusSchema.optional(),
+  code: CodeSchema.optional().describe(
+    "Where it's defined: Terraform, Pulumi, CloudFormation, Kubernetes, or compose files",
+  ),
+  links: z.array(LinkSchema).optional(),
+  provenance: ProvenanceSchema.optional(),
+  get nodes() {
+    return z
+      .record(IdSchema, DeploymentNodeSchema)
+      .optional()
+      .describe("Nodes inside this one, such as a cluster inside a region");
+  },
+});
+
+/** A place the system is deployed, such as production, staging, or a developer's machine. */
+export const EnvironmentSchema = z.strictObject({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  owners: StringList.optional(),
+  tags: StringList.optional(),
+  status: StatusSchema.optional(),
+  links: z.array(LinkSchema).optional(),
+  provenance: ProvenanceSchema.optional(),
+  nodes: z
+    .record(IdSchema, DeploymentNodeSchema)
+    .optional()
+    .describe("The infrastructure in it, outermost first: cloud, region, cluster, and so on"),
 });
 
 export const ImportanceSchema = z.enum(["critical", "high", "normal"]);
@@ -452,6 +541,12 @@ const sections = {
   elements: z.record(IdSchema, ElementSchema).optional(),
   journeys: z.record(IdSchema, JourneySchema).optional(),
   data: z.record(IdSchema, DataEntrySchema).optional(),
+  environments: z
+    .record(IdSchema, EnvironmentSchema)
+    .optional()
+    .describe(
+      "Where the system is deployed: each environment and its infrastructure. Elements name a node in it with deploy.",
+    ),
   mappings: z
     .record(IdSchema, MappingSchema)
     .optional()
@@ -526,5 +621,8 @@ export type RuleSpec = z.infer<typeof RuleSchema>;
 export type DomainSpec = z.infer<typeof DomainSchema>;
 export type ImportSpec = z.infer<typeof ImportSchema>;
 export type ProvideSpec = z.infer<typeof ProvideSchema>;
+export type DeploymentSpec = z.infer<typeof DeploymentSchema>;
+export type DeploySpec = z.infer<typeof DeploySchema>;
+export type EnvironmentSpec = z.infer<typeof EnvironmentSchema>;
 export type ModelFile = z.infer<typeof ModelFileSchema>;
 export type JourneyFile = z.infer<typeof JourneyFileSchema>;

@@ -8,6 +8,7 @@ import { formatDiagnostic } from "../diagnostics.js";
 import { consumersElsewhere, otherModels } from "../federation/consumers.js";
 import { contractName } from "../load/build.js";
 import type { ElementNode, JourneyNode, Model, Relationship, Target } from "../model.js";
+import { deploymentsOf, formatDeployment } from "../query/deploy.js";
 import type { Impact } from "../query/impact.js";
 import { getActor, getElement, overview } from "../query/index.js";
 import type { SearchHit } from "../query/search.js";
@@ -164,6 +165,12 @@ export function formatElement(model: Model, ref: string): string | undefined {
   if (remote.length)
     out.push(`Used from other repos: ${[...new Set(remote.map((c) => c.from))].join(", ")}`);
   if (v.journeys.length) out.push(`Journeys: ${v.journeys.map((j) => j.id).join(", ")}`);
+  const deployed = deploymentsOf(model, e.id);
+  if (deployed) {
+    const inherited = deployed.from === e.id ? "" : ` (with ${deployed.from})`;
+    out.push(`Deployed${inherited}:`);
+    for (const d of deployed.deployments) out.push(`  ${formatDeployment(d)}`);
+  }
   return out.join("\n");
 }
 

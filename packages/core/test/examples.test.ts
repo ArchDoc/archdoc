@@ -50,6 +50,7 @@ describe("the examples", () => {
     expect(models).toEqual([
       "big-schema",
       "decisions",
+      "deployment",
       "event-driven",
       "modular-monolith",
       "quickstart",
@@ -201,6 +202,25 @@ describe("each example shows its own part of the platform", () => {
         Customer: [customers[i], ...customers.filter((_, j) => j !== i)],
       }).outcomes;
     expect([as(1), as(2)]).toEqual([["credit-hold"], ["credit-hold"]]);
+  });
+
+  it("deployment: environments, their infrastructure, and what runs where", () => {
+    const m = load("deployment");
+    expect([...m.environments.keys()]).toEqual(["production", "staging", "local"]);
+    expect(m.deploymentNodes.get("production.aws.eks.web")?.depth).toBe(2);
+    // One container on several nodes, in several environments, with what's true of it in each.
+    const api = m.deployments.filter((d) => d.element === "shop.api");
+    expect(api.map((d) => d.to)).toEqual([
+      "production.aws.eks.web",
+      "staging.aws.eks.web",
+      "local.compose",
+    ]);
+    expect(api[0]).toMatchObject({ replicas: "3-12", technology: "Helm chart" });
+    // Removing a container's deploy is a warning: it should say where it runs.
+    const silent = load("deployment", (t) =>
+      t.replace(/ {8}deploy:\n {10}- \{ to: production\.aws\.eks\.jobs[^\n]*\n[^\n]*\n/, ""),
+    );
+    expect(silent.diagnostics.map((d) => d.code)).toContain("deploy/not-deployed");
   });
 
   it("sensitive-data: classified fields, lifecycles, retention, and where they may go", () => {

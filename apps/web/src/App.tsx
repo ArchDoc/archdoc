@@ -12,6 +12,13 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "./components/Canvas.js";
 import { Details } from "./components/Details.js";
+import {
+  defaultEnvironment,
+  EnvironmentList,
+  InfraCanvas,
+  InfraDetails,
+  InfraIntro,
+} from "./components/Infrastructure.js";
 import { Lanes } from "./components/Lanes.js";
 import { Overview } from "./components/Overview.js";
 import type { PayloadEntry } from "./components/Payload.js";
@@ -197,6 +204,10 @@ function Explorer({
   // The open trace, and the hop selected in it.
   const [traceId, setTraceId] = useState<string | undefined>(initial.trace);
   const [traceAt, setTraceAt] = useState<number>();
+  // The environment on the Infrastructure tab.
+  const [environment, setEnvironment] = useState<string | undefined>(
+    () => initial.environment ?? defaultEnvironment(model),
+  );
   const traceState = useMemo(() => readTraces(model, traces, files), [model, traces, files]);
   const traceCheck = traceState.checks.find((c) => c.view.id === traceId) ?? traceState.checks[0];
   const traceStep = traceCheck
@@ -237,12 +248,13 @@ function Explorer({
         pair,
         journey: tab === "journeys" ? journeyId : undefined,
         trace: tab === "traces" ? traceCheck?.view.id : undefined,
+        environment: tab === "infrastructure" ? environment : undefined,
         data:
           tab === "data" && (selected?.startsWith("data:") || selected?.startsWith("field:"))
             ? selected
             : undefined,
       }),
-    [tab, pair, journeyId, selected, traceCheck],
+    [tab, pair, journeyId, selected, traceCheck, environment],
   );
 
   // After a live reload, drop references to things that no longer exist.
@@ -251,6 +263,9 @@ function Explorer({
     setTables((prev) => new Set([...prev].filter((id) => model.elements.has(id))));
     setSelected((prev) => (prev && exists(model, prev, landscape) ? prev : undefined));
     setJourneyId((prev) => (prev && model.journeys.has(prev) ? prev : undefined));
+    setEnvironment((prev) =>
+      prev && model.environments.has(prev) ? prev : defaultEnvironment(model),
+    );
   }, [model, landscape]);
 
   // The Journeys tab always has a journey open: the most important one, to start.
@@ -383,6 +398,15 @@ function Explorer({
       }
       if (key.startsWith("data:") || key.startsWith("field:")) {
         if (tab !== "data") onTab("data");
+        return;
+      }
+      // An environment or a node in one lives on the Infrastructure tab.
+      if (key.startsWith("env:") || key.startsWith("deploy:")) {
+        const env = key.startsWith("env:")
+          ? key.slice(4)
+          : model.deploymentNodes.get(key.slice(7))?.environment;
+        if (env) setEnvironment(env);
+        if (tab !== "infrastructure") onTab("infrastructure");
         return;
       }
       if (key.startsWith("element:")) {
@@ -700,6 +724,38 @@ function Explorer({
           code={code}
         />
       ) : null;
+  } else if (tab === "infrastructure") {
+    side = (
+      <EnvironmentList
+        model={model}
+        environment={environment}
+        selected={selected}
+        onEnvironment={(id) => {
+          setEnvironment(id);
+          setSelected(undefined);
+        }}
+        onSelect={select}
+      />
+    );
+    main = environment ? (
+      <InfraCanvas
+        key={environment}
+        model={model}
+        environment={environment}
+        selected={selected}
+        onSelect={(key) => setSelected(key)}
+      />
+    ) : (
+      <div className="empty-main">
+        <InfraIntro />
+      </div>
+    );
+    panel =
+      selected?.startsWith("env:") || selected?.startsWith("deploy:") ? (
+        <InfraDetails model={model} selected={selected} onSelect={select} />
+      ) : (
+        details
+      );
   } else if (tab === "data") {
     side = <DataList model={model} selected={selected} onSelect={select} />;
     panel = details ?? (
@@ -736,6 +792,12 @@ function Explorer({
         ]
       : []),
     ...(hasData ? [{ id: "data" as const, label: "Data" }] : []),
+    {
+      id: "infrastructure" as const,
+      label: "Infrastructure",
+      title:
+        "Where the system is deployed: each environment, its infrastructure, and what runs on it",
+    },
     ...(changes
       ? [
           {
@@ -971,6 +1033,8 @@ function exists(model: Model, key: string, landscape?: LandscapeInfo): boolean {
   if (key.startsWith("domain:")) return !!landscape?.domains.some((d) => d.id === key.slice(7));
   if (key.startsWith("actor:")) return model.actors.has(key.slice(6));
   if (key.startsWith("element:")) return model.elements.has(key.slice(8));
+  if (key.startsWith("env:")) return model.environments.has(key.slice(4));
+  if (key.startsWith("deploy:")) return model.deploymentNodes.has(key.slice(7));
   return model.relationships.some(
     (r) => r.to.type === "external" && `external:${r.to.ref}` === key,
   );

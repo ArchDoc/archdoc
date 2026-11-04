@@ -15,6 +15,7 @@ import { targetLabel } from "../model/stories.js";
 import type { LandscapeInfo, RecheckFact } from "../model/useModel.js";
 import { type CodeContext, CodeSection } from "./code.js";
 import { DataDetails, FieldDetails } from "./DataPanels.js";
+import { DeployedSection } from "./Infrastructure.js";
 
 export interface DetailsProps {
   model: Model;
@@ -96,6 +97,7 @@ function ElementDetails(props: DetailsProps & { id: string }) {
           />
         </Block>
       ) : null}
+      <DeployedSection model={props.model} id={el.id} onSelect={props.onSelect} />
       {el.code.length || el.childIds.length ? (
         <Block title="Code">
           {el.code.length === 0 ? (

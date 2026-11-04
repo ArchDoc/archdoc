@@ -1,5 +1,7 @@
 import {
   type CodeSpec,
+  type DeploymentNodeSpec,
+  type DeploySpec,
   type ElementSpec,
   isV1Model,
   JourneyFileSchema,
@@ -13,7 +15,15 @@ import type { z } from "zod";
 import { validateJourneys } from "../check/journeys.js";
 import { checkData } from "../data/check.js";
 import type { Diagnostic, SourceLocation } from "../diagnostics.js";
-import type { ActorNode, CodeRef, ElementNode, Model, NodeRef, Relationship } from "../model.js";
+import type {
+  ActorNode,
+  CodeRef,
+  DeploymentNode,
+  ElementNode,
+  Model,
+  NodeRef,
+  Relationship,
+} from "../model.js";
 import { type Resolution, Resolver } from "./resolve.js";
 import { type ParsedFile, parseYaml, type YamlPath } from "./yaml.js";
 
@@ -53,6 +63,9 @@ export function buildModel(sources: readonly ModelSource[], options: BuildOption
     logic: new Map(),
     rules: [],
     relationships: [],
+    environments: new Map(),
+    deploymentNodes: new Map(),
+    deployments: [],
     files: sources.map((s) => s.path),
     diagnostics,
   };
@@ -81,6 +94,12 @@ export function buildModel(sources: readonly ModelSource[], options: BuildOption
   }[] = [];
   const ownerSites: { owners: string[]; file: ParsedFile; path: YamlPath }[] = [];
   const journeySites = new Map<string, { file: ParsedFile; path: YamlPath }>();
+  const deploySites: {
+    element: ElementNode;
+    deploy: DeploySpec;
+    file: ParsedFile;
+    path: YamlPath;
+  }[] = [];
 
   for (const source of sources) {
     const isRoot = source.path === rootPath;
@@ -232,6 +251,23 @@ export function buildModel(sources: readonly ModelSource[], options: BuildOption
       model.rules.push(rule);
     }
 
+    for (const [id, spec] of Object.entries(file.environments ?? {})) {
+      const path = ["environments", id];
+      if (model.environments.has(id)) {
+        diagnostics.push(
+          duplicate("environment", id, parsed, path, model.environments.get(id)?.location),
+        );
+        continue;
+      }
+      if (spec.owners) ownerSites.push({ owners: spec.owners, file: parsed, path });
+      model.environments.set(id, {
+        id,
+        spec,
+        nodeIds: addDeploymentNodes(spec.nodes ?? {}, id, undefined, parsed, [...path, "nodes"], 0),
+        location: parsed.locate(path),
+      });
+    }
+
     for (const [id, spec] of Object.entries(file.domains ?? {})) {
       if (model.domains?.has(id)) {
         diagnostics.push(
@@ -313,6 +349,7 @@ export function buildModel(sources: readonly ModelSource[], options: BuildOption
 
   checkLocalContracts(model);
   checkDomains(model, resolver);
+  diagnostics.push(...resolveDeployments(model, deploySites));
   diagnostics.push(...validateJourneys(model, resolver, journeySites));
   // After journeys, whose steps resolve their ends.
   diagnostics.push(...checkData(model, "local"));
@@ -348,7 +385,48 @@ export function buildModel(sources: readonly ModelSource[], options: BuildOption
       ids.push(id);
       if (spec.uses) usesSites.push({ from: node, uses: spec.uses, scope: parentId, file, path });
       if (spec.owners) ownerSites.push({ owners: spec.owners, file, path });
+      if (spec.deploy !== undefined) {
+        deploySites.push({ element: node, deploy: spec.deploy, file, path: [...path, "deploy"] });
+      }
       node.childIds = addElements(spec.elements ?? {}, id, file, [...path, "elements"], depth + 1);
+    }
+    return ids;
+  }
+
+  function addDeploymentNodes(
+    specs: Record<string, DeploymentNodeSpec>,
+    environment: string,
+    parentId: string | undefined,
+    file: ParsedFile,
+    basePath: YamlPath,
+    depth: number,
+  ): string[] {
+    const ids: string[] = [];
+    for (const [key, spec] of Object.entries(specs)) {
+      const id = `${parentId ?? environment}.${key}`;
+      const path = [...basePath, key];
+      const node: DeploymentNode = {
+        id,
+        key,
+        environment,
+        parentId,
+        childIds: [],
+        depth,
+        spec,
+        code: normalizeCode(spec.code),
+        location: file.locate(path),
+      };
+      model.deploymentNodes.set(id, node);
+      ids.push(id);
+      if (spec.owners) ownerSites.push({ owners: spec.owners, file, path });
+      node.childIds = addDeploymentNodes(
+        spec.nodes ?? {},
+        environment,
+        id,
+        file,
+        [...path, "nodes"],
+        depth + 1,
+      );
     }
     return ids;
   }
@@ -371,6 +449,92 @@ export function buildModel(sources: readonly ModelSource[], options: BuildOption
     journeySites.set(id, { file, path });
     if (spec.owners) ownerSites.push({ owners: spec.owners, file, path });
   }
+}
+
+/** Kinds of element that run somewhere: each one is deployed on its own. */
+export const DEPLOYABLE_KINDS: ReadonlySet<string> = new Set(["container", "datastore", "queue"]);
+
+/**
+ * Turns each element's `deploy` into deployments: the target must be an
+ * environment or a node in one. Only deployable kinds are deployed, and once
+ * the model says where it runs, every container should say where it's deployed.
+ */
+function resolveDeployments(
+  model: Model,
+  sites: { element: ElementNode; deploy: DeploySpec; file: ParsedFile; path: YamlPath }[],
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  const envs = [...model.environments.keys()];
+  for (const site of sites) {
+    const { element } = site;
+    if (!DEPLOYABLE_KINDS.has(element.spec.kind)) {
+      out.push(
+        warning(
+          "deploy/not-deployable",
+          `${element.id} is a ${element.spec.kind}, which isn't deployed on its own. Move deploy to the container, datastore, or queue it belongs to.`,
+          site.file,
+          site.path,
+        ),
+      );
+    }
+    const list = Array.isArray(site.deploy) ? site.deploy : [site.deploy];
+    for (const [i, d] of list.entries()) {
+      const spec = typeof d === "string" ? { to: d } : d;
+      const path = Array.isArray(site.deploy) ? [...site.path, i] : site.path;
+      const environment = spec.to.split(".")[0] ?? spec.to;
+      const isEnv = model.environments.has(spec.to);
+      const node = model.deploymentNodes.get(spec.to);
+      if (!isEnv && !node) {
+        const known = model.environments.has(environment)
+          ? `Nodes in ${environment}: ${
+              [...model.deploymentNodes.values()]
+                .filter((n) => n.environment === environment)
+                .map((n) => n.id)
+                .join(", ") || "none yet"
+            }.`
+          : envs.length
+            ? `Environments: ${envs.join(", ")}.`
+            : "Declare it under environments.";
+        out.push(
+          error(
+            "deploy/unknown-target",
+            `${element.id} is deployed to "${spec.to}", which isn't an environment or a node in one. ${known}`,
+            site.file,
+            path,
+          ),
+        );
+        continue;
+      }
+      model.deployments.push({
+        element: element.id,
+        to: spec.to,
+        environment,
+        node: node?.id,
+        description: spec.description,
+        technology: spec.technology,
+        replicas: spec.replicas,
+        url: spec.url,
+        code: normalizeCode(spec.code),
+        status: spec.status ?? "active",
+        provenance: spec.provenance,
+        location: site.file.locate(path),
+      });
+    }
+  }
+  if (model.environments.size > 0) {
+    const deployed = new Set(model.deployments.map((d) => d.element));
+    for (const el of model.elements.values()) {
+      if (el.spec.kind !== "container" || deployed.has(el.id)) continue;
+      if (el.spec.status === "planned") continue;
+      out.push({
+        severity: "warning",
+        code: "deploy/not-deployed",
+        message: `Container ${el.id} doesn't say where it's deployed. Add deploy with the environment or node it runs on, such as deploy: ${model.deploymentNodes.keys().next().value ?? envs[0]}.`,
+        location: el.location,
+      });
+    }
+  }
+  return out;
 }
 
 /** A domain's namespaces must be this model's or imported, and its elements must resolve. */
@@ -455,6 +619,10 @@ export function normalizeCode(code: CodeSpec | undefined): CodeRef[] {
     const { lines, ...rest } = c;
     return lines === undefined ? rest : { ...rest, lines: String(lines) };
   });
+}
+
+function warning(code: string, message: string, file: ParsedFile, path: YamlPath): Diagnostic {
+  return { ...error(code, message, file, path), severity: "warning" };
 }
 
 function error(code: string, message: string, file: ParsedFile, path: YamlPath): Diagnostic {

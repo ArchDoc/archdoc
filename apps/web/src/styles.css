@@ -3165,3 +3165,120 @@ table.observed td.is-wrong code {
   color: var(--added);
   margin: 0;
 }
+
+/* ---------- Infrastructure ---------- */
+
+/* The environment: the outermost frame, tinted so it reads as a place, not a box. */
+.infra-environment .card.is-group {
+  border: 2px dashed var(--line-strong);
+  background: color-mix(in srgb, var(--accent-soft) 35%, transparent);
+}
+
+/* Nodes inside it: each level a little more solid, so nesting reads at a glance. */
+.infra-node .card.is-group {
+  border-style: solid;
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+
+.infra-node .card:not(.is-group) {
+  border-style: solid;
+  background: var(--surface-2);
+}
+
+.infra-box .card.is-group .card-label {
+  font-size: var(--fs-3);
+  color: var(--muted);
+  text-transform: none;
+}
+
+.infra-box .card {
+  cursor: pointer;
+}
+
+/* What the environment talks to from outside it. */
+.infra-outside .card {
+  box-shadow: none;
+}
+
+.infra-side {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 16px 12px 24px;
+}
+
+.infra-side > p {
+  margin: 0 6px;
+  font-size: var(--fs-2);
+}
+
+.infra-envs {
+  flex-wrap: wrap;
+  row-gap: 6px;
+  margin: 0 4px 6px;
+}
+
+.infra-envs legend {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.infra-tree,
+.infra-tree ul,
+.infra-missing {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.infra-tree-node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  padding: 5px 8px;
+  text-align: left;
+  font: inherit;
+  font-size: var(--fs-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.infra-tree-node:hover {
+  background: var(--surface-2);
+}
+
+.infra-tree-node.is-on {
+  background: var(--accent-soft);
+}
+
+.infra-tree-node .muted {
+  font-size: var(--fs-1);
+}
+
+.infra-missing li {
+  padding: 3px 8px;
+  font-size: var(--fs-2);
+}
+
+.infra-deployments li + li {
+  margin-top: 8px;
+}
+
+.infra-intro {
+  max-width: 560px;
+}
+
+.infra-example {
+  font-family: var(--f-mono);
+  font-size: var(--fs-mono);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+}

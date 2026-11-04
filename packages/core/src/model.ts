@@ -2,8 +2,10 @@ import type {
   ActorSpec,
   Bundle,
   DataEntrySpec,
+  DeploymentNodeSpec,
   DomainSpec,
   ElementSpec,
+  EnvironmentSpec,
   ImportSpec,
   JourneySpec,
   JourneyStepSpec,
@@ -119,6 +121,50 @@ export interface LogicNode {
   location?: SourceLocation | undefined;
 }
 
+/** A place the system is deployed, such as production. */
+export interface EnvironmentNode {
+  id: string;
+  spec: EnvironmentSpec;
+  /** Its top-level deployment nodes, as full paths (`production.aws`). */
+  nodeIds: string[];
+  location?: SourceLocation | undefined;
+}
+
+/** Infrastructure inside an environment: a cloud, region, cluster, host, or service. */
+export interface DeploymentNode {
+  /** Full dotted path, starting with the environment: `production.aws.eks`. */
+  id: string;
+  /** Its own key, such as `eks`. */
+  key: string;
+  environment: string;
+  /** The enclosing node's path; undefined for a top-level node. */
+  parentId?: string | undefined;
+  childIds: string[];
+  /** 0 for a top-level node in its environment. */
+  depth: number;
+  spec: DeploymentNodeSpec;
+  code: CodeRef[];
+  location?: SourceLocation | undefined;
+}
+
+/** An element deployed to an environment or a node in it. */
+export interface Deployment {
+  element: string;
+  /** The target as written: `production` or `production.aws.eks`. */
+  to: string;
+  environment: string;
+  /** The node it runs on, when `to` names one. */
+  node?: string | undefined;
+  description?: string | undefined;
+  technology?: string | undefined;
+  replicas?: number | string | undefined;
+  url?: string | undefined;
+  code: CodeRef[];
+  status: Status;
+  provenance?: Provenance | undefined;
+  location?: SourceLocation | undefined;
+}
+
 export interface Model {
   namespace: string;
   name?: string | undefined;
@@ -132,6 +178,12 @@ export interface Model {
   logic: Map<string, LogicNode>;
   rules: RuleSpec[];
   relationships: Relationship[];
+  /** Where the system is deployed, by environment ID. */
+  environments: Map<string, EnvironmentNode>;
+  /** Every deployment node, by full path (`production.aws.eks`). */
+  deploymentNodes: Map<string, DeploymentNode>;
+  /** Which elements run where, from their `deploy`. Only resolved targets. */
+  deployments: Deployment[];
   /** Model files that were read, in load order. */
   files: string[];
   diagnostics: Diagnostic[];

@@ -1,0 +1,143 @@
+# Deployment: where a small shop runs. Each environment holds its
+# infrastructure (cloud, region, cluster, managed services), and each
+# container, datastore, and queue says where it's deployed with `deploy`.
+# Open it with `archdoc view examples/deployment.yaml` and pick the
+# Infrastructure tab, or `archdoc show production.aws.eks`.
+archdoc: "2.0"
+namespace: shop
+name: Online shop
+description: Sells things to shoppers on the web.
+
+actors:
+  shopper:
+    kind: person
+    description: Someone buying from the shop.
+    uses:
+      storefront: { description: Browses and checks out, technology: HTTPS }
+  ops:
+    kind: team
+    description: Runs the clusters and the databases.
+
+elements:
+  shop:
+    kind: system
+    description: Everything the shop runs.
+    owners: [ops]
+    elements:
+      storefront:
+        kind: container
+        technology: Next.js
+        description: The shop's web pages.
+        deploy:
+          - { to: production.cdn, technology: Static export, url: "https://shop.example.com" }
+          - { to: staging.aws.eks.web, replicas: 1 }
+          - local.compose
+        uses:
+          api: { description: Calls the API, technology: HTTPS/JSON }
+      api:
+        kind: container
+        technology: Node.js, Fastify
+        description: Takes orders and serves the catalog. Publishes order.placed.
+        provides:
+          - { topic: order.placed, transport: sqs }
+        deploy:
+          - to: production.aws.eks.web
+            replicas: 3-12
+            technology: Helm chart
+            url: "https://api.shop.example.com"
+          - { to: staging.aws.eks.web, replicas: 1, technology: Helm chart }
+          - local.compose
+        uses:
+          db: { description: Reads and writes orders, technology: SQL/TLS }
+          cache: { description: Caches the catalog, technology: RESP }
+          payments: { description: Charges the card, technology: HTTPS }
+      worker:
+        kind: container
+        technology: Node.js
+        description: Sends receipts and updates stock after an order.
+        deploy:
+          - { to: production.aws.eks.jobs, replicas: 2, technology: Helm chart }
+          - { to: staging.aws.eks.jobs, replicas: 1, technology: Helm chart }
+        uses:
+          api: { description: Sends the receipt and updates stock, via: order.placed }
+          db: { description: Updates stock, technology: SQL/TLS }
+          email: { description: Sends the receipt, technology: HTTPS }
+      db:
+        kind: datastore
+        technology: Postgres 16
+        deploy:
+          - { to: production.aws.rds, technology: Multi-AZ db.r6g.large }
+          - { to: staging.aws.rds, technology: db.t4g.medium }
+          - local.compose
+      cache:
+        kind: datastore
+        technology: Redis 7
+        deploy: [production.aws.elasticache, staging.aws.eks.web, local.compose]
+      admin:
+        kind: container
+        technology: Retool
+        status: planned
+        description: Back office for refunds. Not running anywhere yet.
+        uses:
+          api: Looks up and refunds orders
+  payments:
+    kind: external
+    description: The card processor.
+  email:
+    kind: external
+    description: The email delivery service.
+
+environments:
+  production:
+    name: Production
+    description: What shoppers use.
+    owners: [ops]
+    nodes:
+      cdn:
+        kind: cdn
+        name: CloudFront
+        technology: AWS CloudFront
+        code: infra/terraform/cdn.tf
+      aws:
+        kind: region
+        name: AWS us-east-1
+        technology: AWS
+        code: infra/terraform/
+        nodes:
+          eks:
+            kind: cluster
+            name: EKS
+            technology: EKS 1.30
+            code: infra/terraform/eks.tf
+            nodes:
+              web: { kind: namespace, technology: Kubernetes namespace }
+              jobs: { kind: namespace, technology: Kubernetes namespace }
+          rds: { kind: managed, name: RDS, technology: Amazon RDS for Postgres }
+          elasticache: { kind: managed, name: ElastiCache, technology: Amazon ElastiCache }
+          sqs: { kind: managed, name: SQS, technology: Amazon SQS, description: Carries order.placed }
+  staging:
+    name: Staging
+    description: One of everything, for testing a release before it ships.
+    nodes:
+      aws:
+        kind: region
+        name: AWS us-east-2
+        technology: AWS
+        nodes:
+          eks:
+            kind: cluster
+            name: EKS
+            technology: EKS 1.30
+            nodes:
+              web: { kind: namespace }
+              jobs: { kind: namespace }
+          rds: { kind: managed, name: RDS, technology: Amazon RDS for Postgres }
+  local:
+    name: Local
+    description: A developer's machine.
+    nodes:
+      compose:
+        kind: host
+        name: Docker Compose
+        technology: Docker Compose
+        code: docker-compose.yaml

@@ -1,6 +1,33 @@
 # Written by archdoc seal. Don't edit it by hand: when the code a fact points at changes, check the model, then run archdoc seal <fact>.
 sealVersion: 1
 seals:
+  deploy:ci.actions:
+    kind: content
+    hash: fnv-2d4d7599fe24163d
+    refs:
+      .github/workflows/archdoc.yml:
+        hash: fnv-4973599cc4a919ee
+        lines: 22
+    by: agent:claude-code
+  deploy:release.github:
+    kind: content
+    hash: fnv-26888f66b2c128aa
+    refs:
+      .claude-plugin/marketplace.json:
+        hash: fnv-d581657a2482c4d6
+        lines: 13
+    by: agent:claude-code
+  deploy:release.npm:
+    kind: content
+    hash: fnv-e60fef49cf637fc1
+    refs:
+      .github/workflows/release.yml:
+        hash: fnv-d84ab78157a58f95
+        lines: 52
+      scripts/release.mjs:
+        hash: fnv-289c47345136c39e
+        lines: 114
+    by: agent:claude-code
   element:toolchain.agent-skills:
     kind: structure
     hash: fnv-4bbe8202346ab434
@@ -212,7 +239,7 @@ seals:
         - startViewServer
   element:toolchain.core:
     kind: structure
-    hash: fnv-295c4310a6fadfa2
+    hash: fnv-1b6d565b8180af97
     files:
       packages/core/package.json: []
       packages/core/src/browser.ts: []
@@ -227,8 +254,11 @@ seals:
         - ActorNode
         - CodeRef
         - DataNode
+        - Deployment
+        - DeploymentNode
         - DomainNode
         - ElementNode
+        - EnvironmentNode
         - ExternalRef
         - ImportedModel
         - JourneyNode
@@ -454,10 +484,11 @@ seals:
         - readFederationInput
   element:toolchain.core.loader:
     kind: structure
-    hash: fnv-de32a50681386a68
+    hash: fnv-48a9f251c8479245
     files:
       packages/core/src/load/build.ts:
         - BuildOptions
+        - DEPLOYABLE_KINDS
         - LANDSCAPE
         - ModelSource
         - buildModel
@@ -495,9 +526,10 @@ seals:
         - ParsedFile
         - YamlPath
         - parseYaml
+    by: agent:claude-code
   element:toolchain.core.query:
     kind: structure
-    hash: fnv-bba48204cc9956aa
+    hash: fnv-e8cbc615c793fee9
     files:
       packages/core/src/query/code-index.ts:
         - CodeIndex
@@ -526,6 +558,15 @@ seals:
         - ContextSameJob
         - ContextStart
         - context
+      packages/core/src/query/deploy.ts:
+        - DeploymentLink
+        - DeploymentView
+        - PlacedElement
+        - deploymentPath
+        - deploymentView
+        - deploymentsOf
+        - formatDeployment
+        - formatEnvironment
       packages/core/src/query/eval.ts:
         - EvalCase
         - EvalCommit
@@ -568,7 +609,7 @@ seals:
         - sameWord
         - singular
         - splitIdentifier
-    by: agent:claude
+    by: agent:claude-code
   element:toolchain.core.report:
     kind: structure
     hash: fnv-4b010faf2b077799
@@ -663,11 +704,12 @@ seals:
         - sealedPaths
   element:toolchain.core.seals#packages/core/src/seal/seal.ts:fingerprints:
     kind: content
-    hash: fnv-1657759770083f41
+    hash: fnv-d156a189fd201543
     refs:
       packages/core/src/seal/seal.ts (fingerprints):
-        hash: fnv-8a058d12e0453afe
-        lines: 70
+        hash: fnv-192ac43db77507cd
+        lines: 81
+    by: agent:claude-code
   element:toolchain.core.traces:
     kind: structure
     hash: fnv-a1cbd238dac5550e
@@ -843,7 +885,7 @@ seals:
         - migrateV1
   element:toolchain.spec.schema:
     kind: structure
-    hash: fnv-2b0b7d43299bcbd3
+    hash: fnv-67cd354f7e5eea33
     files:
       packages/spec/src/json-schema.ts:
         - JSON_SCHEMA_ID
@@ -867,12 +909,20 @@ seals:
         - DataFieldSpec
         - DataRuleSchema
         - DataRuleSpec
+        - DeploySchema
+        - DeploySpec
+        - DeploymentNodeSchema
+        - DeploymentNodeSpec
+        - DeploymentSchema
+        - DeploymentSpec
         - DomainSchema
         - DomainSpec
         - ElementKind
         - ElementKindSchema
         - ElementSchema
         - ElementSpec
+        - EnvironmentSchema
+        - EnvironmentSpec
         - IdSchema
         - ImportSchema
         - ImportSpec
@@ -909,6 +959,7 @@ seals:
         - StoreSchema
         - UsesSchema
         - UsesSpec
+    by: agent:claude-code
   element:toolchain.web:
     kind: structure
     hash: fnv-5aaec34a89f7491c
@@ -922,7 +973,7 @@ seals:
         - default
   element:toolchain.web.graph:
     kind: structure
-    hash: fnv-d9a335b4da1203b2
+    hash: fnv-26ac36fd449684cd
     files:
       apps/web/src/graph/data.ts:
         - DataFocus
@@ -988,6 +1039,11 @@ seals:
         - boundaryOf
         - crossingOf
         - groupLandscape
+      apps/web/src/graph/infra.ts:
+        - InfraGraph
+        - buildInfraGraph
+        - deployKey
+        - envKey
       apps/web/src/graph/layout.ts:
         - Box
         - GROUP_HEADER
@@ -1001,6 +1057,7 @@ seals:
         - countCrossings
         - pointAlong
         - roundedPath
+    by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
     hash: fnv-ec21bedb05a35305
@@ -1066,7 +1123,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-f45ea09e0a899082
+    hash: fnv-bd30519ad2ebbcb4
     files:
       apps/web/src/App.tsx:
         - App
@@ -1081,6 +1138,17 @@ seals:
       apps/web/src/components/Details.tsx:
         - Details
         - DetailsProps
+      apps/web/src/components/Infrastructure.tsx:
+        - DeployedSection
+        - DeploymentList
+        - EnvironmentList
+        - EnvironmentListProps
+        - InfraCanvas
+        - InfraCanvasProps
+        - InfraDetails
+        - InfraDetailsProps
+        - InfraIntro
+        - defaultEnvironment
       apps/web/src/components/Lanes.tsx:
         - Lanes
         - LanesProps
@@ -1219,10 +1287,11 @@ seals:
         - readTraceSources
   step:check-model#4:
     kind: structure
-    hash: fnv-337b8a3120948b0f
+    hash: fnv-5b16c82e21e5b312
     files:
       packages/core/src/load/build.ts:
         - BuildOptions
+        - DEPLOYABLE_KINDS
         - LANDSCAPE
         - ModelSource
         - buildModel
@@ -1231,6 +1300,7 @@ seals:
         - isEventContract
         - normalizeCode
         - schemaDiagnostics
+    by: agent:claude-code
   step:depend-on-another-repo#1:
     kind: structure
     hash: fnv-b4dba358312e9a8c

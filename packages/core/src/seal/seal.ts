@@ -138,6 +138,23 @@ export function sealableFacts(model: Model): SealedFact[] {
       });
     }
   }
+  // Infrastructure code: a change to a chart or a Terraform module may move what runs where.
+  for (const n of model.deploymentNodes.values()) {
+    if (n.code.length)
+      facts.push(deployFact(`deploy:${n.id}`, `deployment node ${n.id}`, n.code, n.location));
+  }
+  for (const d of model.deployments) {
+    if (!d.code.length) continue;
+    facts.push({
+      ...deployFact(
+        `deploy:${d.element}@${d.to}`,
+        `deployment of ${d.element} to ${d.to}`,
+        d.code,
+        d.location,
+      ),
+      element: d.element,
+    });
+  }
   for (const d of model.data.values()) {
     if (!d.spec.source || Object.keys(d.spec.source).length === 0) continue;
     facts.push({
@@ -149,6 +166,33 @@ export function sealableFacts(model: Model): SealedFact[] {
     });
   }
   return facts.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/** Plain files are sealed by their content; directories and globs, by the files in them. */
+function deployFact(
+  key: string,
+  label: string,
+  code: CodeRef[],
+  location: SourceLocation | undefined,
+): SealedFact {
+  const files = code.every((r) => /\.[a-z0-9]+$/i.test(r.path) && !/[*?[{]/.test(r.path));
+  return {
+    key,
+    label,
+    kind: files ? "content" : "structure",
+    refs: code.map(snippetLabel),
+    location,
+  };
+}
+
+/** A deployment fact's code, from its key. */
+function deployCode(model: Model, key: string): CodeRef[] {
+  const id = key.slice("deploy:".length);
+  const at = id.indexOf("@");
+  if (at < 0) return model.deploymentNodes.get(id)?.code ?? [];
+  const element = id.slice(0, at);
+  const to = id.slice(at + 1);
+  return model.deployments.find((d) => d.element === element && d.to === to)?.code ?? [];
 }
 
 /** The files content seals read, so a caller can read them ahead of time. */
@@ -182,6 +226,15 @@ export function fingerprints(model: Model, inputs: FingerprintInputs): Fingerpri
     let seal: Seal;
     if (fact.key.startsWith("element:") && fact.kind === "structure") {
       seal = structure(owned.get(fact.element ?? "") ?? []);
+    } else if (fact.key.startsWith("deploy:") && fact.kind === "structure") {
+      const matched = new Set<string>();
+      for (const ref of deployCode(model, fact.key)) {
+        const re = compileGlob(normalizePath(ref.path));
+        const found = files.filter((f) => re.test(f));
+        if (!found.length) problems.push(`${ref.path} matches no file`);
+        for (const f of found) matched.add(f);
+      }
+      seal = structure([...matched]);
     } else if (fact.key.startsWith("step:")) {
       const path = normalizePath(fact.refs[0] ?? "");
       const matched = files.filter((f) => f === path || compileGlob(path).test(f));
@@ -205,12 +258,14 @@ export function fingerprints(model: Model, inputs: FingerprintInputs): Fingerpri
             ?.code.filter((r) => snippetLabel(r) === fact.refs[0]) ?? [])
         : fact.key.startsWith("contract:")
           ? [{ path: fact.refs[0] ?? "" }]
-          : normalizeCode(
-              (fact.key.startsWith("logic:")
-                ? model.logic.get(fact.key.slice(6))
-                : model.mappings.get(fact.key.slice(8))
-              )?.spec.code,
-            );
+          : fact.key.startsWith("deploy:")
+            ? deployCode(model, fact.key)
+            : normalizeCode(
+                (fact.key.startsWith("logic:")
+                  ? model.logic.get(fact.key.slice(6))
+                  : model.mappings.get(fact.key.slice(8))
+                )?.spec.code,
+              );
       const each: Record<string, { hash: string; lines: number }> = {};
       for (const ref of refs) {
         const label = snippetLabel(ref);
