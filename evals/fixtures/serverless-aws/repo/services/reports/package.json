@@ -1,0 +1,10 @@
+{
+  "name": "reports",
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.650.0",
+    "@aws-sdk/lib-dynamodb": "^3.650.0",
+    "@aws-sdk/client-sqs": "^3.650.0",
+    "@aws-sdk/client-ses": "^3.650.0"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "bookings",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build"
+  }
+}

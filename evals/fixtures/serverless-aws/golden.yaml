@@ -1,0 +1,253 @@
+# A person's model of the fixture: what the evals score against. A
+# serverless app whose wiring is all in a CDK stack: API Gateway routes to
+# Lambda handlers, DynamoDB tables with their keys, an SQS queue with its
+# consumer, and an EventBridge schedule. Imports don't show any of it.
+archdoc: "2.0"
+namespace: bookings
+name: Bookings
+description: Customers book restaurant tables; the bookings are confirmed by email and totalled nightly.
+actors:
+  customer:
+    kind: person
+    description: Books a table and looks up their bookings.
+    uses: { web: Books a table and follows their bookings }
+  scheduler:
+    kind: agent
+    description: The EventBridge rule that runs the nightly report at 02:00.
+    uses: { reports: Runs the nightly report }
+elements:
+  bookings:
+    kind: system
+    description: Table bookings on AWS Lambda, API Gateway, DynamoDB, and SQS.
+    elements:
+      web:
+        kind: container
+        technology: TypeScript, React
+        description: The web app customers book a table in and see their bookings.
+        code: web/**
+        deploy: [production.aws.site]
+        uses:
+          api.handlers: { description: Calls the bookings API (VITE_API_URL), sends: NewBooking }
+      api:
+        kind: container
+        technology: TypeScript, AWS Lambda
+        description: The bookings API, one Lambda per route behind API Gateway. Saves bookings and announces each new one.
+        code: services/bookings/**
+        deploy: [production.aws.lambda, staging.aws.lambda]
+        elements:
+          handlers:
+            kind: component
+            description: The Lambda handlers behind POST /bookings, GET /bookings, and GET /bookings/{bookingId}.
+            code: services/bookings/src/handlers/**
+            uses: { store: Saves and looks up bookings, events: Announces a new booking }
+          store:
+            kind: component
+            description: Reads and writes bookings in DynamoDB, by ID and by customer.
+            code: services/bookings/src/store/**
+            uses: { bookings-table: { description: "Puts, gets, and queries bookings", sends: Booking } }
+          events:
+            kind: component
+            description: Sends booking-requested messages to SQS.
+            code: services/bookings/src/events/**
+            uses: { booking-requested: { description: Sends booking-requested, sends: BookingRequested } }
+      confirmations:
+        kind: container
+        technology: TypeScript, AWS Lambda
+        description: Consumes booking-requested, marks the booking confirmed, and emails the customer.
+        code: services/confirmations/**
+        deploy: [production.aws.lambda, staging.aws.lambda]
+        uses:
+          booking-requested: { description: Consumes booking-requested, sends: BookingRequested }
+          bookings-table: Marks the booking confirmed
+          ses: { description: Emails the confirmation, sends: ConfirmationEmail }
+      reports:
+        kind: container
+        technology: TypeScript, AWS Lambda
+        description: The nightly job that totals yesterday's bookings into the reports table.
+        code: services/reports/**
+        deploy: [production.aws.lambda]
+        uses:
+          bookings-table: Scans yesterday's bookings
+          daily-reports: { description: Writes the day's totals, sends: DailyReport }
+      bookings-table:
+        kind: datastore
+        technology: Amazon DynamoDB
+        description: Bookings, by booking ID, with a byCustomer index.
+        deploy: [production.aws.dynamodb, staging.aws.dynamodb]
+        stores:
+          bookings: { entity: Booking, key: bookingId }
+      daily-reports:
+        kind: datastore
+        technology: Amazon DynamoDB
+        description: One row of totals per day.
+        deploy: [production.aws.dynamodb]
+        stores:
+          daily-reports: { entity: DailyReport, key: date }
+      booking-requested:
+        kind: queue
+        technology: Amazon SQS
+        description: New bookings waiting to be confirmed.
+        deploy: [production.aws.sqs, staging.aws.sqs]
+  ses:
+    kind: external
+    technology: Amazon SES
+    description: Delivers the confirmation emails.
+environments:
+  production:
+    description: What customers use.
+    nodes:
+      aws:
+        kind: region
+        name: AWS us-east-1
+        technology: AWS
+        code: [infra/bin/app.ts, infra/lib/bookings-stack.ts]
+        nodes:
+          lambda: { kind: serverless, technology: AWS Lambda }
+          dynamodb: { kind: managed, technology: Amazon DynamoDB }
+          sqs: { kind: managed, technology: Amazon SQS }
+          site: { kind: cdn, technology: Amazon S3 website }
+  staging:
+    description: The same stack in another account, for testing a release.
+    nodes:
+      aws:
+        kind: region
+        name: AWS us-east-2
+        technology: AWS
+        code: [infra/bin/app.ts, infra/lib/bookings-stack.ts]
+        nodes:
+          lambda: { kind: serverless, technology: AWS Lambda }
+          dynamodb: { kind: managed, technology: Amazon DynamoDB }
+          sqs: { kind: managed, technology: Amazon SQS }
+data:
+  NewBooking:
+    kind: message
+    fields:
+      restaurant: { type: string }
+      slot: { type: string }
+      partySize: { type: int }
+  Booking:
+    kind: entity
+    fields:
+      bookingId: { type: string }
+      customerId: { type: string }
+      email: { type: string, classification: pii }
+      restaurant: { type: string }
+      slot: { type: string }
+      partySize: { type: int }
+      status: { type: enum, values: [requested, confirmed] }
+  BookingRequested:
+    kind: message
+    fields:
+      bookingId: { type: string, references: Booking }
+      email: { type: string, classification: pii }
+      slot: { type: string }
+  ConfirmationEmail:
+    kind: message
+    fields:
+      to: { type: string, classification: pii }
+      slot: { type: string }
+  DailyReport:
+    kind: entity
+    fields:
+      date: { type: string }
+      bookings: { type: int }
+      covers: { type: int }
+journeys:
+  book-a-table:
+    actor: customer
+    goal: Book a table
+    importance: critical
+    steps:
+      - { from: customer, to: web, action: Picks a time and party size and books, code: web/src/pages/book.tsx }
+      - from: web
+        to: api.handlers
+        action: POSTs the booking to /bookings
+        code: web/src/api.ts
+        sends: NewBooking
+      - from: api.handlers
+        to: api.store
+        action: Saves the booking as requested
+        code: services/bookings/src/handlers/create-booking.ts
+      - from: api.store
+        to: bookings-table
+        action: Puts the booking
+        code: services/bookings/src/store/bookings-table.ts
+        creates: { Booking: { status: requested } }
+      - from: api.handlers
+        to: api.events
+        action: Announces the new booking
+        code: services/bookings/src/handlers/create-booking.ts
+      - from: api.events
+        to: booking-requested
+        action: Sends booking-requested
+        code: services/bookings/src/events/booking-requested.ts
+        sends: BookingRequested
+  confirm-booking:
+    actor: customer
+    goal: Know the table is booked
+    steps:
+      - from: confirmations
+        to: booking-requested
+        action: Receives booking-requested
+        code: services/confirmations/src/confirm-booking.ts
+        sends: BookingRequested
+      - from: confirmations
+        to: bookings-table
+        action: Marks the booking confirmed
+        code: services/confirmations/src/confirm-booking.ts
+        changes: { Booking.status: requested -> confirmed }
+      - from: confirmations
+        to: ses
+        action: Emails the customer the confirmation
+        code: services/confirmations/src/mailer.ts
+  see-my-bookings:
+    actor: customer
+    goal: See the tables they've booked
+    steps:
+      - { from: customer, to: web, action: Opens their bookings, code: web/src/pages/my-bookings.tsx }
+      - from: web
+        to: api.handlers
+        action: GETs /bookings
+        code: web/src/api.ts
+      - from: api.handlers
+        to: api.store
+        action: Looks up the customer's bookings
+        code: services/bookings/src/handlers/list-bookings.ts
+      - from: api.store
+        to: bookings-table
+        action: Queries the byCustomer index
+        code: services/bookings/src/store/bookings-table.ts
+        sends: Booking
+  open-a-booking:
+    actor: customer
+    goal: Check one booking's status
+    steps:
+      - { from: customer, to: web, action: Opens a booking, code: web/src/pages/my-bookings.tsx }
+      - from: web
+        to: api.handlers
+        action: GETs /bookings/{bookingId}
+        code: web/src/api.ts
+      - from: api.handlers
+        to: api.store
+        action: Gets the booking by ID
+        code: services/bookings/src/handlers/get-booking.ts
+      - from: api.store
+        to: bookings-table
+        action: Gets the item
+        code: services/bookings/src/store/bookings-table.ts
+        sends: Booking
+  nightly-report:
+    actor: scheduler
+    goal: Total yesterday's bookings
+    steps:
+      - { from: scheduler, to: reports, action: Runs the job at 02:00, code: infra/lib/bookings-stack.ts }
+      - from: reports
+        to: bookings-table
+        action: Scans yesterday's bookings
+        code: services/reports/src/nightly-report.ts
+        sends: Booking
+      - from: reports
+        to: daily-reports
+        action: Writes the day's totals
+        code: services/reports/src/nightly-report.ts
+        creates: DailyReport

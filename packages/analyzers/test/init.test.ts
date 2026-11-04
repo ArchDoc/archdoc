@@ -5,21 +5,52 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildModel, loadModel, type Model } from "@archdoc/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { parse, stringify } from "yaml";
 import { checkRepository, formatInit, inferModel, initModel } from "../src/index.js";
 
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
 const org = join(repo, "examples/org");
 
-/** The model init writes, built the way loadModel builds it. */
+/**
+ * The model init writes, built the way loadModel builds it. Init wraps the
+ * elements in one system; these tests look at what's inside it, so the system
+ * is taken away and its elements put at the top, where their IDs are short.
+ */
 async function inferred(root: string): Promise<{ model: Model; stats: InitStats }> {
   const r = await inferModel(root);
   expect(r.problems).toEqual([]);
+  const files = r.files.map((f) =>
+    f.path === ".archdoc/archdoc.yaml" ? { ...f, text: unwrapSystem(f.text) } : f,
+  );
   return {
-    model: buildModel(r.files, { root: ".archdoc/archdoc.yaml" }),
+    model: buildModel(files, { root: ".archdoc/archdoc.yaml" }),
     stats: r.stats,
   };
 }
 type InitStats = Awaited<ReturnType<typeof inferModel>>["stats"];
+
+/** Takes init's system away, putting its elements at the top, where their IDs are short. */
+function unwrapSystem(text: string): string {
+  const doc = parse(text) as { elements: Record<string, { kind: string; elements?: object }> };
+  const [key, system] = Object.entries(doc.elements).find(([, e]) => e.kind === "system") ?? [];
+  expect(system, "init wraps the elements in a system").toBeDefined();
+  if (key && system) {
+    delete doc.elements[key];
+    doc.elements = { ...system.elements, ...doc.elements } as typeof doc.elements;
+  }
+  return stringify(doc);
+}
+
+/** The model init wrote to disk, without its system (see unwrapSystem). */
+async function loadUnwrapped(dir: string): Promise<Model> {
+  const files: { path: string; text: string }[] = [];
+  for (const path of [".archdoc/archdoc.yaml", ".archdoc/data.yaml"]) {
+    const text = await readFile(join(dir, path), "utf8").catch(() => undefined);
+    if (text !== undefined)
+      files.push({ path, text: path.endsWith("archdoc.yaml") ? unwrapSystem(text) : text });
+  }
+  return buildModel(files, { root: ".archdoc/archdoc.yaml" });
+}
 
 /** The directory an element's code is, from a `dir/**` path. */
 const dirOf = (path: string) => path.replace(/\/\*\*$/, "");
@@ -157,7 +188,10 @@ describe("archdoc init on a Go service with compose and SQL migrations", () => {
   it("writes a binary per cmd/, compose's datastores and queues, and the tables migrations leave", async () => {
     const r = await initModel(dir);
     expect(r.written).toBe(true);
-    const model = await loadModel(".", { cwd: dir });
+    expect(
+      (await loadModel(".", { cwd: dir })).diagnostics.filter((d) => d.severity === "error"),
+    ).toEqual([]);
+    const model = await loadUnwrapped(dir);
     expect(model.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
     const kinds = Object.fromEntries(
       [...model.elements.values()].map((e) => [e.id, `${e.spec.kind} ${e.spec.technology}`]),
@@ -341,7 +375,7 @@ describe("archdoc init, layer by layer", () => {
   it("nests components in containers and code in components, with uses at every level", async () => {
     const r = await initModel(dir);
     expect(r.problems).toEqual([]);
-    const model = await loadModel(".", { cwd: dir });
+    const model = await loadUnwrapped(dir);
     const kinds = Object.fromEntries([...model.elements.values()].map((e) => [e.id, e.spec.kind]));
     expect(kinds).toEqual({
       web: "container",

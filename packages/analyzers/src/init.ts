@@ -4,6 +4,7 @@ import { basename, dirname, join, posix } from "node:path";
 import {
   buildModel,
   type CodeIndex,
+  type EntryPoint,
   isDevTooling,
   isVerificationCode,
   listRepoFiles,
@@ -12,6 +13,7 @@ import {
 } from "@archdoc/core";
 import { parse, stringify } from "yaml";
 import { type AnalyzerContext, contextFor } from "./api.js";
+import { type IacFindings, readIac } from "./iac.js";
 import { analyze } from "./run.js";
 import { indexCode } from "./symbols.js";
 
@@ -43,7 +45,11 @@ export interface InitResult {
     data: number;
     /** Source files an element claims, of all source files. */
     coverage: { claimed: number; total: number };
+    /** Environments, from compose files and infrastructure as code. */
+    environments: number;
   };
+  /** Where flows start, from infrastructure as code: routes, queue consumers, schedules. */
+  entryPoints: EntryPoint[];
   /** Problems the model would have; init writes nothing when there are errors. */
   problems: string[];
 }
@@ -51,7 +57,7 @@ export interface InitResult {
 interface Unit {
   key: string;
   dir: string;
-  kind: "container" | "component" | "code" | "datastore" | "queue";
+  kind: "container" | "component" | "code" | "datastore" | "queue" | "external";
   description?: string | undefined;
   technology?: string | undefined;
   /** Code paths; datastores and queues from images have none. */
@@ -66,6 +72,18 @@ interface Unit {
   source: string;
   /** Run by a compose file. */
   composed?: boolean | undefined;
+  /** Where it runs: deployment nodes such as production.aws.lambda. */
+  deploy?: string[] | undefined;
+}
+
+/** What init writes besides the elements: who starts the system, and where it runs. */
+interface Extras {
+  actors: Record<string, Record<string, unknown>>;
+  environments: Record<string, Record<string, unknown>>;
+  /** Data entries the IaC declares, such as a DynamoDB table's keys. */
+  data: Record<string, Record<string, unknown>>;
+  /** Where flows start: routes, consumers, schedules. */
+  entryPoints: EntryPoint[];
 }
 
 const INFERRED = { source: "inferred", by: "archdoc init" } as const;
@@ -101,11 +119,18 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     return unit;
   };
 
-  // 1. Packages and modules, from their manifests.
-  for (const m of await manifests(ctx)) add(m, m.key);
+  // 1. Packages and modules, from their manifests. A CDK app is how the system is
+  // deployed, not a part of it: its code goes with the environments it defines.
+  const iac = await readIac(ctx).catch((): IacFindings[] => []);
+  const cdkDirs = new Set(iac.filter((f) => f.tool === "cdk").map((f) => f.dir));
+  for (const m of await manifests(ctx)) {
+    if (m.kind === "container" && cdkDirs.has(m.dir)) continue;
+    add(m, m.key);
+  }
   // Directories under the conventional roots that no manifest claims, such as
   // an integration written in Markdown and YAML, or code without a manifest.
-  const claimedBy = (f: string) => ownerOf(units, f) && units.length > 0;
+  const iacFiles = new Set(iac.flatMap((f) => f.files));
+  const claimedBy = (f: string) => (ownerOf(units, f) && units.length > 0) || iacFiles.has(f);
   for (const dir of codeDirs(files, "", (f) => !claimedBy(f))) {
     add(await directoryUnit(ctx, dir), basename(dir));
   }
@@ -137,8 +162,10 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     unit.components = components(unit.dir, sources, exportsOf);
   }
 
-  // 2. Datastores, queues, and dependencies, from compose files.
-  await compose(ctx, units, add);
+  // 2. Datastores, queues, and dependencies, from compose files and infrastructure as code.
+  const extras: Extras = { actors: {}, environments: {}, data: {}, entryPoints: [] };
+  await compose(ctx, units, add, extras);
+  await infrastructure(ctx, units, add, iac, extras);
 
   // 3. Uses, from the dependencies analyzers see, mapped onto the elements the
   // way archdoc check maps them, and declared at the level where the two
@@ -172,18 +199,18 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
   }
 
   // 4. Data and contracts, from schema files.
-  const data = await schemas(ctx, units, add);
+  const data = { ...extras.data, ...(await schemas(ctx, units, add)) };
 
   // The model, as YAML, and checked before it's written.
   const namespace = sanitize(name ?? (await rootName(ctx)) ?? basename(root));
-  const doc = modelDoc(namespace, units);
+  const doc = modelDoc(namespace, units, extras);
   const files_: InitResult["files"] = [
     { path: ".archdoc/archdoc.yaml", text: HEADER + stringify(doc, YAML) + NEXT },
   ];
   if (Object.keys(data).length) {
     files_.push({
       path: ".archdoc/data.yaml",
-      text: `# What the schema files say this repository stores and sends. Fields come from the source.\n${stringify({ data }, YAML)}`,
+      text: `# What the schema files and infrastructure as code say this repository stores and sends. Fields come from the source.\n${stringify({ data }, YAML)}`,
     });
   }
   const model = buildModel(
@@ -217,7 +244,9 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
       contracts: all.reduce((n, u) => n + u.provides.length, 0),
       data: Object.keys(data).length,
       coverage: { claimed, total: source.length },
+      environments: Object.keys(extras.environments).length,
     },
+    entryPoints: extras.entryPoints,
     problems,
   };
 }
@@ -301,7 +330,7 @@ const NEXT = `
 #       - { from: web, to: api, action: Posts the cart, code: apps/web/src/api.ts }
 `;
 
-function modelDoc(namespace: string, units: Unit[]) {
+function modelDoc(namespace: string, units: Unit[], extras?: Extras) {
   const element = (u: Unit): Record<string, unknown> => {
     const out: Record<string, unknown> = { kind: u.kind };
     if (u.technology) out.technology = u.technology;
@@ -312,6 +341,7 @@ function modelDoc(namespace: string, units: Unit[]) {
     else if (u.code.length) out.code = u.code.length === 1 ? u.code[0] : u.code;
     if (u.provides.length) out.provides = u.provides.map((api) => ({ api }));
     if (u.stores.size) out.stores = Object.fromEntries(u.stores);
+    if (extras && u.deploy?.length) out.deploy = u.deploy;
     if (u.uses.size) {
       out.uses = Object.fromEntries(
         [...u.uses].map(([to, description]) => [to, { description, provenance: INFERRED }]),
@@ -323,10 +353,31 @@ function modelDoc(namespace: string, units: Unit[]) {
     out.provenance = INFERRED;
     return out;
   };
+  if (!extras) {
+    return {
+      archdoc: "2.0",
+      namespace,
+      elements: Object.fromEntries(units.map((u) => [u.key, element(u)])),
+    };
+  }
+  // One system around everything but the externals, so the context view has a box to draw.
+  const inside = units.filter((u) => u.kind !== "external");
+  const outside = units.filter((u) => u.kind === "external");
+  const system = units.some((u) => u.key === namespace) ? `${namespace}-system` : namespace;
   return {
     archdoc: "2.0",
     namespace,
-    elements: Object.fromEntries(units.map((u) => [u.key, element(u)])),
+    ...(Object.keys(extras.actors).length ? { actors: extras.actors } : {}),
+    elements: {
+      [system]: {
+        kind: "system",
+        description: `The ${namespace} system: everything this repository builds and runs.`,
+        elements: Object.fromEntries(inside.map((u) => [u.key, element(u)])),
+        provenance: INFERRED,
+      },
+      ...Object.fromEntries(outside.map((u) => [u.key, element(u)])),
+    },
+    ...(Object.keys(extras.environments).length ? { environments: extras.environments } : {}),
   };
 }
 
@@ -627,6 +678,7 @@ async function compose(
   ctx: AnalyzerContext,
   units: Unit[],
   add: (u: Omit<Found, "key">, key: string) => Unit,
+  extras: Extras,
 ) {
   const files = ctx.files.filter(
     (f) => /(^|\/)(docker-)?compose(\.[\w-]+)?\.ya?ml$/.test(f) && !SKIP_DIR.test(f),
@@ -670,6 +722,22 @@ async function compose(
             name,
           ),
       );
+    }
+    // A compose file runs them on one host: the local environment.
+    if (byService.size) {
+      extras.environments.local ??= {
+        description: "A developer's machine.",
+        nodes: {},
+        provenance: INFERRED,
+      };
+      const env = extras.environments.local as { nodes: Record<string, unknown> };
+      const node = Object.keys(env.nodes).length
+        ? `compose-${Object.keys(env.nodes).length + 1}`
+        : "compose";
+      env.nodes[node] = { kind: "host", technology: "Docker Compose", code: f };
+      for (const u of new Set(byService.values())) {
+        u.deploy = [...new Set([...(u.deploy ?? []), `local.${node}`])];
+      }
     }
     for (const [name, svc] of Object.entries(doc.services ?? {})) {
       const from = byService.get(name);
@@ -958,7 +1026,272 @@ function emptyResult(): InitResult {
       contracts: 0,
       data: 0,
       coverage: { claimed: 0, total: 0 },
+      environments: 0,
     },
+    entryPoints: [],
     problems: [],
   };
+}
+
+/** What each SDK a component imports reaches, to put a use on the component that makes the call. */
+const SDK: [RegExp, RegExp][] = [
+  [/DynamoDB/, /@aws-sdk\/(client-dynamodb|lib-dynamodb)|\bdynamodb\b|DynamoDB/],
+  [
+    /RDS/,
+    /\bpg\b|postgres|mysql|prisma|knex|sequelize|typeorm|drizzle|sqlalchemy|psycopg|database\/sql/,
+  ],
+  [/SQS/, /@aws-sdk\/client-sqs|\bsqs\b|SQS/],
+  [/SNS/, /@aws-sdk\/client-sns|\bsns\b|SNS/],
+  [/EventBridge/, /@aws-sdk\/client-eventbridge|eventbridge|EventBridge/],
+  [/Kinesis/, /@aws-sdk\/client-kinesis|kinesis/],
+  [/SES/, /@aws-sdk\/client-sesv?2?|\bses\b|SES/],
+  [/Bedrock/, /@aws-sdk\/client-bedrock|bedrock/],
+  [/Secrets Manager/, /@aws-sdk\/client-secrets-manager|secretsmanager/],
+];
+/** The AWS SDK as a whole (v2, boto3): any of them, when no client says which. */
+const ANY_AWS_SDK = /["']aws-sdk["']|\bboto3\b/;
+
+const ACCESS: Record<string, string> = {
+  read: "Reads",
+  write: "Writes",
+  readwrite: "Reads and writes",
+  send: "Sends messages to",
+  consume: "Consumes",
+  publish: "Publishes to",
+  call: "Calls",
+};
+
+/**
+ * Datastores, queues, and services from infrastructure as code (Terraform and
+ * CDK), with what each function is granted as uses from the code that makes
+ * the call, the keys of each table as data, who starts each function on a
+ * schedule, and the environments it deploys to.
+ */
+async function infrastructure(
+  ctx: AnalyzerContext,
+  units: Unit[],
+  add: (u: Omit<Found, "key">, key: string) => Unit,
+  findings: IacFindings[],
+  extras: Extras,
+) {
+  const read = (f: string) => ctx.read(f).catch(() => "");
+  const keyFor = (name: string, suffix: string) => {
+    const k = sanitize(name);
+    return units.some((u) => u.key === k) ? `${k}-${suffix}` : k;
+  };
+  for (const iac of findings) {
+    const byId = new Map<string, Unit>();
+    for (const t of iac.tables) {
+      const name = t.name ?? t.id.split(".").pop() ?? "table";
+      const unit = add(
+        {
+          dir: "",
+          kind: "datastore",
+          technology: t.technology,
+          code: [],
+          source: `the ${name} table in ${t.file}`,
+        },
+        keyFor(name, "table"),
+      );
+      byId.set(t.id, unit);
+      if (!t.keys.length) continue;
+      const entity = uniqueEntity(extras.data, entityName(name));
+      const fields: Record<string, Record<string, string>> = {};
+      for (const k of [...t.keys, ...t.attributes]) {
+        fields[k.name] = k.type ? { type: k.type } : {};
+      }
+      extras.data[entity] = {
+        kind: "entity",
+        description: `A record in the ${name} table. ${t.file} declares its keys${t.indexes.length ? ` and indexes (${t.indexes.join(", ")})` : ""}; add the other attributes from the code that writes it.`,
+        fields,
+        provenance: INFERRED,
+      };
+      const pk = t.keys.find((k) => k.role === "partition")?.name;
+      unit.stores.set(name, { entity, ...(pk ? { key: pk } : {}) } as { entity: string });
+    }
+    for (const q of iac.queues) {
+      const name = q.name ?? q.id.split(".").pop() ?? "queue";
+      byId.set(
+        q.id,
+        add(
+          {
+            dir: "",
+            kind: "queue",
+            technology: q.technology,
+            code: [],
+            source: `the ${name} ${q.kind} in ${q.file}`,
+          },
+          keyFor(name, q.kind),
+        ),
+      );
+    }
+    for (const s of iac.services) {
+      const existing = units.find((u) => u.kind === "external" && u.technology === s.technology);
+      byId.set(
+        s.id,
+        existing ??
+          add(
+            {
+              dir: "",
+              kind: "external",
+              technology: s.technology,
+              code: [],
+              source: `${s.technology}, which the functions in ${iac.dir || "the repository"} call`,
+            },
+            s.id,
+          ),
+      );
+    }
+
+    // Each function's uses, from the code that makes the call.
+    const fnUnit = new Map<string, Unit>();
+    for (const fn of iac.functions) {
+      if (!fn.handler) continue;
+      const container = ownerOf(units, fn.handler);
+      if (!container) continue;
+      fnUnit.set(fn.id, container);
+      if (!container.technology?.includes("Lambda")) {
+        container.technology = container.technology
+          ? `${container.technology}, AWS Lambda`
+          : fn.technology;
+      }
+      const handlerPart = partHolding(container, fn.handler);
+      for (const u of fn.uses) {
+        const to = byId.get(u.to);
+        if (!to) continue;
+        const caller =
+          u.access === "consume"
+            ? (handlerPart ?? container)
+            : ((await callerOf(container, to, read, ctx.files)) ?? container);
+        if (caller === to || caller.uses.has(to.key)) continue;
+        caller.uses.set(
+          to.key,
+          `${ACCESS[u.access]} ${to.key} (${iac.files.includes(fn.file) ? fn.file : iac.dir})`,
+        );
+      }
+    }
+
+    // Where flows start, and who starts the scheduled ones.
+    const queueName = (id: string) => iac.queues.find((q) => q.id === id)?.name ?? id;
+    for (const t of iac.triggers) {
+      const fn = iac.functions.find((f) => f.id === t.function);
+      if (!fn?.handler) continue;
+      extras.entryPoints.push({
+        kind: t.kind,
+        label: t.kind === "consumer" ? `consumes ${queueName(t.queue ?? t.label)}` : t.label,
+        file: fn.handler,
+        symbol: fn.symbol,
+      });
+      const unit = fnUnit.get(fn.id);
+      if (t.kind === "schedule" && unit) {
+        extras.actors.scheduler ??= {
+          kind: "agent",
+          description: `What runs the scheduled jobs (${iac.tool === "cdk" ? "EventBridge rules in the CDK app" : "EventBridge rules in Terraform"}).`,
+          uses: {},
+          provenance: INFERRED,
+        };
+        const actor = extras.actors.scheduler as { uses: Record<string, unknown> };
+        actor.uses[unit.key] = {
+          description: `Runs ${fn.name ?? fn.id} on ${t.label} (${t.file})`,
+          provenance: INFERRED,
+        };
+      }
+    }
+
+    // Environments, and what's deployed to each.
+    const kinds = new Set([...byId.values()].map((u) => u.technology ?? ""));
+    for (const env of iac.environments) {
+      const nodes: Record<string, Record<string, unknown>> = {};
+      const node = (id: string, spec: Record<string, unknown>) => {
+        nodes[id] = spec;
+        return `${env.id}.aws.${id}`;
+      };
+      const lambda = iac.functions.length
+        ? node("lambda", { kind: "serverless", technology: "AWS Lambda" })
+        : undefined;
+      const managed = new Map<string, string>();
+      for (const [re, id, technology] of [
+        [/DynamoDB/, "dynamodb", "Amazon DynamoDB"],
+        [/RDS/, "rds", "Amazon RDS"],
+        [/SQS/, "sqs", "Amazon SQS"],
+        [/SNS/, "sns", "Amazon SNS"],
+        [/EventBridge/, "eventbridge", "Amazon EventBridge"],
+        [/Kinesis/, "kinesis", "Amazon Kinesis"],
+      ] as const) {
+        const tech = [...kinds].find((k) => re.test(k));
+        if (tech) managed.set(tech, node(id, { kind: "managed", technology }));
+      }
+      if (iac.buckets.some((b) => b.website))
+        node("site", { kind: "cdn", technology: "Amazon S3 website" });
+      extras.environments[env.id] = {
+        ...(env.name && env.name !== env.id ? { name: env.name } : {}),
+        description: `What ${iac.tool === "cdk" ? `the ${env.name ?? env.id} stack` : `the Terraform in ${iac.dir || "the repository"}`} deploys${env.region ? ` to ${env.region}` : ""}.`,
+        nodes: {
+          aws: {
+            kind: "region",
+            name: `AWS${env.region ? ` ${env.region}` : ""}`,
+            technology: "AWS",
+            code: env.code.length === 1 ? env.code[0] : env.code,
+            nodes,
+          },
+        },
+        provenance: INFERRED,
+      };
+      for (const u of new Set(fnUnit.values())) {
+        if (lambda) u.deploy = [...new Set([...(u.deploy ?? []), lambda])];
+      }
+      for (const u of byId.values()) {
+        const at = managed.get(u.technology ?? "");
+        if (at) u.deploy = [...new Set([...(u.deploy ?? []), at])];
+      }
+    }
+  }
+}
+
+/** The component inside a container whose code holds a file. */
+function partHolding(container: Unit, file: string): Unit | undefined {
+  return container.components.find((c) =>
+    c.code.some((p) => p === file || (p.endsWith("/**") && file.startsWith(p.slice(0, -2)))),
+  );
+}
+
+/**
+ * The component that makes calls to a datastore, queue, or service: the only
+ * one in the container whose code imports the SDK for it.
+ */
+async function callerOf(
+  container: Unit,
+  to: Unit,
+  read: (f: string) => Promise<string>,
+  files: readonly string[],
+): Promise<Unit | undefined> {
+  const sdk = SDK.find(([tech]) => tech.test(to.technology ?? ""))?.[1];
+  if (!sdk || !container.components.length) return undefined;
+  const importsOf = new Map<Unit, string>();
+  for (const c of container.components) {
+    const inside = files.filter((f) =>
+      c.code.some((p) => p === f || (p.endsWith("/**") && f.startsWith(p.slice(0, -2)))),
+    );
+    const lines: string[] = [];
+    for (const f of inside.filter(isSource)) {
+      lines.push(
+        ...(await read(f))
+          .split("\n")
+          .filter((l) => /^\s*(import\b|from\b|export .* from|.*require\()/.test(l)),
+      );
+    }
+    importsOf.set(c, lines.join("\n"));
+  }
+  for (const re of [sdk, ANY_AWS_SDK]) {
+    const hits = container.components.filter((c) => re.test(importsOf.get(c) ?? ""));
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) return undefined;
+  }
+  return undefined;
+}
+
+function uniqueEntity(data: Record<string, unknown>, name: string): string {
+  let k = name;
+  for (let i = 2; data[k]; i++) k = `${name}${i}`;
+  return k;
 }

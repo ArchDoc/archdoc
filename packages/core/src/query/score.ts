@@ -1,4 +1,4 @@
-import { assessDiscovery } from "../check/discovery.js";
+import { assessDiscovery, type DiscoveryOptions } from "../check/discovery.js";
 import { filesUnder, locate, resolveCodeMap } from "../codemap/codemap.js";
 import type { ElementNode, JourneyNode, Model } from "../model.js";
 
@@ -379,6 +379,16 @@ export interface DiscoveryScore {
   connected: number;
   /** Elements with a description of their own, of the same. */
   described: number;
+  /** 1 when the model has a system (kind: system), the box the C4 context draws; else 0. */
+  system: number;
+  /** Steps across a boundary (another container, a datastore, a queue, an external) that say what they carry, of those steps (1 with none). */
+  stepData: number;
+  /** Datastores that say what they store and queues that name their messages, of both (1 with none). */
+  storeData: number;
+  /** Containers, datastores, and queues that say where they run, of those; undefined when the repository has no deployment files. */
+  deployed?: number | undefined;
+  /** Entry points a journey reaches, of those known; undefined when they aren't known. */
+  entryPoints?: number | undefined;
   overall: number;
   /** What `archdoc check --done` would still list. */
   gaps: number;
@@ -394,8 +404,9 @@ export function scoreDiscovery(
   golden: Model,
   files: readonly string[],
   score: ModelScore,
+  options: DiscoveryOptions = {},
 ): DiscoveryScore {
-  const a = assessDiscovery(found, files);
+  const a = assessDiscovery(found, files, options);
   const f2g = new Map(score.matches.map((m) => [m.found, m.golden]));
   // Each end of a found step, as the golden element it is or sits inside.
   const toGolden = (id: string): string | undefined => {
@@ -448,11 +459,23 @@ export function scoreDiscovery(
     mapped: frac(s.sourceFiles - s.unmappedFiles, s.sourceFiles),
     connected: frac(s.elements - s.orphans.length, s.elements),
     described: frac(s.described, s.elements),
+    system: s.system ? 1 : 0,
+    stepData: frac(s.dataStepsDescribed, s.dataSteps),
+    storeData: frac(s.storesDescribed, s.stores),
   };
-  const all = [...(expected ? [journeys.recall] : []), ...Object.values(parts)];
+  const deployed = s.deploymentFiles ? frac(s.deployed, s.deployable) : undefined;
+  const entryPoints = s.entryPoints ? s.entryPointsCovered / s.entryPoints : undefined;
+  const all = [
+    ...(expected ? [journeys.recall] : []),
+    ...Object.values(parts),
+    ...(deployed === undefined ? [] : [deployed]),
+    ...(entryPoints === undefined ? [] : [entryPoints]),
+  ];
   return {
     journeys,
     ...parts,
+    deployed,
+    entryPoints,
     overall: all.reduce((x, y) => x + y, 0) / all.length,
     gaps: a.gaps.length,
   };

@@ -52,6 +52,17 @@ export function formatDiscoveryScore(d: DiscoveryScore, verbose = false): string
     `  ${"Mapped".padEnd(14)} ${pct(d.mapped)} of source files belong to an element`,
     `  ${"Connected".padEnd(14)} ${pct(d.connected)} of elements`,
     `  ${"Described".padEnd(14)} ${pct(d.described)} of elements`,
+    `  ${"System".padEnd(14)} ${d.system ? "yes" : "no"}`,
+    `  ${"Step data".padEnd(14)} ${pct(d.stepData)} of steps across a boundary say what they carry`,
+    `  ${"Store data".padEnd(14)} ${pct(d.storeData)} of datastores and queues say what they hold`,
+    ...(d.deployed === undefined
+      ? []
+      : [
+          `  ${"Deployed".padEnd(14)} ${pct(d.deployed)} of containers, datastores, and queues say where they run`,
+        ]),
+    ...(d.entryPoints === undefined
+      ? []
+      : [`  ${"Entry points".padEnd(14)} ${pct(d.entryPoints)} reached by a journey`]),
   ];
   if (verbose && d.journeys.missed.length) {
     out.push(`  missed journeys: ${d.journeys.missed.join(", ")}`);

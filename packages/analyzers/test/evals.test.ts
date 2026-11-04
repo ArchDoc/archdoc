@@ -88,6 +88,28 @@ const floors: Record<string, Floor> = {
     nesting: 1,
     code: 0.96,
   },
+  // Lambdas behind API Gateway, DynamoDB tables, an SQS queue, and a schedule, all
+  // wired in a CDK app or in Terraform, which imports don't show. Init reads the
+  // IaC: the tables with their keys, the queue, SES, which component calls each,
+  // the environments, and the routes, consumer, and schedule as entry points.
+  "serverless-aws": {
+    overall: 0.91,
+    containers: 1,
+    components: 1,
+    datastores: 1,
+    uses: 0.9,
+    nesting: 1,
+    code: 1,
+  },
+  "serverless-aws-tf": {
+    overall: 0.91,
+    containers: 1,
+    components: 1,
+    datastores: 1,
+    uses: 0.9,
+    nesting: 1,
+    code: 1,
+  },
   "ts-monorepo": {
     overall: 0.91,
     containers: 1,
@@ -115,9 +137,10 @@ async function scoreInit(name: string) {
   const score: ModelScore = scoreModel(found, golden, files);
   return {
     score,
-    discovery: scoreDiscovery(found, golden, all, score),
+    discovery: scoreDiscovery(found, golden, all, score, { entryPoints: r.entryPoints }),
+    entryPoints: r.entryPoints,
     golden: scoreDiscovery(golden, golden, all, scoreModel(golden, golden, files)),
-    done: assessDiscovery(found, all),
+    done: assessDiscovery(found, all, { entryPoints: r.entryPoints }),
   };
 }
 
@@ -156,18 +179,43 @@ describe("evals: archdoc init on the fixture repos", () => {
     it(`${name}: discovery`, async () => {
       const { discovery, golden, done } = await scoreInit(name);
       const shown = `\n${formatDiscoveryScore(discovery, true)}`;
-      // Init leaves test and verification code out, and writes no journeys or actors.
+      // Init leaves test and verification code out, writes no journeys, and puts
+      // everything in a system.
       expect(done.stats.testElements, shown).toEqual([]);
       expect(discovery.testExclusion, shown).toBe(1);
       expect(discovery.journeys.found, shown).toBe(0);
+      expect(discovery.system, shown).toBe(1);
       expect(done.gaps.map((g) => g.code)).toEqual(
-        expect.arrayContaining(["done/no-actors", "done/few-journeys", "done/undescribed"]),
+        expect.arrayContaining(["done/few-journeys", "done/undescribed"]),
       );
       // The golden model follows every journey it has, with detailed steps.
       expect(golden.journeys.expected, formatDiscoveryScore(golden)).toBeGreaterThanOrEqual(2);
       expect(golden.journeys.recall, formatDiscoveryScore(golden, true)).toBe(1);
       expect(golden.stepDetail, formatDiscoveryScore(golden)).toBe(1);
       expect(golden.overall).toBeGreaterThan(discovery.overall);
+    });
+  }
+
+  // Infrastructure as code says what imports can't: where it runs, what each table keeps,
+  // and where each flow starts.
+  for (const name of ["serverless-aws", "serverless-aws-tf"]) {
+    it(`${name}: reads the infrastructure as code`, async () => {
+      const { done, entryPoints } = await scoreInit(name);
+      expect(entryPoints.map((e) => `${e.kind} ${e.label} ${e.file}`).sort()).toEqual([
+        "consumer consumes booking-requested services/confirmations/src/confirm-booking.ts",
+        "route GET /bookings services/bookings/src/handlers/list-bookings.ts",
+        "route GET /bookings/{bookingId} services/bookings/src/handlers/get-booking.ts",
+        "route POST /bookings services/bookings/src/handlers/create-booking.ts",
+        "schedule cron(0 2 * * ? *) services/reports/src/nightly-report.ts",
+      ]);
+      // The tables say what they store; the queue waits for the agent to name its message.
+      expect(done.stats.storesDescribed).toBe(2);
+      expect(done.stats.stores).toBe(3);
+      // Everything but the web app, which the IaC doesn't tie to its bucket, says where it runs.
+      expect(done.stats.deployed).toBe(done.stats.deployable - 1);
+      expect(done.gaps.map((g) => g.code)).toContain("done/uncovered-entry-points");
+      expect(done.gaps.map((g) => g.code)).not.toContain("done/no-environments");
+      expect(done.gaps.map((g) => g.code)).not.toContain("done/no-system");
     });
   }
 });
