@@ -101,7 +101,7 @@ elements:
                 description: Prints what archdoc check --seals says
           checker:
             kind: component
-            description: Validates journeys, and compares the model with the code and its rules (undeclared dependencies, rule violations, stale paths including deployment code, orphans, and components outside containers or code outside components). Also says whether a new model is done (archdoc check --done), listing levels over the limits, unmapped code, init's descriptions, test and verification code modeled as elements, unconnected elements, actors, journeys, and steps without an action or code. Build tooling (devDependencies, tool config files) is not a dependency between elements.
+            description: Validates journeys, and compares the model with the code and its rules (undeclared dependencies, rule violations, stale paths including deployment code, orphans, and components outside containers or code outside components). Also says whether a new model is done (archdoc check --done), listing levels over the limits, unmapped code, init's descriptions, test and verification code modeled as elements, unconnected elements, actors, journeys, steps without an action or code, a missing system, entry points no journey starts at, steps that cross a boundary without saying what they carry, datastores and queues without data, and what no environment places when the repository has deployment files. Build tooling (devDependencies, tool config files) is not a dependency between elements.
             code: [{ path: packages/core/src/check/** }]
             uses:
               seals:
@@ -178,7 +178,7 @@ elements:
         kind: container
         deploy: [release.npm]
         technology: TypeScript (ts.preProcessFile), yaml
-        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, check, seal), and init infers a starting model from manifests, compose files, imports, and schema files, layer by layer (containers, their components, and the code in those), with uses from imports at the level where the two sides part.
+        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, check, seal, paths), and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers, their components, and the code in those) inside a system, with uses from imports at the level where the two sides part. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go.
         code: [{ path: packages/analyzers/** }]
         uses:
           source-tree: Reads manifests, imports, and infra files
@@ -210,7 +210,7 @@ elements:
         kind: container
         deploy: [release.npm, workstation.node, ci.actions]
         technology: Node.js, commander
-        description: "`archdoc` command. For agents, the same answers as the MCP tools: init, context, show, check, and seal. For people and CI: validate, view, site, map, diff, report, trace list, mcp, and schema. sync, publish, landscape build, and view --landscape are experimental and left out of --help. eval and migrate are hidden maintainer commands."
+        description: "`archdoc` command. For agents, the same answers as the MCP tools: init, context, show, check, seal, and paths. For people and CI: validate, view, site, map, diff, report, trace list, mcp, and schema. sync, publish, landscape build, and view --landscape are experimental and left out of --help. eval and migrate are hidden maintainer commands."
         code: [{ path: packages/cli/** }]
         uses:
           core:
@@ -244,7 +244,7 @@ elements:
         kind: container
         deploy: [release.npm, workstation.agent]
         technology: Node.js, @modelcontextprotocol/sdk (stdio)
-        description: "MCP tools for agents, one per question: archdoc_context (where to start, from a task, paths, or an error), archdoc_show (one thing by ID), archdoc_check (what's wrong or stale, and with a base, what the change does), archdoc_seal (record checked facts), and archdoc_init (start a model). Only seal and init write."
+        description: "MCP tools for agents, one per question: archdoc_context (where to start, from a task, paths, or an error), archdoc_show (one thing by ID), archdoc_check (what's wrong or stale, and with a base, what the change does), archdoc_seal (record checked facts), archdoc_paths (where flows start and the calls each makes), and archdoc_init (start a model). Only seal and init write."
         code: [{ path: packages/mcp/** }]
         uses:
           core:
@@ -272,7 +272,7 @@ elements:
               graph: Hands the model to the canvas
           graph:
             kind: component
-            description: Decides what's visible (C4 levels, expand, focus, journeys, a landscape's boxes by repo, team, or domain, and an environment's infrastructure), lifts relationships to visible boxes, sizes each use's description, and lays them out with ELK, keeping room for the descriptions.
+            description: Decides what's visible (the C4 context and containers, with one box for a model without a system; expand, focus, journeys, a landscape's boxes by repo, team, or domain, and an environment's infrastructure), lifts relationships to visible boxes, sizes each use's description, and lays them out with ELK, keeping room for the descriptions.
             code: [{ path: apps/web/src/graph/** }]
           ui:
             kind: component
