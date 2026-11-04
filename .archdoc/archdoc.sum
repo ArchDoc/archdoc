@@ -973,7 +973,7 @@ seals:
         - default
   element:toolchain.web.graph:
     kind: structure
-    hash: fnv-26ac36fd449684cd
+    hash: fnv-a129c4642685528c
     files:
       apps/web/src/graph/data.ts:
         - DataFocus
@@ -1007,6 +1007,7 @@ seals:
         - GraphNode
         - GraphNodeKind
         - JourneyEdge
+        - Level
         - OTHERS_LISTED
         - ROWS_BADGE
         - ROWS_COLUMNS
@@ -1021,6 +1022,8 @@ seals:
         - defaultExpanded
         - journeyEdges
         - journeyExpansion
+        - levelExpansion
+        - levelOf
         - liftKey
         - reorderRows
         - rowColumnWidths
@@ -1044,9 +1047,18 @@ seals:
         - buildInfraGraph
         - deployKey
         - envKey
+      apps/web/src/graph/labels.ts:
+        - EdgeLabel
+        - LABEL_LINES
+        - LABEL_WIDTH
+        - edgeLabels
+        - edgeText
+        - labelFor
+        - wrap
       apps/web/src/graph/layout.ts:
         - Box
         - GROUP_HEADER
+        - LabelSizes
         - Layout
         - NODE_HEIGHT
         - NODE_WIDTH
@@ -1123,7 +1135,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-64b728311f078685
+    hash: fnv-17ee2d9c97e57d84
     files:
       apps/web/src/App.tsx:
         - App
@@ -1131,6 +1143,8 @@ seals:
         - Canvas
         - CanvasProps
         - describe
+        - useStoredChoice
+        - useStoredFlag
       apps/web/src/components/DataPanels.tsx:
         - DataDetails
         - FieldDetails
@@ -1153,6 +1167,11 @@ seals:
       apps/web/src/components/Lanes.tsx:
         - Lanes
         - LanesProps
+      apps/web/src/components/Legend.tsx:
+        - Legend
+        - LegendKind
+        - LegendProps
+        - toneOf
       apps/web/src/components/Overview.tsx:
         - Overview
         - OverviewProps

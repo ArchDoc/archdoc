@@ -617,6 +617,38 @@ export function journeyExpansion(model: Model, journey: JourneyNode): string[] {
   return [...out];
 }
 
+/** A C4 level: the system in its context, its containers, or their components. */
+export type Level = "context" | "containers" | "components";
+
+/**
+ * What's open to show a C4 level: nothing for the context (each system one
+ * box, with the people who use it and the systems it talks to), the systems
+ * for their containers, and the systems and containers for their components.
+ */
+export function levelExpansion(model: Model, level: Level): Set<string> {
+  if (level === "context") return new Set();
+  const kinds = level === "containers" ? ["system"] : ["system", "container"];
+  return new Set(
+    [...model.elements.values()]
+      .filter((e) => e.childIds.length > 0 && kinds.includes(e.spec.kind))
+      // Only what can be seen: a box inside a closed one stays closed.
+      .filter((e) =>
+        ancestorsOf(model, e.id).every((a) =>
+          kinds.includes(model.elements.get(a)?.spec.kind ?? ""),
+        ),
+      )
+      .map((e) => e.id),
+  );
+}
+
+/** The C4 level the open boxes show exactly, if they show one. */
+export function levelOf(model: Model, expanded: ReadonlySet<string>): Level | undefined {
+  return (["context", "containers", "components"] as const).find((l) => {
+    const want = levelExpansion(model, l);
+    return want.size === expanded.size && [...want].every((id) => expanded.has(id));
+  });
+}
+
 /** Default view: top-level systems open, everything else closed. */
 export function defaultExpanded(model: Model): Set<string> {
   return new Set(
