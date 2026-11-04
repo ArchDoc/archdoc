@@ -1,5 +1,7 @@
 import { filesUnder, locate, resolveCodeMap } from "../codemap/codemap.js";
-import type { ElementNode, Model } from "../model.js";
+import { compileGlob } from "../codemap/glob.js";
+import { stepMessage } from "../data/flows.js";
+import type { ElementNode, JourneyStep, Model } from "../model.js";
 import { stepCodePath } from "../query/code-index.js";
 import { orphanElements } from "./check.js";
 
@@ -36,9 +38,42 @@ const INIT_DESCRIPTION =
 /** The limits a level of the model is held to, so it can be read top-down. */
 export const LEVEL_LIMITS = { top: 12, children: 10 } as const;
 
+/**
+ * Files that say where and how the system is deployed: compose files,
+ * Terraform, CDK apps, Kubernetes manifests and Helm charts, serverless and
+ * SAM templates, Pulumi, Bicep, and app hosts.
+ */
+const DEPLOYMENT_FILE =
+  /(^|\/)(docker-)?compose(\.[\w-]+)?\.ya?ml$|\.tf$|(^|\/)cdk\.json$|(^|\/)Chart\.yaml$|(^|\/)(k8s|kubernetes|manifests|helm|charts)\/.+\.ya?ml$|(^|\/)serverless\.ya?ml$|(^|\/)(template|samconfig)\.ya?ml$|(^|\/)Pulumi\.ya?ml$|\.bicep$|(^|\/)[^/]*AppHost[^/]*\/(Program|AppHost)\.cs$/;
+
+/** Whether a file says where the system is deployed (see DEPLOYMENT_FILE). */
+export function isDeploymentFile(path: string): boolean {
+  return DEPLOYMENT_FILE.test(path) && !isVerificationCode(path) && !NOT_ARCHITECTURE.test(path);
+}
+
+/** Where a flow starts in the code: a route, a consumer, a scheduled job, a CLI command. */
+export interface EntryPoint {
+  /** route, consumer, schedule, command, handler, or page. */
+  kind: string;
+  /** What starts it, such as `POST /bookings` or `booking-requested`. */
+  label: string;
+  /** The file it's handled in, relative to the repository root. */
+  file: string;
+  symbol?: string | undefined;
+  line?: number | undefined;
+}
+
+export interface DiscoveryOptions {
+  /** The repository's entry points, when they're known (`archdoc paths`): journeys should start from most of them. */
+  entryPoints?: readonly EntryPoint[] | undefined;
+}
+
+/** The share of entry points a done model's journeys start from or pass through. */
+const ENTRY_COVERAGE = 0.8;
+
 /** One thing a model still lacks before it's done. */
 export interface DiscoveryGap {
-  /** done/level-too-wide, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-actors, done/few-journeys, done/short-journey, done/journey-stops-short, done/step-detail, done/step-elsewhere, done/coarse-step. */
+  /** done/level-too-wide, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/step-elsewhere, done/coarse-step, done/store-data, done/no-environments, done/undeployed. */
   code: string;
   message: string;
   element?: string | undefined;
@@ -72,6 +107,22 @@ export interface DiscoveryAssessment {
     preciseSteps: number;
     /** The widest level: how many elements (not code) one parent, or the top, holds. */
     widestLevel: number;
+    /** Whether the model has a system (kind: system), the box the C4 context draws. */
+    system: boolean;
+    /** Steps that carry data across a boundary (into another container, a datastore, a queue, or an external), and how many say what (sends, creates, or changes). */
+    dataSteps: number;
+    dataStepsDescribed: number;
+    /** Datastores and queues, and how many say what they hold (stores, or the messages sent through them). */
+    stores: number;
+    storesDescribed: number;
+    /** Deployment files in the repository (compose, Terraform, CDK, Kubernetes, Helm, and the like). */
+    deploymentFiles: number;
+    /** Containers, datastores, and queues, and how many say where they run (deploy). */
+    deployable: number;
+    deployed: number;
+    /** Entry points known, and how many a journey starts from or passes through; 0 of 0 when they aren't known. */
+    entryPoints: number;
+    entryPointsCovered: number;
   };
 }
 
@@ -90,7 +141,11 @@ const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs|go|py|rs|java|kt|kts|rb|cs|php|swift|sc
  * files, relative to its root, to tell which elements cover test code and
  * whether a step's code exists.
  */
-export function assessDiscovery(model: Model, files: readonly string[]): DiscoveryAssessment {
+export function assessDiscovery(
+  model: Model,
+  files: readonly string[],
+  options: DiscoveryOptions = {},
+): DiscoveryAssessment {
   const gaps: DiscoveryGap[] = [];
   const elements = [...model.elements.values()];
   const arch = elements.filter((e) => ARCHITECTURE.has(e.spec.kind));
@@ -174,8 +229,16 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
   }
 
   // Code no element covers: usually a code: that lists a few files where the directory was meant.
+  // Infrastructure as code a deployment node points at (a CDK app, say) is mapped too.
+  const infra = [...model.deploymentNodes.values()].flatMap((n) =>
+    n.code.map((c) => compileGlob(c.path.endsWith("/") ? `${c.path}**` : c.path)),
+  );
   const sources = files.filter(
-    (f) => SOURCE.test(f) && !isVerificationCode(f) && !NOT_ARCHITECTURE.test(f),
+    (f) =>
+      SOURCE.test(f) &&
+      !isVerificationCode(f) &&
+      !NOT_ARCHITECTURE.test(f) &&
+      !infra.some((re) => re.test(f)),
   );
   const unmappedSet = new Set(map.unmapped);
   const unmapped = sources.filter((f) => unmappedSet.has(f));
@@ -207,6 +270,15 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
     });
   }
 
+  // The system: the box the C4 context draws, with who uses it and what it talks to around it.
+  const system = elements.some((e) => e.spec.kind === "system");
+  if (!system && arch.length) {
+    gaps.push({
+      code: "done/no-system",
+      message: `No system. Wrap the containers, datastores, and queues in one element with kind: system, named for the product (${model.name ?? model.namespace}), and keep externals outside it, so the context view shows the system with who uses it and what it calls.`,
+    });
+  }
+
   // 5. Who uses it, and the flows they follow.
   if (!model.actors.size) {
     gaps.push({
@@ -219,9 +291,130 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
   if (journeys.length < 2) {
     gaps.push({
       code: "done/few-journeys",
-      message: `${journeys.length ? "One journey" : "No journeys"}. Add the two or three flows a newcomer would trace first, starting from the entry points: routes, pages, CLI commands, consumers, and scheduled jobs.`,
+      message: `${journeys.length ? "One journey" : "No journeys"}. Add a journey for each main flow, starting from the entry points: routes, pages, CLI commands, consumers, and scheduled jobs. Most systems have four to ten; mark the main one importance: critical.`,
     });
   }
+  // Every actor who reaches the system starts at least one journey.
+  const inJourney = new Set(
+    journeys.flatMap((j) => [
+      j.spec.actor,
+      ...j.steps.flatMap((s) => [s.from, s.to]).flatMap((t) => (t?.type === "actor" ? [t.id] : [])),
+    ]),
+  );
+  const lonely = [...model.actors.values()].filter(
+    (a) => Object.keys(a.spec.uses ?? {}).length > 0 && !inJourney.has(a.id),
+  );
+  if (lonely.length && journeys.length) {
+    gaps.push({
+      code: "done/actor-without-journey",
+      message: `${lonely.map((a) => a.id).join(", ")} ${lonely.length === 1 ? "uses the system but has" : "use the system but have"} no journey. Trace what ${lonely.length === 1 ? "it does" : "each does"} from the entry point ${lonely.length === 1 ? "it reaches" : "they reach"}, a step per hop.`,
+    });
+  }
+
+  // Journeys should start from most of the entry points: each route, consumer, and job is a flow.
+  const entries = options.entryPoints ?? [];
+  const stepFiles = new Set(
+    journeys.flatMap((j) =>
+      j.steps.flatMap((s) => (s.spec.code ? [stepCodePath(s.spec.code)] : [])),
+    ),
+  );
+  const uncovered = entries.filter((e) => !stepFiles.has(e.file));
+  if (entries.length && (entries.length - uncovered.length) / entries.length < ENTRY_COVERAGE) {
+    const shown = uncovered
+      .slice(0, 10)
+      .map((e) => `${e.label} (${e.file})`)
+      .join(", ");
+    gaps.push({
+      code: "done/uncovered-entry-points",
+      message: `Journeys reach ${entries.length - uncovered.length} of ${entries.length} entry points. Not yet: ${shown}${uncovered.length > 10 ? `, and ${uncovered.length - 10} more` : ""}. Add a journey for each flow a newcomer would need (archdoc_paths shows each one's calls), with a step whose code is the handler's file, or say which you left out and why when you hand over.`,
+    });
+  }
+
+  // The data each boundary-crossing step carries, and what each datastore and queue holds.
+  const unitOf = (id: string): string => {
+    for (
+      let e = model.elements.get(id);
+      e;
+      e = e.parentId ? model.elements.get(e.parentId) : undefined
+    ) {
+      if (e.spec.kind !== "component" && e.spec.kind !== "code") return e.id;
+    }
+    return id;
+  };
+  const crosses = (s: JourneyStep): boolean => {
+    if (s.from?.type === "actor" || s.to?.type === "actor") return false;
+    if (s.from?.type !== "element" || s.to?.type !== "element") return !!s.from && !!s.to;
+    const kinds = [s.from.id, s.to.id].map((id) => model.elements.get(id)?.spec.kind ?? "");
+    return kinds.some((k) => INFRA.has(k)) || unitOf(s.from.id) !== unitOf(s.to.id);
+  };
+  const writes = (s: JourneyStep) =>
+    !!s.spec.creates ||
+    !!s.spec.changes ||
+    Object.values(s.spec.branches ?? {}).some((b) => !!b.creates || !!b.changes);
+  let dataSteps = 0;
+  let dataStepsDescribed = 0;
+  const silentSteps: string[] = [];
+  for (const j of journeys) {
+    const silent: number[] = [];
+    for (const s of j.steps) {
+      if (!crosses(s)) continue;
+      dataSteps++;
+      if (writes(s) || stepMessage(model, s)) dataStepsDescribed++;
+      else silent.push(s.index + 1);
+    }
+    if (silent.length)
+      silentSteps.push(`"${j.id}" step${silent.length === 1 ? "" : "s"} ${silent.join(", ")}`);
+  }
+  if (silentSteps.length) {
+    gaps.push({
+      code: "done/step-data",
+      message: `Steps that cross into another container, a datastore, a queue, or an external don't say what they carry: ${silentSteps.slice(0, 8).join("; ")}${silentSteps.length > 8 ? `, and ${silentSteps.length - 8} more journeys` : ""}. Read the request, message, or record the code builds, add it under data: with its fields (classification: pii for personal data), and name it with sends: on the step or its use, or creates:/changes: on a step that writes a datastore.`,
+    });
+  }
+  const holders = arch.filter((e) => e.spec.kind === "datastore" || e.spec.kind === "queue");
+  const sendsThrough = (id: string) =>
+    model.relationships.some(
+      (r) => r.sends.length > 0 && [r.from, r.to].some((t) => t.type === "element" && t.id === id),
+    ) ||
+    journeys.some((j) =>
+      j.steps.some(
+        (s) =>
+          [s.from, s.to].some((t) => t?.type === "element" && t.id === id) &&
+          (writes(s) || !!s.spec.sends),
+      ),
+    );
+  const emptyHolders = holders.filter((e) =>
+    e.spec.kind === "datastore" ? !Object.keys(e.spec.stores ?? {}).length : !sendsThrough(e.id),
+  );
+  if (emptyHolders.length) {
+    gaps.push({
+      code: "done/store-data",
+      message: `${emptyHolders.map((e) => e.id).join(", ")} ${emptyHolders.length === 1 ? "doesn't" : "don't"} say what ${emptyHolders.length === 1 ? "it holds" : "they hold"}. For a datastore, add stores: with each table or collection, its key, and the data entry it holds (from the schema, migrations, ORM models, or the IaC that creates it, such as a DynamoDB table's keys). For a queue, name the messages sent through it with sends: on the uses that publish and consume them.`,
+    });
+  }
+
+  // Where it runs: the deployment files say, so the model should too.
+  const deploymentFiles = files.filter(isDeploymentFile);
+  const deployable = arch.filter(
+    (e) => ["container", "datastore", "queue"].includes(e.spec.kind) && e.spec.status !== "planned",
+  );
+  const deployedIds = new Set(model.deployments.map((d) => d.element));
+  const deployed = deployable.filter(
+    (e) => deployedIds.has(e.id) || [...deployedIds].some((d) => e.id.startsWith(`${d}.`)),
+  );
+  if (deploymentFiles.length && !model.environments.size) {
+    gaps.push({
+      code: "done/no-environments",
+      message: `No environments, though the repository has deployment files (${deploymentFiles.slice(0, 5).join(", ")}${deploymentFiles.length > 5 ? `, and ${deploymentFiles.length - 5} more` : ""}). Add environments: with one entry per environment they define (production, staging, local) and the infrastructure in each (account or region, cluster, serverless, managed services), each with code: pointing at its file. Then give each container, datastore, and queue a deploy:.`,
+    });
+  } else if (model.environments.size && deployed.length < deployable.length) {
+    const missing = deployable.filter((e) => !deployed.includes(e)).map((e) => e.id);
+    gaps.push({
+      code: "done/undeployed",
+      message: `${missing.slice(0, 12).join(", ")}${missing.length > 12 ? `, and ${missing.length - 12} more` : ""} ${missing.length === 1 ? "has" : "have"} no deploy:. Say where each runs, such as deploy: [production.aws.lambda], from the deployment files that define it.`,
+    });
+  }
+
   const leaf = (id: string) =>
     !(model.elements.get(id)?.childIds ?? []).some(
       (c) => model.elements.get(c)?.spec.kind !== "code",
@@ -333,6 +526,16 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
       detailedSteps,
       preciseSteps,
       widestLevel: widest,
+      system,
+      dataSteps,
+      dataStepsDescribed,
+      stores: holders.length,
+      storesDescribed: holders.length - emptyHolders.length,
+      deploymentFiles: deploymentFiles.length,
+      deployable: deployable.length,
+      deployed: deployed.length,
+      entryPoints: entries.length,
+      entryPointsCovered: entries.length - uncovered.length,
     },
   };
 }
@@ -344,25 +547,34 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0): string {
   const ok = !a.gaps.length && !errors;
   out.push(
     ok
-      ? "✓ The model is done: every level is small, every element is described and connected, no test code is modeled, and the main flows are journeys."
+      ? "✓ The model is done: every level is small, every element is described and connected, no test code is modeled, the main flows are journeys that say what they carry, and the model says where it runs."
       : `✗ Not done yet: ${a.gaps.length} thing${a.gaps.length === 1 ? "" : "s"} to finish${errors ? `, and archdoc check has ${errors} error${errors === 1 ? "" : "s"}` : ""}.`,
     "",
     `  ${s.described} of ${s.elements} elements described, ${s.orphans.length} unconnected, widest level ${s.widestLevel}`,
     `  ${s.sourceFiles - s.unmappedFiles} of ${s.sourceFiles} source files belong to an element`,
     `  ${s.testElements.length} test or verification element${s.testElements.length === 1 ? "" : "s"}; ${s.testFilesModeled} of ${s.testFiles} test files modeled`,
     `  ${s.actors} actor${s.actors === 1 ? "" : "s"}, ${s.journeys} journey${s.journeys === 1 ? "" : "s"}, ${s.detailedSteps} of ${s.steps} steps with an action and code`,
+    `  ${s.dataStepsDescribed} of ${s.dataSteps} steps across a boundary say what they carry; ${s.storesDescribed} of ${s.stores} datastores and queues say what they hold`,
+    `  ${s.deployed} of ${s.deployable} containers, datastores, and queues say where they run (${s.deploymentFiles} deployment file${s.deploymentFiles === 1 ? "" : "s"})${s.entryPoints ? `; journeys reach ${s.entryPointsCovered} of ${s.entryPoints} entry points` : ""}`,
   );
   const order = [
     "done/test-code",
     "done/level-too-wide",
     "done/unmapped-code",
     "done/orphan",
+    "done/no-system",
     "done/undescribed",
+    "done/no-environments",
+    "done/undeployed",
+    "done/store-data",
     "done/no-actors",
     "done/few-journeys",
+    "done/actor-without-journey",
+    "done/uncovered-entry-points",
     "done/short-journey",
     "done/journey-stops-short",
     "done/step-detail",
+    "done/step-data",
     "done/step-elsewhere",
     "done/coarse-step",
   ];

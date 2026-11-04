@@ -4,6 +4,8 @@ import { basename, dirname, join, posix } from "node:path";
 import {
   buildModel,
   type CodeIndex,
+  type EntryPoint,
+  isDeploymentFile,
   isDevTooling,
   isVerificationCode,
   listRepoFiles,
@@ -12,6 +14,8 @@ import {
 } from "@archdoc/core";
 import { parse, stringify } from "yaml";
 import { type AnalyzerContext, contextFor } from "./api.js";
+import { type IacFindings, readIac } from "./iac.js";
+import { findEntryPoints } from "./paths.js";
 import { analyze } from "./run.js";
 import { indexCode } from "./symbols.js";
 
@@ -43,7 +47,13 @@ export interface InitResult {
     data: number;
     /** Source files an element claims, of all source files. */
     coverage: { claimed: number; total: number };
+    /** Environments, from compose files and infrastructure as code. */
+    environments: number;
   };
+  /** Where flows start: routes, queue consumers, schedules, CLI commands. */
+  entryPoints: EntryPoint[];
+  /** What to read before reshaping the model: the docs, and the files that say how it's deployed. */
+  brief: { docs: string[]; deployment: string[] };
   /** Problems the model would have; init writes nothing when there are errors. */
   problems: string[];
 }
@@ -51,7 +61,7 @@ export interface InitResult {
 interface Unit {
   key: string;
   dir: string;
-  kind: "container" | "component" | "code" | "datastore" | "queue";
+  kind: "container" | "component" | "code" | "datastore" | "queue" | "external";
   description?: string | undefined;
   technology?: string | undefined;
   /** Code paths; datastores and queues from images have none. */
@@ -66,6 +76,18 @@ interface Unit {
   source: string;
   /** Run by a compose file. */
   composed?: boolean | undefined;
+  /** Where it runs: deployment nodes such as production.aws.lambda. */
+  deploy?: string[] | undefined;
+}
+
+/** What init writes besides the elements: who starts the system, and where it runs. */
+interface Extras {
+  actors: Record<string, Record<string, unknown>>;
+  environments: Record<string, Record<string, unknown>>;
+  /** Data entries the IaC declares, such as a DynamoDB table's keys. */
+  data: Record<string, Record<string, unknown>>;
+  /** Where flows start: routes, consumers, schedules. */
+  entryPoints: EntryPoint[];
 }
 
 const INFERRED = { source: "inferred", by: "archdoc init" } as const;
@@ -101,11 +123,18 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     return unit;
   };
 
-  // 1. Packages and modules, from their manifests.
-  for (const m of await manifests(ctx)) add(m, m.key);
+  // 1. Packages and modules, from their manifests. A CDK app is how the system is
+  // deployed, not a part of it: its code goes with the environments it defines.
+  const iac = await readIac(ctx).catch((): IacFindings[] => []);
+  const cdkDirs = new Set(iac.filter((f) => f.tool === "cdk").map((f) => f.dir));
+  for (const m of await manifests(ctx)) {
+    if (m.kind === "container" && cdkDirs.has(m.dir)) continue;
+    add(m, m.key);
+  }
   // Directories under the conventional roots that no manifest claims, such as
   // an integration written in Markdown and YAML, or code without a manifest.
-  const claimedBy = (f: string) => ownerOf(units, f) && units.length > 0;
+  const iacFiles = new Set(iac.flatMap((f) => f.files));
+  const claimedBy = (f: string) => (ownerOf(units, f) && units.length > 0) || iacFiles.has(f);
   for (const dir of codeDirs(files, "", (f) => !claimedBy(f))) {
     add(await directoryUnit(ctx, dir), basename(dir));
   }
@@ -137,8 +166,10 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     unit.components = components(unit.dir, sources, exportsOf);
   }
 
-  // 2. Datastores, queues, and dependencies, from compose files.
-  await compose(ctx, units, add);
+  // 2. Datastores, queues, and dependencies, from compose files and infrastructure as code.
+  const extras: Extras = { actors: {}, environments: {}, data: {}, entryPoints: [] };
+  await compose(ctx, units, add, extras);
+  await infrastructure(ctx, units, add, iac, extras);
 
   // 3. Uses, from the dependencies analyzers see, mapped onto the elements the
   // way archdoc check maps them, and declared at the level where the two
@@ -171,19 +202,39 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     from.uses.set(to.key, `Imports ${e.dependencies[0]?.specifier ?? to.key}`);
   }
 
+  // Where flows start: what the agent traces as journeys.
+  extras.entryPoints = await findEntryPoints(ctx, iac).catch(() => []);
+
   // 4. Data and contracts, from schema files.
-  const data = await schemas(ctx, units, add);
+  const data = { ...extras.data, ...(await schemas(ctx, units, add)) };
 
   // The model, as YAML, and checked before it's written.
   const namespace = sanitize(name ?? (await rootName(ctx)) ?? basename(root));
-  const doc = modelDoc(namespace, units);
+  // Who starts the system and where it runs get files of their own, as journeys do
+  // (.archdoc/journeys/<id>.yaml), so each edit is to a small file.
+  const { actors, environments, ...doc } = modelDoc(namespace, units, extras) as Record<
+    string,
+    unknown
+  >;
   const files_: InitResult["files"] = [
     { path: ".archdoc/archdoc.yaml", text: HEADER + stringify(doc, YAML) + NEXT },
   ];
+  if (actors) {
+    files_.push({
+      path: ".archdoc/actors.yaml",
+      text: `# Who and what uses the system. Init only knows the schedulers infrastructure as code declares: add the people and systems behind each entry point.\n${stringify({ actors }, YAML)}`,
+    });
+  }
+  if (environments) {
+    files_.push({
+      path: ".archdoc/environments.yaml",
+      text: `# Where the system runs, from compose files and infrastructure as code. Elements say which node they run on with deploy:.\n${stringify({ environments }, YAML)}`,
+    });
+  }
   if (Object.keys(data).length) {
     files_.push({
       path: ".archdoc/data.yaml",
-      text: `# What the schema files say this repository stores and sends. Fields come from the source.\n${stringify({ data }, YAML)}`,
+      text: `# What the schema files and infrastructure as code say this repository stores and sends. Fields come from the source.\n${stringify({ data }, YAML)}`,
     });
   }
   const model = buildModel(
@@ -196,7 +247,8 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     .filter((d) => d.severity === "error")
     .map((d) => `${d.code}: ${d.message}`);
 
-  const source = files.filter((f) => SOURCE.test(f) && !SKIP_DIR.test(f));
+  // A CDK app's code is how the system is deployed: the environments point at it.
+  const source = files.filter((f) => SOURCE.test(f) && !SKIP_DIR.test(f) && !iacFiles.has(f));
   const claimed = source.filter((f) => locate(model, f).element).length;
   const all: Unit[] = [];
   const flat = (list: Unit[]) => {
@@ -217,6 +269,20 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
       contracts: all.reduce((n, u) => n + u.provides.length, 0),
       data: Object.keys(data).length,
       coverage: { claimed, total: source.length },
+      environments: Object.keys(extras.environments).length,
+    },
+    entryPoints: extras.entryPoints,
+    brief: {
+      docs: files
+        .filter(
+          (f) =>
+            /^(README|ARCHITECTURE|DESIGN)[^/]*\.md$/i.test(f) ||
+            /^(docs?|architecture|adr|design)\/[^/]*\.md$/i.test(f) ||
+            /^[^/]+\/[^/]+\/README\.md$|^[^/]+\/README\.md$/i.test(f),
+        )
+        .filter((f) => !SKIP_DIR.test(f) || /^docs?\//.test(f))
+        .slice(0, 12),
+      deployment: [...new Set([...files.filter(isDeploymentFile), ...iacFiles])].slice(0, 15),
     },
     problems,
   };
@@ -251,16 +317,45 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
   const pct = s.coverage.total ? Math.round((100 * s.coverage.claimed) / s.coverage.total) : 100;
   const out = [
     r.written
-      ? `✓ Wrote ${r.files.map((f) => f.path).join(" and ")}.`
+      ? `✓ Wrote ${list(r.files.map((f) => f.path))}.`
       : r.problems.length
         ? "✗ Wrote nothing: the model init inferred doesn't validate."
-        : `Would write ${r.files.map((f) => f.path).join(" and ")}:`,
+        : `Would write ${list(r.files.map((f) => f.path))}:`,
     `  ${s.elements} container${s.elements === 1 ? "" : "s"}, ${s.components} component${s.components === 1 ? "" : "s"} in them, ${s.code} code element${s.code === 1 ? "" : "s"} in those`,
     `  ${s.uses} use${s.uses === 1 ? "" : "s"}, ${s.datastores} datastore${s.datastores === 1 ? "" : "s"} or queue${s.datastores === 1 ? "" : "s"}, ${s.contracts} contract${s.contracts === 1 ? "" : "s"}, ${s.data} data entr${s.data === 1 ? "y" : "ies"}`,
     `  ${s.coverage.claimed} of ${s.coverage.total} source files (${pct}%) belong to an element`,
   ];
+  if (s.environments) {
+    out.push(
+      `  ${s.environments} environment${s.environments === 1 ? "" : "s"}, from compose files and infrastructure as code`,
+    );
+  }
   for (const p of r.problems) out.push(`  ✗ ${p}`);
   if (!r.problems.length) {
+    const b = r.brief;
+    if (b.docs.length) out.push("", "Read first:", ...b.docs.map((d) => `  ${d}`));
+    if (b.deployment.length) {
+      out.push(
+        "",
+        "How it's deployed (the environments, and the datastores, queues, and services each part reaches):",
+        ...b.deployment.map((d) => `  ${d}`),
+      );
+    }
+    const flows = r.entryPoints.filter((e) => e.kind !== "main");
+    if (r.entryPoints.length) {
+      out.push(
+        "",
+        `Where flows start (${r.entryPoints.length}); archdoc_paths shows the calls each one makes:`,
+      );
+      const width = Math.min(36, Math.max(...r.entryPoints.map((e) => e.label.length)));
+      for (const e of r.entryPoints.slice(0, 30)) {
+        out.push(
+          `  ${e.kind.padEnd(8)} ${e.label.padEnd(width)}  ${e.file}${e.symbol ? `#${e.symbol}` : ""}`,
+        );
+      }
+      if (r.entryPoints.length > 30)
+        out.push(`  … and ${r.entryPoints.length - 30} more (archdoc paths lists them all)`);
+    }
     out.push(
       "",
       "Everything is marked inferred, and tests and other verification code are left out. Next, with the code open:",
@@ -270,11 +365,13 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
       "     over HTTP, queues, and schedulers. Find how each unconnected element is reached.",
       "  3. Describe each element: what it does, not what it's called (archdoc show <id> --code).",
       "     Keep the layers nested: a component inside a container, code inside a component.",
-      "  4. Add actors from the entry points (routes, pages, CLI commands, consumers, scheduled jobs),",
-      "     and trace the two to four main flows through the code as journeys, a step per hop,",
-      "     each with an action and the code where it happens.",
-      "  5. archdoc check --done until it says the model is done, then ask a person to review it.",
-      "  6. Once they accept it, remove the provenance blocks and run archdoc seal --all.",
+      `  4. Add actors from the entry points, and trace ${flows.length >= 3 ? "a journey for each main flow above" : "the main flows"} through the`,
+      "     code with archdoc_paths (not grep), a step per hop, each with an action, the code where it",
+      "     happens, and the data it carries (sends:, creates:, changes:).",
+      "  5. Say what each datastore stores and each queue carries (data:, stores:, sends:), and where each",
+      "     part runs (environments:, deploy:) from the deployment files.",
+      "  6. archdoc check --done until it says the model is done, then ask a person to review it.",
+      "  7. Once they accept it, remove the provenance blocks and run archdoc seal --all.",
     );
     if (!r.written) out.push("", ...r.files.flatMap((f) => [`# ${f.path}`, f.text]));
   }
@@ -282,13 +379,14 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
 }
 
 const HEADER = `# Written by archdoc init from the repository's manifests, compose files,
-# imports, and schema files. Everything is marked inferred: check it against
+# imports, schema files, and infrastructure as code. Everything is marked inferred: check it against
 # the code, describe what each element does, then remove the provenance blocks.
 `;
 
 const NEXT = `
 # Who uses this system, and how: init can't tell. Trace the main flows through the
-# code, a step per hop, then run archdoc check --done.
+# code (archdoc paths), a step per hop, one journey per file in .archdoc/journeys/,
+# then run archdoc check --done.
 # actors:
 #   customer: { kind: person, uses: { web: Shops } }
 # journeys:
@@ -301,7 +399,7 @@ const NEXT = `
 #       - { from: web, to: api, action: Posts the cart, code: apps/web/src/api.ts }
 `;
 
-function modelDoc(namespace: string, units: Unit[]) {
+function modelDoc(namespace: string, units: Unit[], extras?: Extras) {
   const element = (u: Unit): Record<string, unknown> => {
     const out: Record<string, unknown> = { kind: u.kind };
     if (u.technology) out.technology = u.technology;
@@ -312,6 +410,7 @@ function modelDoc(namespace: string, units: Unit[]) {
     else if (u.code.length) out.code = u.code.length === 1 ? u.code[0] : u.code;
     if (u.provides.length) out.provides = u.provides.map((api) => ({ api }));
     if (u.stores.size) out.stores = Object.fromEntries(u.stores);
+    if (extras && u.deploy?.length) out.deploy = u.deploy;
     if (u.uses.size) {
       out.uses = Object.fromEntries(
         [...u.uses].map(([to, description]) => [to, { description, provenance: INFERRED }]),
@@ -323,10 +422,31 @@ function modelDoc(namespace: string, units: Unit[]) {
     out.provenance = INFERRED;
     return out;
   };
+  if (!extras) {
+    return {
+      archdoc: "2.0",
+      namespace,
+      elements: Object.fromEntries(units.map((u) => [u.key, element(u)])),
+    };
+  }
+  // One system around everything but the externals, so the context view has a box to draw.
+  const inside = units.filter((u) => u.kind !== "external");
+  const outside = units.filter((u) => u.kind === "external");
+  const system = units.some((u) => u.key === namespace) ? `${namespace}-system` : namespace;
   return {
     archdoc: "2.0",
     namespace,
-    elements: Object.fromEntries(units.map((u) => [u.key, element(u)])),
+    ...(Object.keys(extras.actors).length ? { actors: extras.actors } : {}),
+    elements: {
+      [system]: {
+        kind: "system",
+        description: `The ${namespace} system: everything this repository builds and runs.`,
+        elements: Object.fromEntries(inside.map((u) => [u.key, element(u)])),
+        provenance: INFERRED,
+      },
+      ...Object.fromEntries(outside.map((u) => [u.key, element(u)])),
+    },
+    ...(Object.keys(extras.environments).length ? { environments: extras.environments } : {}),
   };
 }
 
@@ -627,6 +747,7 @@ async function compose(
   ctx: AnalyzerContext,
   units: Unit[],
   add: (u: Omit<Found, "key">, key: string) => Unit,
+  extras: Extras,
 ) {
   const files = ctx.files.filter(
     (f) => /(^|\/)(docker-)?compose(\.[\w-]+)?\.ya?ml$/.test(f) && !SKIP_DIR.test(f),
@@ -670,6 +791,22 @@ async function compose(
             name,
           ),
       );
+    }
+    // A compose file runs them on one host: the local environment.
+    if (byService.size) {
+      extras.environments.local ??= {
+        description: "A developer's machine.",
+        nodes: {},
+        provenance: INFERRED,
+      };
+      const env = extras.environments.local as { nodes: Record<string, unknown> };
+      const node = Object.keys(env.nodes).length
+        ? `compose-${Object.keys(env.nodes).length + 1}`
+        : "compose";
+      env.nodes[node] = { kind: "host", technology: "Docker Compose", code: f };
+      for (const u of new Set(byService.values())) {
+        u.deploy = [...new Set([...(u.deploy ?? []), `local.${node}`])];
+      }
     }
     for (const [name, svc] of Object.entries(doc.services ?? {})) {
       const from = byService.get(name);
@@ -958,7 +1095,273 @@ function emptyResult(): InitResult {
       contracts: 0,
       data: 0,
       coverage: { claimed: 0, total: 0 },
+      environments: 0,
     },
+    entryPoints: [],
+    brief: { docs: [], deployment: [] },
     problems: [],
   };
+}
+
+/** What each SDK a component imports reaches, to put a use on the component that makes the call. */
+const SDK: [RegExp, RegExp][] = [
+  [/DynamoDB/, /@aws-sdk\/(client-dynamodb|lib-dynamodb)|\bdynamodb\b|DynamoDB/],
+  [
+    /RDS/,
+    /\bpg\b|postgres|mysql|prisma|knex|sequelize|typeorm|drizzle|sqlalchemy|psycopg|database\/sql/,
+  ],
+  [/SQS/, /@aws-sdk\/client-sqs|\bsqs\b|SQS/],
+  [/SNS/, /@aws-sdk\/client-sns|\bsns\b|SNS/],
+  [/EventBridge/, /@aws-sdk\/client-eventbridge|eventbridge|EventBridge/],
+  [/Kinesis/, /@aws-sdk\/client-kinesis|kinesis/],
+  [/SES/, /@aws-sdk\/client-sesv?2?|\bses\b|SES/],
+  [/Bedrock/, /@aws-sdk\/client-bedrock|bedrock/],
+  [/Secrets Manager/, /@aws-sdk\/client-secrets-manager|secretsmanager/],
+];
+/** The AWS SDK as a whole (v2, boto3): any of them, when no client says which. */
+const ANY_AWS_SDK = /["']aws-sdk["']|\bboto3\b/;
+
+const ACCESS: Record<string, string> = {
+  read: "Reads",
+  write: "Writes",
+  readwrite: "Reads and writes",
+  send: "Sends messages to",
+  consume: "Consumes",
+  publish: "Publishes to",
+  call: "Calls",
+};
+
+/**
+ * Datastores, queues, and services from infrastructure as code (Terraform and
+ * CDK), with what each function is granted as uses from the code that makes
+ * the call, the keys of each table as data, who starts each function on a
+ * schedule, and the environments it deploys to.
+ */
+async function infrastructure(
+  ctx: AnalyzerContext,
+  units: Unit[],
+  add: (u: Omit<Found, "key">, key: string) => Unit,
+  findings: IacFindings[],
+  extras: Extras,
+) {
+  const read = (f: string) => ctx.read(f).catch(() => "");
+  const keyFor = (name: string, suffix: string) => {
+    const k = sanitize(name);
+    return units.some((u) => u.key === k) ? `${k}-${suffix}` : k;
+  };
+  for (const iac of findings) {
+    const byId = new Map<string, Unit>();
+    for (const t of iac.tables) {
+      const name = t.name ?? t.id.split(".").pop() ?? "table";
+      const unit = add(
+        {
+          dir: "",
+          kind: "datastore",
+          technology: t.technology,
+          code: [],
+          source: `the ${name} table in ${t.file}`,
+        },
+        keyFor(name, "table"),
+      );
+      byId.set(t.id, unit);
+      if (!t.keys.length) continue;
+      const entity = uniqueEntity(extras.data, entityName(name));
+      const fields: Record<string, Record<string, string>> = {};
+      for (const k of [...t.keys, ...t.attributes]) {
+        fields[k.name] = k.type ? { type: k.type } : {};
+      }
+      extras.data[entity] = {
+        kind: "entity",
+        description: `A record in the ${name} table. ${t.file} declares its keys${t.indexes.length ? ` and indexes (${t.indexes.join(", ")})` : ""}; add the other attributes from the code that writes it.`,
+        fields,
+        provenance: INFERRED,
+      };
+      const pk = t.keys.find((k) => k.role === "partition")?.name;
+      unit.stores.set(name, { entity, ...(pk ? { key: pk } : {}) } as { entity: string });
+    }
+    for (const q of iac.queues) {
+      const name = q.name ?? q.id.split(".").pop() ?? "queue";
+      byId.set(
+        q.id,
+        add(
+          {
+            dir: "",
+            kind: "queue",
+            technology: q.technology,
+            code: [],
+            source: `the ${name} ${q.kind} in ${q.file}`,
+          },
+          keyFor(name, q.kind),
+        ),
+      );
+    }
+    for (const s of iac.services) {
+      const existing = units.find((u) => u.kind === "external" && u.technology === s.technology);
+      byId.set(
+        s.id,
+        existing ??
+          add(
+            {
+              dir: "",
+              kind: "external",
+              technology: s.technology,
+              code: [],
+              source: `${s.technology}, which the functions in ${iac.dir || "the repository"} call`,
+            },
+            s.id,
+          ),
+      );
+    }
+
+    // Each function's uses, from the code that makes the call.
+    const fnUnit = new Map<string, Unit>();
+    for (const fn of iac.functions) {
+      if (!fn.handler) continue;
+      const container = ownerOf(units, fn.handler);
+      if (!container) continue;
+      fnUnit.set(fn.id, container);
+      if (!container.technology?.includes("Lambda")) {
+        container.technology = container.technology
+          ? `${container.technology}, AWS Lambda`
+          : fn.technology;
+      }
+      const handlerPart = partHolding(container, fn.handler);
+      for (const u of fn.uses) {
+        const to = byId.get(u.to);
+        if (!to) continue;
+        const caller =
+          u.access === "consume"
+            ? (handlerPart ?? container)
+            : ((await callerOf(container, to, read, ctx.files)) ?? container);
+        if (caller === to || caller.uses.has(to.key)) continue;
+        caller.uses.set(
+          to.key,
+          `${ACCESS[u.access]} ${to.key} (${iac.files.includes(fn.file) ? fn.file : iac.dir})`,
+        );
+      }
+    }
+
+    // Where flows start, and who starts the scheduled ones.
+    for (const t of iac.triggers) {
+      const fn = iac.functions.find((f) => f.id === t.function);
+      if (!fn?.handler) continue;
+      const unit = fnUnit.get(fn.id);
+      if (t.kind === "schedule" && unit) {
+        extras.actors.scheduler ??= {
+          kind: "agent",
+          description: `What runs the scheduled jobs (${iac.tool === "cdk" ? "EventBridge rules in the CDK app" : "EventBridge rules in Terraform"}).`,
+          uses: {},
+          provenance: INFERRED,
+        };
+        const actor = extras.actors.scheduler as { uses: Record<string, unknown> };
+        actor.uses[unit.key] = {
+          description: `Runs ${fn.name ?? fn.id} on ${t.label} (${t.file})`,
+          provenance: INFERRED,
+        };
+      }
+    }
+
+    // Environments, and what's deployed to each.
+    const kinds = new Set([...byId.values()].map((u) => u.technology ?? ""));
+    for (const env of iac.environments) {
+      const nodes: Record<string, Record<string, unknown>> = {};
+      const node = (id: string, spec: Record<string, unknown>) => {
+        nodes[id] = spec;
+        return `${env.id}.aws.${id}`;
+      };
+      const lambda = iac.functions.length
+        ? node("lambda", { kind: "serverless", technology: "AWS Lambda" })
+        : undefined;
+      const managed = new Map<string, string>();
+      for (const [re, id, technology] of [
+        [/DynamoDB/, "dynamodb", "Amazon DynamoDB"],
+        [/RDS/, "rds", "Amazon RDS"],
+        [/SQS/, "sqs", "Amazon SQS"],
+        [/SNS/, "sns", "Amazon SNS"],
+        [/EventBridge/, "eventbridge", "Amazon EventBridge"],
+        [/Kinesis/, "kinesis", "Amazon Kinesis"],
+      ] as const) {
+        const tech = [...kinds].find((k) => re.test(k));
+        if (tech) managed.set(tech, node(id, { kind: "managed", technology }));
+      }
+      if (iac.buckets.some((b) => b.website))
+        node("site", { kind: "cdn", technology: "Amazon S3 website" });
+      extras.environments[env.id] = {
+        ...(env.name && env.name !== env.id ? { name: env.name } : {}),
+        description: `What ${iac.tool === "cdk" ? `the ${env.name ?? env.id} stack` : `the Terraform in ${iac.dir || "the repository"}`} deploys${env.region ? ` to ${env.region}` : ""}.`,
+        nodes: {
+          aws: {
+            kind: "region",
+            name: `AWS${env.region ? ` ${env.region}` : ""}`,
+            technology: "AWS",
+            code: env.code.length === 1 ? env.code[0] : env.code,
+            nodes,
+          },
+        },
+        provenance: INFERRED,
+      };
+      for (const u of new Set(fnUnit.values())) {
+        if (lambda) u.deploy = [...new Set([...(u.deploy ?? []), lambda])];
+      }
+      for (const u of byId.values()) {
+        const at = managed.get(u.technology ?? "");
+        if (at) u.deploy = [...new Set([...(u.deploy ?? []), at])];
+      }
+    }
+  }
+}
+
+/** The component inside a container whose code holds a file. */
+function partHolding(container: Unit, file: string): Unit | undefined {
+  return container.components.find((c) =>
+    c.code.some((p) => p === file || (p.endsWith("/**") && file.startsWith(p.slice(0, -2)))),
+  );
+}
+
+/**
+ * The component that makes calls to a datastore, queue, or service: the only
+ * one in the container whose code imports the SDK for it.
+ */
+async function callerOf(
+  container: Unit,
+  to: Unit,
+  read: (f: string) => Promise<string>,
+  files: readonly string[],
+): Promise<Unit | undefined> {
+  const sdk = SDK.find(([tech]) => tech.test(to.technology ?? ""))?.[1];
+  if (!sdk || !container.components.length) return undefined;
+  const importsOf = new Map<Unit, string>();
+  for (const c of container.components) {
+    const inside = files.filter((f) =>
+      c.code.some((p) => p === f || (p.endsWith("/**") && f.startsWith(p.slice(0, -2)))),
+    );
+    const lines: string[] = [];
+    for (const f of inside.filter(isSource)) {
+      lines.push(
+        ...(await read(f))
+          .split("\n")
+          .filter((l) => /^\s*(import\b|from\b|export .* from|.*require\()/.test(l)),
+      );
+    }
+    importsOf.set(c, lines.join("\n"));
+  }
+  for (const re of [sdk, ANY_AWS_SDK]) {
+    const hits = container.components.filter((c) => re.test(importsOf.get(c) ?? ""));
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) return undefined;
+  }
+  return undefined;
+}
+
+function uniqueEntity(data: Record<string, unknown>, name: string): string {
+  let k = name;
+  for (let i = 2; data[k]; i++) k = `${name}${i}`;
+  return k;
+}
+
+/** a, b, and c. */
+function list(items: string[]): string {
+  return items.length <= 2
+    ? items.join(" and ")
+    : `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }

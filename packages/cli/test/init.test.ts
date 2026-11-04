@@ -61,7 +61,7 @@ describe("archdoc init", () => {
     expect(yaml).toContain("technology: TypeScript, React");
     expect((await run("validate")).code).toBe(0);
     const context = await run("context", "apps/web/src/app.tsx");
-    expect(context.out).toContain("(web)");
+    expect(context.out).toContain(".web)");
     // Nothing connects to the elements until someone adds actors and journeys; the use is declared.
     const check = await run("check");
     expect(check.out).not.toContain("doesn't declare");

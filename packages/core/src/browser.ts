@@ -15,7 +15,10 @@ export {
   assessDiscovery,
   type DiscoveryAssessment,
   type DiscoveryGap,
+  type DiscoveryOptions,
+  type EntryPoint,
   formatDiscovery,
+  isDeploymentFile,
   isVerificationCode,
   LEVEL_LIMITS,
 } from "./check/discovery.js";

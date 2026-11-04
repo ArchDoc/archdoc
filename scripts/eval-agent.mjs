@@ -115,7 +115,9 @@ const {
   scoreDiscovery,
   scoreModel,
 } = await import(join(here, "packages/core/dist/index.js"));
-const { inferModel } = await import(join(here, "packages/analyzers/dist/index.js"));
+const { FLOW_KINDS, contextFor, findEntryPoints, inferModel } = await import(
+  join(here, "packages/analyzers/dist/index.js")
+);
 
 // What Claude Code gets: the skill as a plugin, the MCP server and the CLI from this build.
 const kit = mkdtempSync(join(tmpdir(), "archdoc-eval-kit-"));
@@ -172,6 +174,38 @@ function cached(name) {
 const repoFiles = async (root) =>
   (await listRepoFiles(root)).filter((f) => !f.startsWith(".archdoc/"));
 const sourceFiles = async (root) => (await repoFiles(root)).filter((f) => SOURCE.test(f));
+
+/** Where the repository's flows start (routes, consumers, schedules, commands, pages), for scoreDiscovery. */
+const flows = async (root) => {
+  const files = await repoFiles(root);
+  const found = await findEntryPoints(contextFor(root, files)).catch(() => []);
+  return { entryPoints: found.filter((e) => FLOW_KINDS.has(e.kind)) };
+};
+
+// A Bash command that runs a script the agent wrote: a heredoc, or an inline program.
+const SCRIPT = /<<-?\s*['"]?\w+|\b(?:python3?|node|ruby|perl)\s+(?:-[ce]\b|-\s|-$)|\bbash\s+-c\b/;
+
+/** How the agent spent its session: tool calls, Bash calls, and scripts it wrote to explore. */
+function effort(transcript) {
+  const out = { tools: 0, bash: 0, scripts: 0 };
+  for (const line of transcript.split("\n")) {
+    let m;
+    try {
+      m = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (m?.type !== "assistant") continue;
+    for (const c of m.message?.content ?? []) {
+      if (c.type !== "tool_use") continue;
+      out.tools++;
+      if (c.name !== "Bash") continue;
+      out.bash++;
+      if (SCRIPT.test(String(c.input?.command ?? ""))) out.scripts++;
+    }
+  }
+  return out;
+}
 
 /** A fresh copy of a fixture's repository, committed, the way an agent would find one. */
 function scratchRepo(name) {
@@ -237,6 +271,7 @@ function runAgent(name, cwd, transcript) {
     child.on("error", (e) => done({ is_error: true, error: String(e) }));
     child.on("close", (code) => {
       writeFileSync(transcript, text);
+      const spent = effort(text);
       const result = text
         .split("\n")
         .filter(Boolean)
@@ -248,7 +283,7 @@ function runAgent(name, cwd, transcript) {
           }
         })
         .findLast((m) => m?.type === "result");
-      done(result ?? { is_error: true, error: err.trim() || `exited ${code}` });
+      done({ ...(result ?? { is_error: true, error: err.trim() || `exited ${code}` }), spent });
     });
   });
 }
@@ -285,6 +320,11 @@ const discovered = (d) => ({
   mapped: d.mapped,
   connected: d.connected,
   described: d.described,
+  system: d.system,
+  stepData: d.stepData,
+  storeData: d.storeData,
+  deployed: d.deployed,
+  entryPoints: d.entryPoints,
   gaps: d.gaps,
 });
 
@@ -315,6 +355,7 @@ async function oneRun(name, i) {
     ms: Date.now() - started,
     turns: result.num_turns,
     cost: result.total_cost_usd,
+    ...result.spent,
     error: result.is_error ? (result.error ?? result.result ?? result.subtype) : undefined,
   };
   if (existsSync(join(dir, ".archdoc"))) {
@@ -322,7 +363,7 @@ async function oneRun(name, i) {
     const found = await loadModel(".", { cwd: dir });
     const g = golden(name);
     const s = scoreModel(found, g, await sourceFiles(dir));
-    const d = scoreDiscovery(found, g, await repoFiles(dir), s);
+    const d = scoreDiscovery(found, g, await repoFiles(dir), s, await flows(dir));
     writeFileSync(
       join(runDir, "score.txt"),
       `${formatScore(s, true)}\n\n${formatDiscoveryScore(d, true)}\n`,
@@ -359,7 +400,7 @@ async function initScore(name) {
   const out = {
     ...summary(s),
     ms,
-    discovery: discovered(scoreDiscovery(found, g, await repoFiles(dir), s)),
+    discovery: discovered(scoreDiscovery(found, g, await repoFiles(dir), s, await flows(dir))),
   };
   if (judging) {
     for (const f of r.files) {
@@ -398,6 +439,11 @@ const discoveryMetrics = [
   "mapped",
   "connected",
   "described",
+  "system",
+  "stepData",
+  "storeData",
+  "deployed",
+  "entryPoints",
   "gaps",
 ];
 const dims = [
@@ -452,6 +498,9 @@ for (const name of chosen) {
     errors: mean(scored.map((r) => r.score.errors)),
     cost: mean(mine.map((r) => r.cost).filter((c) => c !== undefined)),
     turns: mean(mine.map((r) => r.turns).filter((t) => t !== undefined)),
+    minutes: mean(mine.map((r) => r.ms / 60000)),
+    bash: mean(mine.map((r) => r.bash).filter((t) => t !== undefined)),
+    scripts: mean(mine.map((r) => r.scripts).filter((t) => t !== undefined)),
   });
 }
 
@@ -475,8 +524,8 @@ const lines = [
     ? "Each cell is init → agent: what archdoc init alone scores, then the agent's mean over its runs. Scored against each repository's partial reference.yaml, so containers, components, datastores, and uses are recall (a model may go further and isn't marked down); nesting and code are the share right; overall is their mean."
     : "Each cell is init → agent: what archdoc init alone scores, then the agent's mean over its runs. Containers, components, datastores, and uses are F1; nesting and code are the share right.",
   "",
-  `| ${title(what)} | ${metrics.map(title).join(" | ")} | Range | Errors | Turns | Cost |`,
-  `|---|${metrics.map(() => "---").join("|")}|---|---|---|---|`,
+  `| ${title(what)} | ${metrics.map(title).join(" | ")} | Range | Errors | Minutes | Turns | Bash | Scripts | Cost |`,
+  `|---|${metrics.map(() => "---").join("|")}|---|---|---|---|---|---|---|`,
   ...rows.map(
     (f) =>
       [
@@ -484,10 +533,15 @@ const lines = [
         ...metrics.map((m) => cell(f, m)),
         f.range ? `${pct(f.range[0])}–${pct(f.range[1])}` : "–",
         f.errors ?? "–",
+        f.minutes === undefined ? "–" : f.minutes.toFixed(1),
         f.turns === undefined ? "–" : Math.round(f.turns),
+        f.bash === undefined ? "–" : Math.round(f.bash),
+        f.scripts === undefined ? "–" : Math.round(f.scripts),
         f.cost === undefined ? "–" : `$${f.cost.toFixed(2)}`,
       ].join(" | ") + " |",
   ),
+  "",
+  "Minutes is the agent's wall time; turns, its turns; Bash, its Bash calls; scripts, the Bash calls that ran a program it wrote (a heredoc, python -c, node -e) to explore the repository, which init and archdoc paths should make unnecessary. Each is a mean over runs.",
   "",
   `Overall, mean over ${real ? "repositories" : "fixtures"}: init ${pct(mean(rows.map((f) => f.init.overall)))} → agent ${pct(mean(rows.map((f) => f.agent.overall).filter((x) => x !== undefined)))}.`,
 ];
@@ -504,13 +558,18 @@ const lines = [
     mapped: ["Mapped", pct],
     connected: ["Connected", pct],
     described: ["Described", pct],
+    system: ["System", pct],
+    stepData: ["Step data", pct],
+    storeData: ["Store data", pct],
+    deployed: ["Deployed", pct],
+    entryPoints: ["Entry points", pct],
     gaps: ["Left to do", n],
   };
   lines.push(
     "",
     "## Discovery",
     "",
-    "How well the model was discovered beyond its structure (scoreDiscovery in @archdoc/core), init → agent. Journeys found is the share of the golden model's journeys one of the model's journeys follows (half their hops or more; – when it has none); journeys is how many the model has, and journey depth the share of them long enough to follow that reach the datastore, queue, or external their elements use. Step detail is the share of steps with an action and code that exists; step depth, of steps on the most specific element. Tests left out is the share of test and verification files not modeled as elements of their own. Mapped is the share of source files (not tests, vendored, or generated) some element covers. Connected and described are shares of the model's elements. Left to do is how many lines archdoc check --done still lists.",
+    "How well the model was discovered beyond its structure (scoreDiscovery in @archdoc/core), init → agent. Journeys found is the share of the golden model's journeys one of the model's journeys follows (half their hops or more; – when it has none); journeys is how many the model has, and journey depth the share of them long enough to follow that reach the datastore, queue, or external their elements use. Step detail is the share of steps with an action and code that exists; step depth, of steps on the most specific element. Tests left out is the share of test and verification files not modeled as elements of their own. Mapped is the share of source files (not tests, vendored, or generated) some element covers. Connected and described are shares of the model's elements. System is whether the model has a system element for the C4 context. Step data is the share of steps that cross into another container, datastore, queue, or external that say what they carry; store data, the share of datastores that say what they store and queues something sends through. Deployed is the share of deployable elements an environment places (– when the repository has no deployment files). Entry points is the share of routes, consumers, schedules, commands, and pages a journey step starts at. Left to do is how many lines archdoc check --done still lists.",
     "",
     `| ${title(what)} | ${discoveryMetrics.map((m) => col[m][0]).join(" | ")} |`,
     `|---|${discoveryMetrics.map(() => "---").join("|")}|`,

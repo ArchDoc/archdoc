@@ -15,8 +15,10 @@ person would write for it (`golden.yaml`):
 | `polyglot` | A TypeScript frontend, a Go backend with components, a Python worker, RabbitMQ and Postgres |
 | `single-package` | A TypeScript CLI that's one package, which the model has to split into components |
 | `order-flows` | Services in TypeScript, Python, and Go that reach each other only over HTTP, RabbitMQ, and a Kubernetes CronJob, two externals, and tests, mocks, end-to-end tests, smoke checks, and a load test to leave out |
+| `serverless-aws` | A bookings app on Lambda, deployed with the AWS CDK: DynamoDB tables, an SQS queue, an API Gateway REST API, a scheduled report, SES, and two stacks (production and staging) |
+| `serverless-aws-tf` | The same app deployed with Terraform instead, for reading the tables, queue, functions, routes, and IAM grants from HCL |
 
-Every golden model has actors and the journeys a newcomer would trace, each step with an action and code.
+Every golden model has actors and the journeys a newcomer would trace, each step with an action and code. The serverless golden models also have a system, what each step that crosses a boundary carries, what each datastore stores, and where each part runs.
 
 ## Scoring
 
@@ -40,7 +42,7 @@ technology. It reports:
 Code elements (`kind: code`) aren't scored on their own: the files they point at
 count toward the component or container above them.
 
-`scoreDiscovery(found, golden, files, score)` scores how well the model was
+`scoreDiscovery(found, golden, files, score, { entryPoints })` scores how well the model was
 discovered, beyond its structure, from the same checks `archdoc check --done`
 runs:
 
@@ -62,6 +64,17 @@ runs:
   generated, that some element covers.
 - **Connected** and **described**: the shares of the model's elements that
   something connects to, and that have a description of their own.
+- **System**: whether the model has a system element, the box the C4 context draws.
+- **Step data**: the share of steps that cross into another container, a
+  datastore, a queue, or an external that say what they carry (`sends`,
+  `creates`, or `changes`).
+- **Store data**: the share of datastores that say what they store, and of
+  queues something sends through.
+- **Deployed**: the share of containers, datastores, and queues an environment
+  places, when the repository has deployment files (CDK, Terraform, compose,
+  Kubernetes, and the like).
+- **Entry points**: the share of the routes, consumers, schedules, commands, and
+  pages `archdoc paths` finds that a journey step starts at.
 - **Overall**: the mean of those that apply.
 
 ## Running them
@@ -87,7 +100,10 @@ scores. The agent may use the file tools, the archdoc tools, and Bash for
 `archdoc`, `git status`, `git diff`, and `ls`, and nothing else; Claude Code
 still lets read-only shell commands such as `cat` and `grep` through. Results go to
 `evals/results/<time>/` (ignored by git): `report.md`, `results.json`, and
-each run's model, transcript, and `score.txt` with what it missed. Reports
+each run's model, transcript, and `score.txt` with what it missed. The report
+also has each agent's wall time, turns, Bash calls, and how many of those ran a
+script it wrote to explore the repository (a heredoc, `python -c`, `node -e`),
+which init and `archdoc paths` should make unnecessary. Reports
 worth keeping go in `evals/reports/<date>/`.
 
 ## Real-world repositories

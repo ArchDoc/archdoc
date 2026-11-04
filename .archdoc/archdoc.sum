@@ -50,7 +50,7 @@ seals:
     by: agent:claude-code
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-c5f014802cce4d30
+    hash: fnv-46bfe17cf6209b9a
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -59,12 +59,14 @@ seals:
         - CheckInput
         - ContextInput
         - InitInput
+        - PathsInput
         - SealInput
         - ShowInput
         - Where
         - checkAnswer
         - contextAnswer
         - initAnswer
+        - pathsAnswer
         - readRepoFile
         - repoPath
         - sealAnswer
@@ -86,6 +88,23 @@ seals:
         - isGoSource
         - packageName
         - resolveGoImport
+      packages/analyzers/src/hcl.ts:
+        - HclBlock
+        - hclReferences
+        - hclString
+        - parseHcl
+      packages/analyzers/src/iac.ts:
+        - IacAccess
+        - IacEnvironment
+        - IacFindings
+        - IacFunction
+        - IacQueue
+        - IacService
+        - IacTable
+        - IacTrigger
+        - handlerFile
+        - iacFilesOf
+        - readIac
       packages/analyzers/src/index.ts: []
       packages/analyzers/src/init.ts:
         - InitResult
@@ -94,6 +113,14 @@ seals:
         - initModel
       packages/analyzers/src/manifests.ts:
         - manifests
+      packages/analyzers/src/paths.ts:
+        - EntryPath
+        - FLOW_KINDS
+        - PathNode
+        - PathsOptions
+        - findEntryPoints
+        - findPaths
+        - formatPaths
       packages/analyzers/src/python.ts:
         - indexPythonCode
         - indexPythonSource
@@ -170,7 +197,7 @@ seals:
       packages/cli/tsconfig.json: []
   element:toolchain.cli.commands:
     kind: structure
-    hash: fnv-5f772fd37b17d2f9
+    hash: fnv-5b3ab1ed68e6563b
     files:
       packages/cli/src/commands/check.ts:
         - CheckOptions
@@ -204,6 +231,9 @@ seals:
       packages/cli/src/commands/migrate.ts:
         - MigrateOptions
         - migrate
+      packages/cli/src/commands/paths.ts:
+        - PathsOptions
+        - paths
       packages/cli/src/commands/report.ts:
         - ReportOptions
         - report
@@ -277,7 +307,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.checker:
     kind: structure
-    hash: fnv-06594568367b7280
+    hash: fnv-225156f10e697ce7
     files:
       packages/core/src/check/check.ts:
         - CheckOptions
@@ -290,9 +320,12 @@ seals:
       packages/core/src/check/discovery.ts:
         - DiscoveryAssessment
         - DiscoveryGap
+        - DiscoveryOptions
+        - EntryPoint
         - LEVEL_LIMITS
         - assessDiscovery
         - formatDiscovery
+        - isDeploymentFile
         - isVerificationCode
       packages/core/src/check/journeys.ts:
         - validateJourneys
@@ -984,7 +1017,7 @@ seals:
         - default
   element:toolchain.web.graph:
     kind: structure
-    hash: fnv-a129c4642685528c
+    hash: fnv-5e17df33c604ec8f
     files:
       apps/web/src/graph/data.ts:
         - DataFocus
@@ -1025,12 +1058,14 @@ seals:
         - ROWS_HEADER
         - ROWS_LINE
         - RowInfo
+        - SystemBox
         - TABLE_WIDTH
         - TableInfo
         - ViewState
         - ancestorsOf
         - buildGraph
         - defaultExpanded
+        - hasSystem
         - journeyEdges
         - journeyExpansion
         - levelExpansion
@@ -1042,6 +1077,7 @@ seals:
         - rowKey
         - rowTableSize
         - showValue
+        - systemBox
         - tableKey
       apps/web/src/graph/groups.ts:
         - Group
@@ -1510,7 +1546,7 @@ seals:
     by: agent:claude-code
   step:keep-the-model-true#7:
     kind: structure
-    hash: fnv-fa8a6e0ceafafd86
+    hash: fnv-c54145c4365c9b68
     files:
       packages/analyzers/src/answers.ts:
         - Answer
@@ -1518,12 +1554,14 @@ seals:
         - CheckInput
         - ContextInput
         - InitInput
+        - PathsInput
         - SealInput
         - ShowInput
         - Where
         - checkAnswer
         - contextAnswer
         - initAnswer
+        - pathsAnswer
         - readRepoFile
         - repoPath
         - sealAnswer
