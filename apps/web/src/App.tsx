@@ -10,7 +10,7 @@ import {
 } from "@archdoc/core/browser";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useStoredFlag } from "./components/Canvas.js";
+import { Canvas, useStoredChoice, useStoredFlag } from "./components/Canvas.js";
 import { Details } from "./components/Details.js";
 import { Lanes } from "./components/Lanes.js";
 import { Overview } from "./components/Overview.js";
@@ -27,7 +27,14 @@ import {
   journeyStores,
   stepData,
 } from "./graph/data.js";
-import { ancestorsOf, defaultExpanded, journeyExpansion } from "./graph/graph.js";
+import {
+  ancestorsOf,
+  defaultExpanded,
+  journeyExpansion,
+  type Level,
+  levelExpansion,
+  levelOf,
+} from "./graph/graph.js";
 import { type GroupBy, type Grouping, groupLandscape } from "./graph/groups.js";
 import { type Compare, compareModels } from "./model/compare.js";
 import { journeyLanes, journeysByImportance } from "./model/stories.js";
@@ -174,7 +181,17 @@ function Explorer({
 }: ExplorerProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>("repo");
   // Boxes opened by hand, and boxes closed by hand that something else opened (by context).
-  const [expanded, setExpanded] = useState<Set<string>>(() => defaultExpanded(model));
+  // The map starts at the C4 context: each system one box, with who uses it and what it talks
+  // to. A landscape starts with its repos open, grouped.
+  const [expanded, setExpanded] = useState<Set<string>>(() =>
+    landscape ? defaultExpanded(model) : levelExpansion(model, "context"),
+  );
+  // Which way the map runs: left to right, or top down. This browser remembers.
+  const [direction, setDirection] = useStoredChoice(
+    "archdoc:map-direction",
+    ["RIGHT", "DOWN"] as const,
+    "RIGHT",
+  );
   const [closed, setClosed] = useState<{ context: string; ids: ReadonlySet<string> }>();
   // Datastores opened to show their tables, and those showing a journey's rows instead.
   const [tables, setTables] = useState<ReadonlySet<string>>(() => new Set());
@@ -465,6 +482,15 @@ function Explorer({
     [effective, context],
   );
   const toggle = useCallback((id: string) => flip("e:", id), [flip]);
+  /** Opens the boxes a C4 level shows, and closes the rest. */
+  const showLevel = useCallback(
+    (level: Level) => {
+      setExpanded(levelExpansion(model, level));
+      setClosed(undefined);
+      setFocused(false);
+    },
+    [model],
+  );
   const toggleTables = useCallback((id: string) => flip("t:", id), [flip]);
   const toggleFields = useCallback((entry: string) => {
     setOpenFields((prev) => {
@@ -561,7 +587,13 @@ function Explorer({
       compare={compare}
       preview={tab === "overview" ? preview : undefined}
       recheck={seals?.facts}
-      direction={journeyOnMap ? "RIGHT" : "DOWN"}
+      direction={direction}
+      onDirection={setDirection}
+      level={
+        journeyOnMap || tab === "data"
+          ? undefined
+          : { current: levelOf(model, effective.expanded), onLevel: showLevel }
+      }
     />
   );
 

@@ -27,9 +27,15 @@ import {
   stepData,
 } from "../graph/data.js";
 import { buildDiffGraph, type DiffGraph } from "../graph/diff.js";
-import { buildGraph, type Graph, journeyEdges, type ViewState } from "../graph/graph.js";
+import {
+  buildGraph,
+  type Graph,
+  journeyEdges,
+  type Level,
+  type ViewState,
+} from "../graph/graph.js";
 import { boundaryKey, crossingOf, type Grouping } from "../graph/groups.js";
-import { clearOf, type EdgeLabel, edgeLabels, labelFor } from "../graph/labels.js";
+import { type EdgeLabel, edgeLabels, labelFor } from "../graph/labels.js";
 import {
   layoutGraph,
   NODE_HEIGHT,
@@ -84,6 +90,9 @@ export interface CanvasProps {
   preview?: string | undefined;
   /** How the layout runs: left to right (the default), or top to bottom. */
   direction?: "RIGHT" | "DOWN" | undefined;
+  onDirection?: ((direction: "RIGHT" | "DOWN") => void) | undefined;
+  /** The C4 level the open boxes show, and how to show another; none on a journey's map. */
+  level?: { current?: Level | undefined; onLevel: (level: Level) => void } | undefined;
   /** Facts whose code changed since they were sealed, marked on their boxes. */
   recheck?: readonly { element?: string | undefined }[] | undefined;
 }
@@ -104,11 +113,15 @@ export function Canvas(props: CanvasProps) {
     [overlay, model, view],
   );
   // `source` is the graph asked for; `graph` is it as laid out, rows possibly reordered.
-  const [layout, setLayout] = useState<{ source: Graph } & UntangledLayout>();
+  const [layout, setLayout] = useState<
+    { source: Graph; direction: "RIGHT" | "DOWN" } & UntangledLayout
+  >();
   const flow = useReactFlow();
   const [hoverEdge, setHoverEdge] = useState<string>();
   const [hoverNode, setHoverNode] = useState<string>();
   const firstFit = useRef(true);
+  // A level or direction was picked: fit the map once it's laid out again.
+  const refit = useRef(false);
   const pane_ = useRef<HTMLDivElement>(null);
   const direction = props.direction ?? "RIGHT";
 
@@ -159,7 +172,7 @@ export function Canvas(props: CanvasProps) {
           }
         : { "elk.direction": direction };
     void layoutGraph(graph, options, 4, notes).then((result) => {
-      if (!cancelled) setLayout({ source: graph, ...result });
+      if (!cancelled) setLayout({ source: graph, direction, ...result });
     });
     return () => {
       cancelled = true;
@@ -515,6 +528,11 @@ export function Canvas(props: CanvasProps) {
       const pair = [s.source, s.target].sort().join("|");
       sharing.set(pair, [...(sharing.get(pair) ?? []), s.at]);
     }
+    const noted = new Set(
+      layout.graph.edges
+        .filter((e) => notes.has(e.id))
+        .map((e) => [e.source, e.target].sort().join("|")),
+    );
     // The line the current step goes along, either way.
     const now = steps.find((s) => s.at === at);
     const currentPair = now ? [now.source, now.target].sort().join("|") : undefined;
@@ -578,16 +596,11 @@ export function Canvas(props: CanvasProps) {
         target: e.target,
         data: {
           points: layout.routes.get(e.id),
-          // A journey step drawn along the same line says what happens there instead.
           note: note
             ? {
                 lines: note.lines,
                 text: note.text,
-                box: (() => {
-                  const placed = layout.labels.get(e.id);
-                  // A journey's step numbers and message sit on the line: keep its note clear.
-                  return placed && journey ? clearOf(placed, layout.routes.get(e.id), 26) : placed;
-                })(),
+                box: layout.labels.get(e.id),
                 onHover: (on: boolean) => setHoverEdge(on ? e.id : undefined),
                 className: [
                   journey ? "is-step" : "",
@@ -641,7 +654,8 @@ export function Canvas(props: CanvasProps) {
           ]
             .filter(Boolean)
             .join(" "),
-          label: s.label,
+          // A line whose note lists what its steps do, numbered, needs no numbers of its own.
+          label: noted.has([s.source, s.target].sort().join("|")) ? undefined : s.label,
           labelBgPadding: [6, 3] as [number, number],
           labelBgBorderRadius: 10,
           animated: s.at === at,
@@ -706,11 +720,14 @@ export function Canvas(props: CanvasProps) {
     return [...seen.values()];
   }, [nodes]);
 
-  // Fit everything on the first layout; afterwards only move when asked to.
+  // Fit everything on the first layout, and after picking a level or a direction, once the map
+  // is laid out that way; otherwise only move when asked to.
   useEffect(() => {
     if (!layout || nodes.length === 0) return;
-    if (firstFit.current) {
+    const refitNow = refit.current && layout.source === graph && layout.direction === direction;
+    if (firstFit.current || refitNow) {
       firstFit.current = false;
+      refit.current = false;
       // Fit what fits; a big map stays readable and pans instead of shrinking its labels away.
       requestAnimationFrame(() => {
         void flow
@@ -726,14 +743,15 @@ export function Canvas(props: CanvasProps) {
             if (wide || tall) {
               void flow.setViewport({
                 x: wide ? 16 - bounds.x * zoom : x,
-                y: tall ? 16 - bounds.y * zoom : y,
+                // Below the level and layout controls.
+                y: tall ? 64 - bounds.y * zoom : y,
                 zoom,
               });
             }
           });
       });
     }
-  }, [layout, nodes.length, flow]);
+  }, [layout, nodes.length, flow, graph, direction]);
 
   useEffect(() => {
     // Wait for the layout of the current graph, or we'd fit the old size of the node.
@@ -863,6 +881,27 @@ export function Canvas(props: CanvasProps) {
     >
       <Background gap={24} size={1} />
       <Controls showInteractive={false} position="bottom-left" />
+      <Panel position="top-center">
+        <MapControls
+          level={
+            props.level && {
+              current: props.level.current,
+              onLevel: (l: Level) => {
+                refit.current = true;
+                props.level?.onLevel(l);
+              },
+            }
+          }
+          direction={direction}
+          onDirection={
+            props.onDirection &&
+            ((d: "RIGHT" | "DOWN") => {
+              refit.current = true;
+              props.onDirection?.(d);
+            })
+          }
+        />
+      </Panel>
       <Panel position="top-right">
         <Legend kinds={kinds} notes={notesOn} onNotes={setNotesOn} />
       </Panel>
@@ -980,6 +1019,99 @@ function fitActors(model: Model, graph: Graph): Graph {
 const READABLE = 0.75;
 
 const NOTES_KEY = "archdoc:edge-notes";
+
+const LEVELS: { id: Level; label: string; title: string }[] = [
+  {
+    id: "context",
+    label: "Context",
+    title:
+      "C4 level 1: each system as one box, with the people who use it and the systems it talks to",
+  },
+  { id: "containers", label: "Containers", title: "C4 level 2: what each system is made of" },
+  { id: "components", label: "Components", title: "C4 level 3: what each container is made of" },
+];
+
+/** The C4 level the map shows, and which way it runs. */
+function MapControls(props: {
+  level: CanvasProps["level"];
+  direction: "RIGHT" | "DOWN";
+  onDirection: CanvasProps["onDirection"];
+}) {
+  const { level, onDirection } = props;
+  return (
+    <div className="map-controls">
+      {level ? (
+        <fieldset className="segmented" aria-label="C4 level">
+          <legend>Level</legend>
+          {LEVELS.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              className={level.current === l.id ? "is-on" : undefined}
+              aria-pressed={level.current === l.id}
+              title={l.title}
+              onClick={() => level.onLevel(l.id)}
+            >
+              {l.label}
+            </button>
+          ))}
+        </fieldset>
+      ) : null}
+      {onDirection ? (
+        <fieldset className="segmented" aria-label="Layout direction">
+          <legend>Layout</legend>
+          {(
+            [
+              ["RIGHT", "LR", "Left to right"],
+              ["DOWN", "TD", "Top down"],
+            ] as const
+          ).map(([d, label, title]) => (
+            <button
+              key={d}
+              type="button"
+              className={props.direction === d ? "is-on" : undefined}
+              aria-pressed={props.direction === d}
+              title={title}
+              onClick={() => onDirection(d)}
+            >
+              {label}
+            </button>
+          ))}
+        </fieldset>
+      ) : null}
+    </div>
+  );
+}
+
+/** A choice among a few, remembered in this browser, such as which way the map runs. */
+export function useStoredChoice<T extends string>(
+  key: string,
+  options: readonly T[],
+  initial: T,
+): [T, (choice: T) => void] {
+  const [choice, setChoice] = useState<T>(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      const found = options.find((o) => o === saved);
+      if (found) return found;
+    } catch {
+      // Storage can be unavailable; the default is fine.
+    }
+    return initial;
+  });
+  const set = useCallback(
+    (next: T) => {
+      setChoice(next);
+      try {
+        localStorage.setItem(key, next);
+      } catch {
+        // Ignore: the choice just won't be remembered.
+      }
+    },
+    [key],
+  );
+  return [choice, set];
+}
 
 /** A switch remembered in this browser, such as whether lines show their descriptions. */
 export function useStoredFlag(key: string, initial: boolean): [boolean, (on: boolean) => void] {

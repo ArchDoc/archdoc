@@ -1,7 +1,6 @@
 import type { Graph, GraphEdge } from "./graph.js";
-import type { Box, Point } from "./layout.js";
 
-/** A line's description, wrapped to fit beside it, and the room it takes. */
+/** A line's description, wrapped to sit on it, and the room it takes. */
 export interface EdgeLabel {
   /** The whole description, for the tooltip. */
   text: string;
@@ -95,32 +94,4 @@ export function edgeLabels(graph: Graph): Map<string, EdgeLabel> {
     if (label) out.set(e.id, label);
   }
   return out;
-}
-
-/**
- * Moves a label placed against its line until it's at least `gap` pixels off
- * it, the way it already sits (above or below a level stretch, beside an
- * upright one), so what a journey puts on the line doesn't cover it.
- */
-export function clearOf(box: Box, points: readonly Point[] | undefined, gap: number): Box {
-  if (!points || points.length < 2) return box;
-  let best: { d: number; dx: number; dy: number } | undefined;
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1] as Point;
-    const b = points[i] as Point;
-    const level = Math.abs(a.y - b.y) < 0.5;
-    const upright = Math.abs(a.x - b.x) < 0.5;
-    if (level && box.x < Math.max(a.x, b.x) && box.x + box.width > Math.min(a.x, b.x)) {
-      const above = box.y + box.height <= a.y + 0.5;
-      const d = above ? a.y - (box.y + box.height) : box.y - a.y;
-      if (d >= -0.5 && (!best || d < best.d)) best = { d, dx: 0, dy: above ? -1 : 1 };
-    } else if (upright && box.y < Math.max(a.y, b.y) && box.y + box.height > Math.min(a.y, b.y)) {
-      const left = box.x + box.width <= a.x + 0.5;
-      const d = left ? a.x - (box.x + box.width) : box.x - a.x;
-      if (d >= -0.5 && (!best || d < best.d)) best = { d, dx: left ? -1 : 1, dy: 0 };
-    }
-  }
-  if (!best || best.d >= gap) return box;
-  const by = gap - Math.max(0, best.d);
-  return { ...box, x: box.x + best.dx * by, y: box.y + best.dy * by };
 }

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { toneOf } from "../src/components/Legend.js";
 import { buildGraph, defaultExpanded, type GraphEdge } from "../src/graph/graph.js";
 import {
-  clearOf,
   edgeLabels,
   edgeText,
   LABEL_LINES,
@@ -76,7 +75,7 @@ describe("wrap and labelFor", () => {
 });
 
 describe("layoutGraph with labels", () => {
-  it("places every description beside its own line", async () => {
+  it("places every description centered on its own line", async () => {
     const model = ridesModel();
     const graph = buildGraph(model, { expanded: defaultExpanded(model) });
     const labels = edgeLabels(graph);
@@ -85,24 +84,11 @@ describe("layoutGraph with labels", () => {
     expect(placed.size).toBe(labels.size);
     for (const [id, box] of placed) {
       for (const v of [box.x, box.y]) expect(Number.isFinite(v)).toBe(true);
-      expect(distance(box, routes.get(id) ?? []), id).toBeLessThanOrEqual(20);
+      const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      expect(distance({ ...center, width: 0, height: 0 }, routes.get(id) ?? []), id).toBeLessThan(
+        2,
+      );
     }
-  });
-});
-
-describe("clearOf", () => {
-  const line: Point[] = [
-    { x: 0, y: 100 },
-    { x: 300, y: 100 },
-  ];
-  it("moves a label sitting on a level line further above or below it", () => {
-    expect(clearOf({ x: 50, y: 70, width: 100, height: 26 }, line, 20).y).toBe(54);
-    expect(clearOf({ x: 50, y: 104, width: 100, height: 26 }, line, 20).y).toBe(120);
-  });
-
-  it("leaves a label that's already clear where it is", () => {
-    const box = { x: 50, y: 20, width: 100, height: 26 };
-    expect(clearOf(box, line, 20)).toEqual(box);
   });
 });
 

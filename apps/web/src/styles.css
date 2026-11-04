@@ -2548,7 +2548,12 @@ table.observed td.is-wrong code {
   }
 }
 
-/* What a use is for, beside its line: always there, faded with its line. */
+/* Descriptions sit over the lines they're on, the current journey step's included. */
+.react-flow__edgelabel-renderer {
+  z-index: 11;
+}
+
+/* What a use is for, on its line (which runs under it): always there, faded with its line. */
 .edge-note {
   position: absolute;
   display: flex;
@@ -2557,9 +2562,11 @@ table.observed td.is-wrong code {
   padding: 2px 6px;
   border: 1px solid var(--line);
   border-radius: 5px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  background: var(--surface);
   color: var(--muted);
   font-size: var(--fs-2);
+  text-align: center;
+  align-items: center;
   line-height: 16px;
   white-space: nowrap;
   pointer-events: all;
@@ -2588,6 +2595,18 @@ table.observed td.is-wrong code {
   background: var(--accent-soft);
   opacity: 1;
   z-index: 1;
+}
+
+/* The C4 level and the layout's direction, over the map. */
+.map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 
 /* What the colors mean, and the switch for the descriptions. */

@@ -100,10 +100,9 @@ async function layoutOnce(
       "elk.spacing.nodeNode": "44",
       "elk.spacing.edgeNode": "26",
       "elk.spacing.edgeEdge": "16",
-      // A use's description sits beside its line, in a row of its own between the boxes.
+      // A use's description sits on its line, in a row of its own between the boxes.
       "elk.edgeLabels.placement": "CENTER",
-      // Clear of the line, and of the step numbers a journey puts on it.
-      "elk.spacing.edgeLabel": "14",
+      "elk.spacing.edgeLabel": "8",
       "elk.layered.edgeLabels.sideSelection": "SMART_DOWN",
       "elk.spacing.componentComponent": "60",
       "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
@@ -117,11 +116,18 @@ async function layoutOnce(
         id: e.id,
         sources: [e.sourcePort ?? e.source],
         targets: [e.targetPort ?? e.target],
-        // ELK places a label only if it has text; its size is what matters.
+        // ELK places a label only if it has text; its size is what matters. Inline, the label
+        // sits centered on its line, which runs through it.
         ...(label
           ? {
               labels: [
-                { id: `${e.id}:label`, text: "label", width: label.width, height: label.height },
+                {
+                  id: `${e.id}:label`,
+                  text: "label",
+                  width: label.width,
+                  height: label.height,
+                  layoutOptions: { "elk.edgeLabels.inline": "true" },
+                },
               ],
             }
           : {}),
