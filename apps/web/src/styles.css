@@ -32,6 +32,12 @@
   --log-bg: #121a26;
   --log-ink: #e2e8f0;
   --log-muted: #8a97aa;
+  /* Infrastructure: what a deployment node is, never a status. */
+  --infra-environment: #2563eb;
+  --infra-network: #059669;
+  --infra-compute: #db2777;
+  --infra-service: #65a30d;
+  --infra-client: #78716c;
   /* What a box is: people, agents, and each kind of element. */
   --kind-actor: #7c3aed;
   --kind-agent: #c026d3;
@@ -66,6 +72,11 @@
     --line: #253142;
     --line-strong: #4c5a6e;
     --edge: #5d6b80;
+    --infra-environment: #60a5fa;
+    --infra-network: #34d399;
+    --infra-compute: #f472b6;
+    --infra-service: #a3e635;
+    --infra-client: #a8a29e;
     --accent: #5aa2ff;
     --accent-soft: #15294a;
     --on-accent: #0b1017;
@@ -102,6 +113,11 @@
   --line: #253142;
   --line-strong: #4c5a6e;
   --edge: #5d6b80;
+  --infra-environment: #60a5fa;
+  --infra-network: #34d399;
+  --infra-compute: #f472b6;
+  --infra-service: #a3e635;
+  --infra-client: #a8a29e;
   --accent: #5aa2ff;
   --accent-soft: #15294a;
   --on-accent: #0b1017;
@@ -3431,4 +3447,181 @@ table.observed td.is-wrong code {
   font-size: var(--fs-2);
   color: var(--added);
   margin: 0;
+}
+
+/* ---------- Infrastructure ---------- */
+
+/* Each node is colored by what it is: network, compute, managed service, or client. */
+.infra-tone-environment {
+  --infra: var(--infra-environment);
+}
+.infra-tone-network {
+  --infra: var(--infra-network);
+}
+.infra-tone-compute {
+  --infra: var(--infra-compute);
+}
+.infra-tone-service {
+  --infra: var(--infra-service);
+}
+.infra-tone-client {
+  --infra: var(--infra-client);
+}
+
+/* The environment: the outermost frame, dashed, so it reads as a place, not a box. */
+.infra-environment .card.is-group {
+  border: 2px dashed var(--infra);
+  background: color-mix(in srgb, var(--infra) 5%, transparent);
+}
+
+/* Nodes inside it: a colored top edge and a faint tint, so nesting reads at a glance. */
+.infra-node .card.is-group {
+  border: 1.5px solid color-mix(in srgb, var(--infra) 45%, var(--line));
+  border-top: 4px solid var(--infra);
+  background: color-mix(in srgb, var(--infra) 6%, var(--surface));
+}
+
+.infra-node .card:not(.is-group) {
+  border: 1.5px solid color-mix(in srgb, var(--infra) 55%, var(--line-strong));
+  border-left: 4px solid var(--infra);
+  background: color-mix(in srgb, var(--infra) 8%, var(--surface));
+}
+
+.infra-box .card.is-group .card-label {
+  font-size: var(--fs-3);
+  color: color-mix(in srgb, var(--infra) 70%, var(--ink));
+  text-transform: none;
+}
+
+.infra-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  max-width: 60%;
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  font-size: var(--fs-1);
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px var(--shadow);
+}
+
+.infra-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.infra-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--infra) 18%, var(--surface));
+  border: 2px solid var(--infra);
+}
+
+.infra-tree-node .infra-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  vertical-align: baseline;
+}
+
+.infra-box .card {
+  cursor: pointer;
+}
+
+/* What the environment talks to from outside it. */
+.infra-outside .card {
+  box-shadow: none;
+}
+
+.infra-side {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 16px 12px 24px;
+}
+
+.infra-side > p {
+  margin: 0 6px;
+  font-size: var(--fs-2);
+}
+
+.infra-envs {
+  flex-wrap: wrap;
+  row-gap: 6px;
+  margin: 0 4px 6px;
+}
+
+.infra-envs legend {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.infra-tree,
+.infra-tree ul,
+.infra-missing {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.infra-tree-node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  padding: 5px 8px;
+  text-align: left;
+  font: inherit;
+  font-size: var(--fs-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.infra-tree-node:hover {
+  background: var(--surface-2);
+}
+
+.infra-tree-node.is-on {
+  background: var(--accent-soft);
+}
+
+.infra-tree-node .muted {
+  font-size: var(--fs-1);
+}
+
+.infra-missing li {
+  padding: 3px 8px;
+  font-size: var(--fs-2);
+}
+
+.infra-deployments li + li {
+  margin-top: 8px;
+}
+
+.infra-intro {
+  max-width: 560px;
+}
+
+.infra-example {
+  font-family: var(--f-mono);
+  font-size: var(--fs-mono);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
 }

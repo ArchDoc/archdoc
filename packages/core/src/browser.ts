@@ -177,6 +177,16 @@ export {
   context,
 } from "./query/context.js";
 export {
+  type DeploymentLink,
+  type DeploymentView,
+  deploymentPath,
+  deploymentsOf,
+  deploymentView,
+  formatDeployment,
+  formatEnvironment,
+  type PlacedElement,
+} from "./query/deploy.js";
+export {
   type EvalCase,
   type EvalCommit,
   type EvalReport,
