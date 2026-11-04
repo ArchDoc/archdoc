@@ -197,7 +197,8 @@ describe("archdoc init on a Go service with compose and SQL migrations", () => {
     expect(out).toMatch(/^✓ Wrote \.archdoc\/archdoc\.yaml and \.archdoc\/data\.yaml\./);
     expect(out).toContain("3 containers, 0 components in them, 0 code elements in those");
     expect(out).toContain("5 uses, 3 datastores or queues, 0 contracts, 1 data entry");
-    expect(out).toContain("2. Add actors");
+    expect(out).toContain("4. Add actors");
+    expect(out).toContain("archdoc check --done");
     expect(out).toContain("archdoc seal --all");
   });
 });
@@ -259,6 +260,40 @@ describe("archdoc init on flat Go and Python layouts", () => {
       false,
     );
     expect(uses(model)).toEqual(["app.api->app.core"]);
+  });
+
+  it("leaves out tests, test packages, mocks, and smoke checks", async () => {
+    const root = join(dir, "tested");
+    const w = (p: string, t: string) => write(`tested/${p}`, t);
+    await w("package.json", '{ "name": "shop", "private": true }\n');
+    await w("pnpm-workspace.yaml", "packages: [api, e2e]\n");
+    await w("api/package.json", '{ "name": "@shop/api" }\n');
+    await w(
+      "api/src/orders/service.ts",
+      'import { db } from "../storage/db";\nexport const s = db;\n',
+    );
+    await w("api/src/orders/service.spec.ts", 'import { s } from "./service";\n');
+    await w("api/src/storage/db.ts", "export const db = {};\n");
+    await w("api/src/testing/fake-db.ts", 'import { db } from "../storage/db";\n');
+    await w("api/test/orders.test.ts", 'import { s } from "../src/orders/service";\n');
+    await w("api/vitest.config.ts", "export default {};\n");
+    await w(
+      "e2e/package.json",
+      '{ "name": "@shop/e2e", "devDependencies": { "@playwright/test": "1" } }\n',
+    );
+    await w("e2e/checkout.spec.ts", "export {};\n");
+    await w("e2e/helpers.ts", "export {};\n");
+    await w("verification/smoke.py", "import httpx\n");
+    await w("services/billing/billing_test.go", "package billing\n");
+    const { model } = await inferred(root);
+    expect([...model.elements.keys()].sort()).toEqual([
+      "api",
+      "api.orders",
+      "api.orders.service",
+      "api.storage",
+      "api.storage.db",
+    ]);
+    expect(uses(model)).toEqual(["api.orders->api.storage"]);
   });
 });
 

@@ -1,5 +1,6 @@
+import { assessDiscovery } from "../check/discovery.js";
 import { filesUnder, locate, resolveCodeMap } from "../codemap/codemap.js";
-import type { ElementNode, Model } from "../model.js";
+import type { ElementNode, JourneyNode, Model } from "../model.js";
 
 // How close a model is to one a person wrote for the same repository: are its
 // containers, components, datastores, code, nesting, and uses the ones the
@@ -344,5 +345,98 @@ function ratios(expected: number, found: number, recalled: number, precise: numb
     precision,
     recall,
     f1: precision + recall ? (2 * precision * recall) / (precision + recall) : 0,
+  };
+}
+
+/**
+ * How well a model was discovered, beyond its structure: the journeys a
+ * person would trace, steps that say what happens and where the code is,
+ * test and verification code left out, and nothing left unconnected. Each
+ * part is from 0 to 1; `overall` is their mean.
+ */
+export interface DiscoveryScore {
+  /** Golden journeys that one of the model's journeys follows (half their element hops or more). */
+  journeys: { expected: number; found: number; matched: number; recall: number; missed: string[] };
+  /** Steps with an action and code that exists, of all the model's steps (0 with none). */
+  stepDetail: number;
+  /** Steps that name the most specific elements the model has, of all its steps (0 with none). */
+  stepPrecision: number;
+  /** Test and verification source files the model doesn't give elements of their own, of those in the repository. */
+  testExclusion: number;
+  /** Elements that connect to something, of the model's containers, components, datastores, queues, and externals. */
+  connected: number;
+  /** Elements with a description of their own, of the same. */
+  described: number;
+  overall: number;
+  /** What `archdoc check --done` would still list. */
+  gaps: number;
+}
+
+/**
+ * Scores how well `found` was discovered. `files` are all the repository's
+ * files (a step's code may be a manifest); `score` is scoreModel's result
+ * for the same pair, for which elements match.
+ */
+export function scoreDiscovery(
+  found: Model,
+  golden: Model,
+  files: readonly string[],
+  score: ModelScore,
+): DiscoveryScore {
+  const a = assessDiscovery(found, files);
+  const f2g = new Map(score.matches.map((m) => [m.found, m.golden]));
+  // Each end of a found step, as the golden element it is or sits inside.
+  const toGolden = (id: string): string | undefined => {
+    for (let e = found.elements.get(id); e; e = parent(found, e)) {
+      const g = f2g.get(e.id);
+      if (g) return g;
+    }
+    return undefined;
+  };
+  const near = (a: string, b: string) => within(golden, a, b) || within(golden, b, a);
+  const hops = (j: JourneyNode) =>
+    j.steps.flatMap((s) =>
+      s.from?.type === "element" && s.to?.type === "element" ? [[s.from.id, s.to.id] as const] : [],
+    );
+  const foundHops = [...found.journeys.values()].map((j) =>
+    hops(j).flatMap(([from, to]) => {
+      const a = toGolden(from);
+      const b = toGolden(to);
+      return a && b && a !== b ? [[a, b] as const] : [];
+    }),
+  );
+  const missed: string[] = [];
+  const goldenJourneys = [...golden.journeys.values()];
+  for (const j of goldenJourneys) {
+    const want = hops(j);
+    if (!want.length) continue;
+    // Matched at any depth: a step on a container covers the golden step on its component.
+    const covered = (have: (readonly [string, string])[]) =>
+      want.filter(([from, to]) => have.some(([x, y]) => near(x, from) && near(y, to))).length;
+    const best = Math.max(0, ...foundHops.map(covered));
+    if (best * 2 < want.length) missed.push(j.id);
+  }
+  const expected = goldenJourneys.filter((j) => hops(j).length).length;
+  const s = a.stats;
+  const journeys = {
+    expected,
+    found: found.journeys.size,
+    matched: expected - missed.length,
+    recall: frac(expected - missed.length, expected),
+    missed,
+  };
+  const parts = {
+    stepDetail: s.steps ? s.detailedSteps / s.steps : 0,
+    stepPrecision: s.steps ? s.preciseSteps / s.steps : 0,
+    testExclusion: frac(s.testFiles - s.testFilesModeled, s.testFiles),
+    connected: frac(s.elements - s.orphans.length, s.elements),
+    described: frac(s.described, s.elements),
+  };
+  const all = [...(expected ? [journeys.recall] : []), ...Object.values(parts)];
+  return {
+    journeys,
+    ...parts,
+    overall: all.reduce((x, y) => x + y, 0) / all.length,
+    gaps: a.gaps.length,
   };
 }

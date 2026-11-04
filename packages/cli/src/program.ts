@@ -209,6 +209,10 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     .option("--no-code", "check the model only, without analyzing code")
     .option("--all", "list every finding, not only the change's (or the first few)")
     .option("--seals", "only facts whose sealed code changed, in full; exits 1 while there are any")
+    .option(
+      "--done",
+      "whether a new model is done: what it still lacks (levels, descriptions, test code, unconnected elements, actors, journeys, steps); exits 1 while anything is",
+    )
     .action(
       (opts: {
         model?: string;
@@ -218,6 +222,7 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
         code?: boolean;
         all?: boolean;
         seals?: boolean;
+        done?: boolean;
       }) => run(check(opts, io)),
     );
 

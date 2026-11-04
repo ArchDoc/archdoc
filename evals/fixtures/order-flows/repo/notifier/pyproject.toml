@@ -1,0 +1,7 @@
+[project]
+name = "notifier"
+version = "0.1.0"
+dependencies = ["pika>=1.3"]
+
+[project.scripts]
+notifier = "notifier.listener:main"

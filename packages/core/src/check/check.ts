@@ -272,7 +272,7 @@ export function check(model: Model, options: CheckOptions = {}): CheckResult {
     }
   }
 
-  for (const e of orphans(model)) {
+  for (const e of orphanElements(model)) {
     findings.push({
       severity: "warning",
       code: "model/orphan-element",
@@ -367,7 +367,8 @@ export function observedEdges(model: Model, observed: ObservedDependency[]): Obs
   );
 }
 
-function orphans(model: Model): ElementNode[] {
+/** Elements with no relationships that no journey passes through. */
+export function orphanElements(model: Model): ElementNode[] {
   const touched = new Set<string>();
   const mark = (id: string) => {
     for (const a of selfAndAncestors(model, id)) touched.add(a);

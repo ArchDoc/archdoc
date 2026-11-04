@@ -73,11 +73,17 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "What's wrong or stale",
       description:
-        'After you edit: model problems, imports the model doesn\'t declare, broken rules and journeys, stale paths, traces, and facts whose sealed code changed, each with its fix. With base (such as "main"): only what your change caused, plus the verdict the PR comment will give, journeys, and who to ask. format "markdown" returns that comment, for a PR description.',
+        'After you edit: model problems, imports the model doesn\'t declare, broken rules and journeys, stale paths, traces, and facts whose sealed code changed, each with its fix. With base (such as "main"): only what your change caused, plus the verdict the PR comment will give, journeys, and who to ask. format "markdown" returns that comment, for a PR description. done: true, for a new model: what it still lacks before it is done.',
       inputSchema: {
         base: z.string().optional().describe("Branch or commit to compare with, such as main"),
         all: z.boolean().optional().describe("List every finding, not only the change's"),
         format: z.enum(["text", "markdown"]).optional(),
+        done: z
+          .boolean()
+          .optional()
+          .describe(
+            "For a model you're starting: what it still lacks before it's done (level sizes, descriptions, test code, unconnected elements, actors, journeys, step detail), each with what to do",
+          ),
       },
       annotations: READ_ONLY,
     },

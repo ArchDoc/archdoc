@@ -48,3 +48,28 @@ elements:
     kind: queue
     technology: NATS
     description: posting.created events.
+actors:
+  client:
+    kind: agent
+    description: A service that posts to the ledger and reads balances over HTTP.
+    uses: { ledger-api: Posts and reads balances }
+journeys:
+  post-a-posting:
+    actor: client
+    goal: Record a posting
+    importance: critical
+    steps:
+      - { from: client, to: ledger-api, action: POSTs a posting, code: cmd/ledger-api/main.go }
+      - { from: ledger-api, to: ledger.postings, action: Takes the posting, code: cmd/ledger-api/main.go }
+      - { from: ledger.postings, to: ledger.store, action: Writes the posting, code: internal/postings/postings.go }
+      - { from: ledger.store, to: postgres, action: Inserts it, code: internal/store/store.go }
+      - { from: ledger.postings, to: ledger.events, action: Announces it, code: internal/postings/postings.go }
+      - { from: ledger.events, to: nats, action: Publishes posting.created, code: internal/events/bus.go }
+  settle-postings:
+    actor: client
+    goal: Have postings settled
+    steps:
+      - { from: ledger-worker, to: ledger.events, action: Subscribes to posting.created, code: cmd/ledger-worker/main.go }
+      - { from: ledger-worker, to: ledger.postings, action: Settles the posting, code: internal/postings/settle.go }
+      - { from: ledger.postings, to: ledger.store, action: Marks it settled, code: internal/postings/settle.go }
+      - { from: ledger.store, to: postgres, action: Updates the posting, code: internal/store/store.go }

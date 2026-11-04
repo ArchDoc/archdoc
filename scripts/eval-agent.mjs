@@ -106,9 +106,15 @@ for (const n of chosen) {
 }
 if (!existsSync(cli)) throw new Error("Run pnpm build first.");
 
-const { buildModel, formatScore, listRepoFiles, loadModel, scoreModel } = await import(
-  join(here, "packages/core/dist/index.js")
-);
+const {
+  buildModel,
+  formatDiscoveryScore,
+  formatScore,
+  listRepoFiles,
+  loadModel,
+  scoreDiscovery,
+  scoreModel,
+} = await import(join(here, "packages/core/dist/index.js"));
 const { inferModel } = await import(join(here, "packages/analyzers/dist/index.js"));
 
 // What Claude Code gets: the skill as a plugin, the MCP server and the CLI from this build.
@@ -163,8 +169,9 @@ function cached(name) {
   git("-c", "advice.detachedHead=false", "checkout", "-q", commit);
   return dir;
 }
-const sourceFiles = async (root) =>
-  (await listRepoFiles(root)).filter((f) => SOURCE.test(f) && !f.startsWith(".archdoc/"));
+const repoFiles = async (root) =>
+  (await listRepoFiles(root)).filter((f) => !f.startsWith(".archdoc/"));
+const sourceFiles = async (root) => (await repoFiles(root)).filter((f) => SOURCE.test(f));
 
 /** A fresh copy of a fixture's repository, committed, the way an agent would find one. */
 function scratchRepo(name) {
@@ -266,6 +273,19 @@ const summary = (s) => {
   return out;
 };
 
+/** scoreDiscovery's parts, flat, for the report: journey recall only when the golden model has journeys. */
+const discovered = (d) => ({
+  overall: d.overall,
+  journeys: d.journeys.expected ? d.journeys.recall : undefined,
+  found: d.journeys.found,
+  stepDetail: d.stepDetail,
+  stepDepth: d.stepPrecision,
+  tests: d.testExclusion,
+  connected: d.connected,
+  described: d.described,
+  gaps: d.gaps,
+});
+
 async function judged(name, repoDir, modelDir, found) {
   if (!judging) return undefined;
   const j = await judge({
@@ -298,9 +318,15 @@ async function oneRun(name, i) {
   if (existsSync(join(dir, ".archdoc"))) {
     cpSync(join(dir, ".archdoc"), join(runDir, "archdoc"), { recursive: true });
     const found = await loadModel(".", { cwd: dir });
-    const s = scoreModel(found, golden(name), await sourceFiles(dir));
-    writeFileSync(join(runDir, "score.txt"), `${formatScore(s, true)}\n`);
+    const g = golden(name);
+    const s = scoreModel(found, g, await sourceFiles(dir));
+    const d = scoreDiscovery(found, g, await repoFiles(dir), s);
+    writeFileSync(
+      join(runDir, "score.txt"),
+      `${formatScore(s, true)}\n\n${formatDiscoveryScore(d, true)}\n`,
+    );
     run.score = summary(s);
+    run.discovery = discovered(d);
     run.detail = s;
     try {
       run.judge = await judged(name, dir, join(dir, ".archdoc"), found);
@@ -326,8 +352,13 @@ async function initScore(name) {
   const r = await inferModel(dir);
   const ms = Date.now() - started;
   const found = buildModel(r.files, { root: ".archdoc/archdoc.yaml" });
-  const s = scoreModel(found, golden(name), await sourceFiles(dir));
-  const out = { ...summary(s), ms };
+  const g = golden(name);
+  const s = scoreModel(found, g, await sourceFiles(dir));
+  const out = {
+    ...summary(s),
+    ms,
+    discovery: discovered(scoreDiscovery(found, g, await repoFiles(dir), s)),
+  };
   if (judging) {
     for (const f of r.files) {
       mkdirSync(join(dir, f.path, ".."), { recursive: true });
@@ -354,6 +385,17 @@ await Promise.all(
 rmSync(kit, { recursive: true, force: true });
 
 const metrics = ["overall", "containers", "components", "datastores", "uses", "nesting", "code"];
+const discoveryMetrics = [
+  "overall",
+  "journeys",
+  "found",
+  "stepDetail",
+  "stepDepth",
+  "tests",
+  "connected",
+  "described",
+  "gaps",
+];
 const dims = [
   "fidelity",
   "granularity",
@@ -376,6 +418,12 @@ for (const name of chosen) {
     init: await initScore(name),
     agent: Object.fromEntries(
       metrics.map((m) => [m, mean(scored.map((r) => r.score[m]).filter((x) => x !== undefined))]),
+    ),
+    discovery: Object.fromEntries(
+      discoveryMetrics.map((m) => [
+        m,
+        mean(scored.map((r) => r.discovery?.[m]).filter((x) => x !== undefined)),
+      ]),
     ),
     judge: judgedRuns.length
       ? {
@@ -439,6 +487,40 @@ const lines = [
   "",
   `Overall, mean over ${real ? "repositories" : "fixtures"}: init ${pct(mean(rows.map((f) => f.init.overall)))} → agent ${pct(mean(rows.map((f) => f.agent.overall).filter((x) => x !== undefined)))}.`,
 ];
+{
+  const n = (x) => (x === undefined ? "–" : (Math.round(x * 10) / 10).toString());
+  const col = {
+    overall: ["Discovery", pct],
+    journeys: ["Journeys found", pct],
+    found: ["Journeys", n],
+    stepDetail: ["Step detail", pct],
+    stepDepth: ["Step depth", pct],
+    tests: ["Tests left out", pct],
+    connected: ["Connected", pct],
+    described: ["Described", pct],
+    gaps: ["Left to do", n],
+  };
+  lines.push(
+    "",
+    "## Discovery",
+    "",
+    "How well the model was discovered beyond its structure (scoreDiscovery in @archdoc/core), init → agent. Journeys found is the share of the golden model's journeys one of the model's journeys follows (half their hops or more; – when it has none); journeys is how many the model has. Step detail is the share of steps with an action and code that exists; step depth, of steps on the most specific element. Tests left out is the share of test and verification files not modeled as elements of their own. Connected and described are shares of the model's elements. Left to do is how many lines archdoc check --done still lists.",
+    "",
+    `| ${title(what)} | ${discoveryMetrics.map((m) => col[m][0]).join(" | ")} |`,
+    `|---|${discoveryMetrics.map(() => "---").join("|")}|`,
+    ...rows.map(
+      (f) =>
+        [
+          `| ${f.fixture}`,
+          ...discoveryMetrics.map(
+            (m) => `${col[m][1](f.init.discovery?.[m])} → **${col[m][1](f.discovery[m])}**`,
+          ),
+        ].join(" | ") + " |",
+    ),
+    "",
+    `Discovery, mean over ${real ? "repositories" : "fixtures"}: init ${pct(mean(rows.map((f) => f.init.discovery?.overall).filter((x) => x !== undefined)))} → agent ${pct(mean(rows.map((f) => f.discovery.overall).filter((x) => x !== undefined)))}.`,
+  );
+}
 if (judging) {
   const n = (x) => (x === undefined ? "–" : (Math.round(x * 10) / 10).toString());
   lines.push(

@@ -1,0 +1,4 @@
+packages:
+  - web
+  - orders
+  - e2e

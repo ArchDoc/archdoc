@@ -31,3 +31,27 @@ elements:
     kind: datastore
     technology: PostgreSQL
     description: Invoices and customers.
+actors:
+  client:
+    kind: agent
+    description: An app that issues invoices and looks up customers over HTTP.
+    uses: { invoicing: Issues invoices and finds customers }
+journeys:
+  issue-invoice:
+    actor: client
+    goal: Bill a customer
+    importance: critical
+    steps:
+      - { from: client, to: invoicing, action: POSTs an invoice, code: invoicing/api/invoices.py }
+      - { from: invoicing.api, to: invoicing.services, action: Issues the invoice, code: invoicing/api/invoices.py }
+      - { from: invoicing.services, to: invoicing.models, action: Builds the invoice, code: invoicing/services/billing.py }
+      - { from: invoicing.services, to: invoicing.persistence, action: Saves it, code: invoicing/services/billing.py }
+      - { from: invoicing.persistence, to: db, action: Commits the row, code: invoicing/db.py }
+  find-customer:
+    actor: client
+    goal: Look up a customer
+    steps:
+      - { from: client, to: invoicing, action: GETs a customer, code: invoicing/api/customers.py }
+      - { from: invoicing.api, to: invoicing.services, action: Finds the customer, code: invoicing/api/customers.py }
+      - { from: invoicing.services, to: invoicing.persistence, action: Queries customers, code: invoicing/services/customers.py }
+      - { from: invoicing.persistence, to: db, action: Reads the row, code: invoicing/db.py }

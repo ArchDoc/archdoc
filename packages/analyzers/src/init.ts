@@ -5,6 +5,7 @@ import {
   buildModel,
   type CodeIndex,
   isDevTooling,
+  isVerificationCode,
   listRepoFiles,
   locate,
   observedEdges,
@@ -80,7 +81,11 @@ const TOOL_ROOTS = ["integrations", "plugins", "extensions", "tools", "actions"]
 
 /** What `archdoc init` writes, without writing it. */
 export async function inferModel(root: string, name?: string): Promise<InitResult> {
-  const files = (await listRepoFiles(root)).filter((f) => !f.startsWith(".archdoc/"));
+  // Tests, test helpers, mocks, fixtures, benchmarks, and smoke checks aren't
+  // architecture: left out, they make no containers, components, or uses.
+  const files = (await listRepoFiles(root)).filter(
+    (f) => !f.startsWith(".archdoc/") && !isVerificationCode(f),
+  );
   const ctx = contextFor(root, files);
   const units: Unit[] = [];
   const add = (u: Omit<Found, "key">, key: string) => {
@@ -258,15 +263,18 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
   if (!r.problems.length) {
     out.push(
       "",
-      "Everything is marked inferred. Next, with the code open:",
-      "  1. Describe each element: what it does, not what it's called (archdoc show <id> --code).",
-      "     Go layer by layer: containers, then the components inside each, then their code.",
-      "     Merge or split elements to match how the system works, but keep the layers nested:",
-      "     a component inside a container, code (kind: code, code: { path, symbol }) inside a component.",
-      "  2. Add actors: who and what uses it (routes, CLIs, UIs, scheduled jobs, webhooks).",
-      "  3. Add the two or three journeys that matter most, with code: on each step.",
-      "  4. archdoc check until it's clean, then ask a person to review it in archdoc view.",
-      "  5. Once they accept it, remove the provenance blocks and run archdoc seal --all.",
+      "Everything is marked inferred, and tests and other verification code are left out. Next, with the code open:",
+      "  1. Reshape it to the parts the README and deployment files name: about 3 to 12 per level.",
+      "     Fold per-file code into its component, group variants, rename what's named after build files.",
+      "  2. Add what imports don't show: datastores, queues, externals, and the uses between services",
+      "     over HTTP, queues, and schedulers. Find how each unconnected element is reached.",
+      "  3. Describe each element: what it does, not what it's called (archdoc show <id> --code).",
+      "     Keep the layers nested: a component inside a container, code inside a component.",
+      "  4. Add actors from the entry points (routes, pages, CLI commands, consumers, scheduled jobs),",
+      "     and trace the two to four main flows through the code as journeys, a step per hop,",
+      "     each with an action and the code where it happens.",
+      "  5. archdoc check --done until it says the model is done, then ask a person to review it.",
+      "  6. Once they accept it, remove the provenance blocks and run archdoc seal --all.",
     );
     if (!r.written) out.push("", ...r.files.flatMap((f) => [`# ${f.path}`, f.text]));
   }
@@ -279,7 +287,8 @@ const HEADER = `# Written by archdoc init from the repository's manifests, compo
 `;
 
 const NEXT = `
-# Who uses this system, and how: init can't tell. Add them, then run archdoc check.
+# Who uses this system, and how: init can't tell. Trace the main flows through the
+# code, a step per hop, then run archdoc check --done.
 # actors:
 #   customer: { kind: person, uses: { web: Shops } }
 # journeys:
@@ -289,6 +298,7 @@ const NEXT = `
 #     importance: critical
 #     steps:
 #       - { from: customer, to: web, action: Checks out, code: apps/web/src/checkout.ts }
+#       - { from: web, to: api, action: Posts the cart, code: apps/web/src/api.ts }
 `;
 
 function modelDoc(namespace: string, units: Unit[]) {

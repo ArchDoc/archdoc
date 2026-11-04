@@ -48,3 +48,26 @@ elements:
         kind: queue
         technology: RabbitMQ
         description: ticket.opened events.
+actors:
+  customer:
+    kind: person
+    description: Files support tickets and follows them.
+    uses: { frontend: Files and follows tickets }
+journeys:
+  open-ticket:
+    actor: customer
+    goal: Get help with a problem
+    importance: critical
+    steps:
+      - { from: customer, to: frontend, action: Files a ticket, code: frontend/src/tickets.tsx }
+      - { from: frontend, to: backend, action: POSTs the ticket, code: frontend/src/client.ts }
+      - { from: backend.handlers, to: backend.domain, action: Opens the ticket, code: backend/http/handlers/tickets.go }
+      - { from: backend.domain, to: postgres, action: Saves it, code: backend/tickets/store.go }
+      - { from: backend.domain, to: backend.publisher, action: Announces it, code: backend/tickets/open.go }
+      - { from: backend.publisher, to: rabbitmq, action: Publishes ticket.opened, code: backend/queue/publish.go }
+  triage-ticket:
+    actor: customer
+    goal: Have the ticket prioritized
+    steps:
+      - { from: worker, to: rabbitmq, action: Consumes ticket.opened, code: worker/worker/consume.py }
+      - { from: worker, to: postgres, action: Sets the ticket's priority, code: worker/worker/triage.py }

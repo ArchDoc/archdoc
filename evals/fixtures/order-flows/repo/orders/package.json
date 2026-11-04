@@ -1,0 +1,12 @@
+{
+  "name": "@order-flows/orders",
+  "private": true,
+  "dependencies": {
+    "express": "^4.21.0",
+    "pg": "^8.13.0",
+    "amqplib": "^0.10.4"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}
