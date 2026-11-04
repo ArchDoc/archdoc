@@ -322,10 +322,18 @@ function group(e: ElementNode): string {
 
 const norm = (s: string | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-/** Same key, name, or technology ("Postgres" and "PostgreSQL" are the same). */
+/**
+ * Same key, name, or technology ("Postgres" and "PostgreSQL" are the same),
+ * one name the start of the other ("carrier" and "carrier-api"), or one's
+ * name the other's technology ("smtp" and an email relay on SMTP).
+ */
 function sameThing(a: ElementNode, b: ElementNode): boolean {
   const names = (e: ElementNode) => [norm(e.key), norm(e.spec.name)].filter(Boolean);
-  if (names(a).some((n) => names(b).includes(n))) return true;
+  const prefix = (x: string, y: string) =>
+    x === y || (Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x)));
+  if (names(a).some((n) => names(b).some((m) => prefix(n, m)))) return true;
+  const tech = (e: ElementNode) => norm(e.spec.technology);
+  if (names(a).includes(tech(b)) || names(b).includes(tech(a))) return true;
   const ta = norm(a.spec.technology).slice(0, 5);
   const tb = norm(b.spec.technology).slice(0, 5);
   return ta.length >= 4 && ta === tb;
@@ -410,9 +418,14 @@ export function scoreDiscovery(
   for (const j of goldenJourneys) {
     const want = hops(j);
     if (!want.length) continue;
-    // Matched at any depth: a step on a container covers the golden step on its component.
+    // Matched at any depth, either way round: a step on a container covers the golden step on
+    // its component, and a queue delivering to a consumer is the consumer reading the queue.
     const covered = (have: (readonly [string, string])[]) =>
-      want.filter(([from, to]) => have.some(([x, y]) => near(x, from) && near(y, to))).length;
+      want.filter(([from, to]) =>
+        have.some(
+          ([x, y]) => (near(x, from) && near(y, to)) || (near(x, to) && near(y, from)),
+        ),
+      ).length;
     const best = Math.max(0, ...foundHops.map(covered));
     if (best * 2 < want.length) missed.push(j.id);
   }

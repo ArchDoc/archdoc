@@ -126,6 +126,67 @@ describe("assessDiscovery", () => {
     expect(a.gaps.find((g) => g.code === "done/undescribed")?.message).toContain("api.routes");
   });
 
+  it("flags a journey that never reaches what it stores or calls", () => {
+    const m = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: shop
+        actors:
+          shopper: { kind: person, uses: { api: Buys } }
+        elements:
+          api:
+            kind: container
+            description: The orders API.
+            code: api/**
+            elements:
+              routes: { kind: component, description: Routes., code: api/src/routes/**, uses: { orders: Creates orders } }
+              orders: { kind: component, description: Orders., code: api/src/orders/**, uses: { db: Saves orders } }
+          db: { kind: datastore, description: Orders. }
+        journeys:
+          buy:
+            actor: shopper
+            goal: Buy
+            steps:
+              - { from: shopper, to: api.routes, action: Posts, code: api/src/routes/orders.ts }
+              - { from: api.routes, to: api.orders, action: Creates, code: api/src/orders/service.ts }
+      `,
+    });
+    const g = assessDiscovery(m, files).gaps.find((x) => x.code === "done/journey-stops-short");
+    expect(g?.message).toContain("its elements use db");
+  });
+
+  it("flags a step whose code is in another element than the ones it names", () => {
+    const m = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: shop
+        actors:
+          shopper: { kind: person, uses: { web: Buys } }
+        elements:
+          web: { kind: container, description: Pages., code: web/**, uses: { db: Saves orders } }
+          api:
+            kind: container
+            description: The orders API.
+            code: api/**
+            elements:
+              orders: { kind: component, description: Orders., code: api/src/orders/** }
+              storage: { kind: component, description: Storage., code: api/src/storage/** }
+          db: { kind: datastore, description: Orders. }
+        journeys:
+          buy:
+            actor: shopper
+            goal: Buy
+            steps:
+              - { from: shopper, to: web, action: Buys, code: web/src/main.ts }
+              - { from: web, to: db, action: Saves the order, code: api/src/storage/db.ts }
+      `,
+    });
+    const a = assessDiscovery(m, files);
+    const g = a.gaps.find((x) => x.code === "done/step-elsewhere");
+    expect(g?.message).toContain("step 2's code is in api.storage");
+    expect(a.stats.preciseSteps).toBe(1);
+  });
+
   it("says what to do in text", () => {
     const text = formatDiscovery(a);
     expect(text).toMatch(/^✗ Not done yet/);

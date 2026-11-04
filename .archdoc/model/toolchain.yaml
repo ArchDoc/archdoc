@@ -56,9 +56,12 @@ elements:
                 description: Loads archdoc.lock and the vendored models of other repos
           query:
             kind: component
-            description: Element, actor, and overview queries, search by words (and by file paths and symbols with a code index), impact (consumers, actors, journeys, owners, rules, and consumers and journeys in other repos), context briefs that rank the files and symbols to start a task in, eval scoring (of context briefs against past commits, and of a whole model against a golden one), and which experimental parts of the format a model uses.
+            description: Element, actor, and overview queries, search by words (and by file paths and symbols with a code index), impact (consumers, actors, journeys, owners, rules, and consumers and journeys in other repos), context briefs that rank the files and symbols to start a task in, eval scoring (of context briefs against past commits, and of a whole model against a golden one, for its structure and for how well it was discovered), and which experimental parts of the format a model uses.
             code: [{ path: packages/core/src/query/** }]
             uses:
+              checker:
+                description: Scores how well a model was discovered with the same list archdoc check --done gives
+                provenance: { source: suggested, by: agent:claude-code }
               data:
                 description: Lists the data the elements of a context brief send and store
               imports:
@@ -96,7 +99,7 @@ elements:
                 description: Prints what archdoc check --seals says
           checker:
             kind: component
-            description: Validates journeys, and compares the model with the code and its rules (undeclared dependencies, rule violations, stale paths, orphans, and components outside containers or code outside components). Build tooling (devDependencies, tool config files) is not a dependency between elements.
+            description: Validates journeys, and compares the model with the code and its rules (undeclared dependencies, rule violations, stale paths, orphans, and components outside containers or code outside components). Also says whether a new model is done (archdoc check --done), listing levels over the limits, init's descriptions, test and verification code modeled as elements, unconnected elements, actors, journeys, and steps without an action or code. Build tooling (devDependencies, tool config files) is not a dependency between elements.
             code: [{ path: packages/core/src/check/** }]
             uses:
               seals:

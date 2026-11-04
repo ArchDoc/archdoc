@@ -14,6 +14,9 @@ person would write for it (`golden.yaml`):
 | `python-fastapi` | A FastAPI app in one package, split into api, services, models, and persistence |
 | `polyglot` | A TypeScript frontend, a Go backend with components, a Python worker, RabbitMQ and Postgres |
 | `single-package` | A TypeScript CLI that's one package, which the model has to split into components |
+| `order-flows` | Services in TypeScript, Python, and Go that reach each other only over HTTP, RabbitMQ, and a Kubernetes CronJob, two externals, and tests, mocks, end-to-end tests, smoke checks, and a load test to leave out |
+
+Every golden model has actors and the journeys a newcomer would trace, each step with an action and code.
 
 ## Scoring
 
@@ -35,14 +38,33 @@ technology. It reports:
 - **Overall**: the mean of the F1s, nesting, and code accuracy that apply.
 
 Code elements (`kind: code`) aren't scored on their own: the files they point at
-count toward the component or container above them. Descriptions, actors,
-journeys, and data aren't scored yet.
+count toward the component or container above them.
+
+`scoreDiscovery(found, golden, files, score)` scores how well the model was
+discovered, beyond its structure, from the same checks `archdoc check --done`
+runs:
+
+- **Journeys found**: the share of the golden model's journeys that one of the
+  model's journeys follows, for at least half of their hops between elements.
+  Hops match at any depth, so a step on a container covers the golden step on
+  its component.
+- **Step detail**: the share of steps with an action (or description) and code
+  that exists.
+- **Step depth**: the share of steps on the most specific element the model
+  has, not a container whose components would lead to the code.
+- **Tests left out**: the share of test and verification files (`isVerificationCode`)
+  not modeled as elements of their own. A container whose glob covers its own
+  tests is fine.
+- **Connected** and **described**: the shares of the model's elements that
+  something connects to, and that have a description of their own.
+- **Overall**: the mean of those that apply.
 
 ## Running them
 
 **Init** runs with `pnpm test` (`packages/analyzers/test/evals.test.ts`):
 `archdoc init` on each fixture, held to the scores it gets today. When init
-finds more, raise the floors.
+finds more, raise the floors. It also checks that init models no test code and
+that each golden model's journeys score as found, with detailed steps.
 
 **Agent** calls a model, so it costs money and runs by hand:
 
@@ -112,7 +134,8 @@ capped by `maxBudgetUsd` in each `repo.yaml`, and about $0.30 to judge.
 
 1. Add `fixtures/<name>/repo/` with a few files per element and real imports
    between them, so the uses are in the code.
-2. Write `fixtures/<name>/golden.yaml` the way you'd want the model to be. Code
-   paths are relative to `repo/`.
+2. Write `fixtures/<name>/golden.yaml` the way you'd want the model to be, with
+   its actors and two or three journeys, each step with an action and code.
+   Code paths are relative to `repo/`.
 3. Add its floor to `packages/analyzers/test/evals.test.ts` from what init
    scores (`pnpm test evals` prints it when it fails).

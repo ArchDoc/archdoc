@@ -1,4 +1,4 @@
-import { filesUnder, resolveCodeMap } from "../codemap/codemap.js";
+import { filesUnder, locate, resolveCodeMap } from "../codemap/codemap.js";
 import type { ElementNode, Model } from "../model.js";
 import { stepCodePath } from "../query/code-index.js";
 import { orphanElements } from "./check.js";
@@ -38,7 +38,7 @@ export const LEVEL_LIMITS = { top: 12, children: 10 } as const;
 
 /** One thing a model still lacks before it's done. */
 export interface DiscoveryGap {
-  /** done/level-too-wide, done/undescribed, done/test-code, done/orphan, done/no-actors, done/few-journeys, done/short-journey, done/step-detail, done/coarse-step. */
+  /** done/level-too-wide, done/undescribed, done/test-code, done/orphan, done/no-actors, done/few-journeys, done/short-journey, done/journey-stops-short, done/step-detail, done/step-elsewhere, done/coarse-step. */
   code: string;
   message: string;
   element?: string | undefined;
@@ -63,7 +63,7 @@ export interface DiscoveryAssessment {
     steps: number;
     /** Steps that say what happens (action or description) and point at code that exists. */
     detailedSteps: number;
-    /** Steps whose elements are the most specific the model has (no components left to name). */
+    /** Steps on the most specific elements the model has (no components left to name), whose code is theirs. */
     preciseSteps: number;
     /** The widest level: how many elements (not code) one parent, or the top, holds. */
     widestLevel: number;
@@ -71,6 +71,8 @@ export interface DiscoveryAssessment {
 }
 
 const ARCHITECTURE = new Set(["container", "component", "datastore", "queue", "external"]);
+/** Where a flow ends: what it stores, publishes, or calls outside the system. */
+const INFRA = new Set(["datastore", "queue", "external"]);
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs|go|py|rs|java|kt|kts|rb|cs|php|swift|scala|ex|exs)$/;
 
 /**
@@ -142,9 +144,10 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
     if (e.spec.kind === "system") continue;
     const under = filesUnder(model, map, e.id).filter((f) => SOURCE.test(f));
     const tests = under.filter((f) => testSet.has(f)).length;
-    // Mostly tests: a test suite, a mock, a test helper modeled as an element.
-    // A container's glob that also covers its own tests is fine.
-    if (under.length && tests / under.length > 0.5) testElements.push(e.id);
+    // All but a few of its files are tests: a test suite, a mock, a test helper modeled as an
+    // element. A container whose glob also covers its own tests is fine, even in Go or Java,
+    // where tests can outnumber the code.
+    if (under.length && tests / under.length >= 0.9) testElements.push(e.id);
   }
   // Name the outermost one only: its children go with it.
   const outermost = testElements.filter(
@@ -205,8 +208,29 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
         message: `Journey "${j.id}" has ${j.steps.length} step${j.steps.length === 1 ? "" : "s"}. Follow the request through the code to where it ends (the datastore it writes, the message it publishes, the reply the actor gets) and add a step for each hop.`,
       });
     }
+    // A flow ends somewhere: what it stores, publishes, or calls outside.
+    const on = new Set(
+      j.steps.flatMap((s) => [s.from, s.to]).flatMap((t) => (t?.type === "element" ? [t.id] : [])),
+    );
+    const reaches = [...on].some((id) => INFRA.has(model.elements.get(id)?.spec.kind ?? ""));
+    const reachable = model.relationships.flatMap((r) =>
+      r.from.type === "element" &&
+      on.has(r.from.id) &&
+      r.to.type === "element" &&
+      INFRA.has(model.elements.get(r.to.id)?.spec.kind ?? "")
+        ? [r.to.id]
+        : [],
+    );
+    if (!reaches && reachable.length) {
+      gaps.push({
+        code: "done/journey-stops-short",
+        journey: j.id,
+        message: `Journey "${j.id}" never reaches what it stores, publishes, or calls, though its elements use ${[...new Set(reachable)].join(", ")}. Follow the flow to where it ends and add the step that reaches it.`,
+      });
+    }
     const thin: number[] = [];
     const coarse: number[] = [];
+    const elsewhere: string[] = [];
     for (const s of j.steps) {
       steps++;
       const said = !!(s.spec.action?.trim() || s.spec.description?.trim());
@@ -214,15 +238,31 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
       const located = !!code && (fileSet.has(code) || files.some((f) => f.startsWith(`${code}/`)));
       if (said && located) detailedSteps++;
       else thin.push(s.index + 1);
-      const ends = [s.from, s.to].filter((t) => t?.type === "element") as { id: string }[];
-      if (ends.every((t) => leaf(t.id))) preciseSteps++;
-      else coarse.push(s.index + 1);
+      // The step's code should be its own: in the element it's from or to, or inside one.
+      const owner = code && located ? locate(model, code).element?.id : undefined;
+      const endIds = [s.from, s.to].flatMap((t) => (t?.type === "element" ? [t.id] : []));
+      const astray =
+        !!owner &&
+        endIds.length > 0 &&
+        !endIds.some(
+          (id) => owner === id || owner.startsWith(`${id}.`) || id.startsWith(`${owner}.`),
+        );
+      if (astray) elsewhere.push(`step ${s.index + 1}'s code is in ${owner}`);
+      if (!endIds.every(leaf)) coarse.push(s.index + 1);
+      else if (!astray) preciseSteps++;
     }
     if (thin.length) {
       gaps.push({
         code: "done/step-detail",
         journey: j.id,
         message: `Journey "${j.id}", step${thin.length === 1 ? "" : "s"} ${thin.join(", ")}: give each an action (what happens, in the domain's words) and code: the file (and function) where it happens, one that exists. Add sends: when you know the data it carries.`,
+      });
+    }
+    if (elsewhere.length) {
+      gaps.push({
+        code: "done/step-elsewhere",
+        journey: j.id,
+        message: `Journey "${j.id}": ${elsewhere.join(", ")}, not in the elements the step names. Put each step on the elements whose code does the work, a hop for each, so the journey leads a newcomer through the code.`,
       });
     }
     if (coarse.length) {
@@ -275,7 +315,9 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0): string {
     "done/no-actors",
     "done/few-journeys",
     "done/short-journey",
+    "done/journey-stops-short",
     "done/step-detail",
+    "done/step-elsewhere",
     "done/coarse-step",
   ];
   const sorted = [...a.gaps].sort((x, y) => order.indexOf(x.code) - order.indexOf(y.code));
