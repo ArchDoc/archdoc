@@ -48,13 +48,18 @@ runs:
   model's journeys follows, for at least half of their hops between elements.
   Hops match at any depth, so a step on a container covers the golden step on
   its component.
+- **Journey depth**: the share of the model's journeys with at least three steps
+  that reach the datastore, queue, or external their elements use.
 - **Step detail**: the share of steps with an action (or description) and code
-  that exists.
+  that exists (a reply to an actor needs no code).
 - **Step depth**: the share of steps on the most specific element the model
-  has, not a container whose components would lead to the code.
+  has, not a container whose components would lead to the code, and whose code
+  is in one of the elements they name.
 - **Tests left out**: the share of test and verification files (`isVerificationCode`)
   not modeled as elements of their own. A container whose glob covers its own
   tests is fine.
+- **Mapped**: the share of source files, not tests and not vendored or
+  generated, that some element covers.
 - **Connected** and **described**: the shares of the model's elements that
   something connects to, and that have a description of their own.
 - **Overall**: the mean of those that apply.
@@ -101,7 +106,8 @@ model of a real system is one an engineer new to it can read and use:
 
 Each has `repo.yaml` (URL, commit, and the run's turn and dollar caps),
 `reference.yaml` (the containers, components, datastores, and uses any
-maintainer would agree on, not a full model), and `questions.yaml` (what a
+maintainer would agree on, not a full model, and for Online Boutique the
+checkout and add-to-cart journeys), and `questions.yaml` (what a
 newcomer asks, with the files that answer it). The repositories aren't
 committed: `pnpm eval:agent --set real-world` clones each once into
 `evals/.cache/repos/` and gives the agent the pinned commit's files without

@@ -38,7 +38,7 @@ export const LEVEL_LIMITS = { top: 12, children: 10 } as const;
 
 /** One thing a model still lacks before it's done. */
 export interface DiscoveryGap {
-  /** done/level-too-wide, done/undescribed, done/test-code, done/orphan, done/no-actors, done/few-journeys, done/short-journey, done/journey-stops-short, done/step-detail, done/step-elsewhere, done/coarse-step. */
+  /** done/level-too-wide, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-actors, done/few-journeys, done/short-journey, done/journey-stops-short, done/step-detail, done/step-elsewhere, done/coarse-step. */
   code: string;
   message: string;
   element?: string | undefined;
@@ -51,6 +51,9 @@ export interface DiscoveryAssessment {
     /** Containers, components, datastores, queues, and externals. */
     elements: number;
     described: number;
+    /** Source files (not tests, not vendored or generated) that no element covers, of how many. */
+    unmappedFiles: number;
+    sourceFiles: number;
     /** Elements nothing connects to. */
     orphans: string[];
     /** Elements whose code is mostly test or verification code. */
@@ -60,6 +63,8 @@ export interface DiscoveryAssessment {
     testFilesModeled: number;
     actors: number;
     journeys: number;
+    /** Journeys long enough to follow and that reach the datastore, queue, or external their elements use. */
+    completeJourneys: number;
     steps: number;
     /** Steps that say what happens (action or description) and point at code that exists. */
     detailedSteps: number;
@@ -71,6 +76,11 @@ export interface DiscoveryAssessment {
 }
 
 const ARCHITECTURE = new Set(["container", "component", "datastore", "queue", "external"]);
+/** Code that's never architecture: vendored, generated, or built. */
+const NOT_ARCHITECTURE =
+  /(^|\/)(node_modules|vendor|third_party|dist|build|out|target|generated|gen|\.[^/]+)\/|\.(pb|pb\.gw|gen|generated)\.[a-z]+$|_pb2(_grpc)?\.py$/;
+/** The share of source files a model may leave unmapped before it's not done. */
+const UNMAPPED_LIMIT = 0.2;
 /** Where a flow ends: what it stores, publishes, or calls outside the system. */
 const INFRA = new Set(["datastore", "queue", "external"]);
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs|go|py|rs|java|kt|kts|rb|cs|php|swift|scala|ex|exs)$/;
@@ -138,12 +148,12 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
   // 3. Test and verification code isn't architecture.
   const map = resolveCodeMap(model, files);
   const testFiles = files.filter((f) => SOURCE.test(f) && isVerificationCode(f));
-  const testSet = new Set(testFiles);
   const testElements: string[] = [];
   for (const e of elements) {
     if (e.spec.kind === "system") continue;
-    const under = filesUnder(model, map, e.id).filter((f) => SOURCE.test(f));
-    const tests = under.filter((f) => testSet.has(f)).length;
+    // All its files count, docs and config too: an integration of Markdown with one test isn't a test.
+    const under = filesUnder(model, map, e.id);
+    const tests = under.filter((f) => isVerificationCode(f)).length;
     // All but a few of its files are tests: a test suite, a mock, a test helper modeled as an
     // element. A container whose glob also covers its own tests is fine, even in Go or Java,
     // where tests can outnumber the code.
@@ -160,6 +170,28 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
       code: "done/test-code",
       element: id,
       message: `${id} is test or verification code (tests, mocks, fixtures, benchmarks, smoke checks). Remove it from the model, and the uses and steps that name it.`,
+    });
+  }
+
+  // Code no element covers: usually a code: that lists a few files where the directory was meant.
+  const sources = files.filter(
+    (f) => SOURCE.test(f) && !isVerificationCode(f) && !NOT_ARCHITECTURE.test(f),
+  );
+  const unmappedSet = new Set(map.unmapped);
+  const unmapped = sources.filter((f) => unmappedSet.has(f));
+  if (sources.length && unmapped.length / sources.length > UNMAPPED_LIMIT) {
+    const byDir = new Map<string, number>();
+    for (const f of unmapped) {
+      const dir = f.split("/").slice(0, -1).slice(0, 2).join("/") || ".";
+      byDir.set(dir, (byDir.get(dir) ?? 0) + 1);
+    }
+    const top = [...byDir]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 6)
+      .map(([d, n]) => `${d}/ (${n})`);
+    gaps.push({
+      code: "done/unmapped-code",
+      message: `${unmapped.length} of ${sources.length} source files belong to no element, such as in ${top.join(", ")}. Map each element to its whole directory (code: dir/**) rather than a few files, and give what's left an element or leave it out on purpose.`,
     });
   }
 
@@ -195,13 +227,15 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
       (c) => model.elements.get(c)?.spec.kind !== "code",
     );
   let steps = 0;
+  let completeJourneys = 0;
   let detailedSteps = 0;
   let preciseSteps = 0;
   for (const j of journeys) {
     const elementHops = j.steps.filter(
       (s) => s.from?.type === "element" || s.to?.type === "element",
     ).length;
-    if (j.steps.length < 3 || elementHops < 2) {
+    const short = j.steps.length < 3 || elementHops < 2;
+    if (short) {
       gaps.push({
         code: "done/short-journey",
         journey: j.id,
@@ -221,11 +255,13 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
         ? [r.to.id]
         : [],
     );
-    if (!reaches && reachable.length) {
+    const stops = !reaches && reachable.length > 0;
+    if (!short && !stops) completeJourneys++;
+    if (stops) {
       gaps.push({
         code: "done/journey-stops-short",
         journey: j.id,
-        message: `Journey "${j.id}" never reaches what it stores, publishes, or calls, though its elements use ${[...new Set(reachable)].join(", ")}. Follow the flow to where it ends and add the step that reaches it.`,
+        message: `Journey "${j.id}" never reaches the datastore, queue, or external it reads, writes, or calls, though its elements use ${[...new Set(reachable)].join(", ")}. Follow the flow to where it ends and add the step that reaches it.`,
       });
     }
     const thin: number[] = [];
@@ -236,7 +272,12 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
       const said = !!(s.spec.action?.trim() || s.spec.description?.trim());
       const code = s.spec.code ? stepCodePath(s.spec.code) : undefined;
       const located = !!code && (fileSet.has(code) || files.some((f) => f.startsWith(`${code}/`)));
-      if (said && located) detailedSteps++;
+      // A reply to an actor, or a step between things with no code here, has no code to point at.
+      const coded = [s.from, s.to].some(
+        (t) => t?.type === "element" && filesUnder(model, map, t.id).length > 0,
+      );
+      const needsCode = s.to?.type !== "actor" && coded;
+      if (said && (located || (!code && !needsCode))) detailedSteps++;
       else thin.push(s.index + 1);
       // The step's code should be its own: in the element it's from or to, or inside one.
       const owner = code && located ? locate(model, code).element?.id : undefined;
@@ -279,12 +320,15 @@ export function assessDiscovery(model: Model, files: readonly string[]): Discove
     stats: {
       elements: arch.length,
       described: arch.length - undescribed.length,
+      unmappedFiles: unmapped.length,
+      sourceFiles: sources.length,
       orphans,
       testElements: outermost,
       testFiles: testFiles.length,
       testFilesModeled,
       actors: model.actors.size,
       journeys: journeys.length,
+      completeJourneys,
       steps,
       detailedSteps,
       preciseSteps,
@@ -304,12 +348,14 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0): string {
       : `✗ Not done yet: ${a.gaps.length} thing${a.gaps.length === 1 ? "" : "s"} to finish${errors ? `, and archdoc check has ${errors} error${errors === 1 ? "" : "s"}` : ""}.`,
     "",
     `  ${s.described} of ${s.elements} elements described, ${s.orphans.length} unconnected, widest level ${s.widestLevel}`,
+    `  ${s.sourceFiles - s.unmappedFiles} of ${s.sourceFiles} source files belong to an element`,
     `  ${s.testElements.length} test or verification element${s.testElements.length === 1 ? "" : "s"}; ${s.testFilesModeled} of ${s.testFiles} test files modeled`,
     `  ${s.actors} actor${s.actors === 1 ? "" : "s"}, ${s.journeys} journey${s.journeys === 1 ? "" : "s"}, ${s.detailedSteps} of ${s.steps} steps with an action and code`,
   );
   const order = [
     "done/test-code",
     "done/level-too-wide",
+    "done/unmapped-code",
     "done/orphan",
     "done/undescribed",
     "done/no-actors",

@@ -45,9 +45,11 @@ export function formatDiscoveryScore(d: DiscoveryScore, verbose = false): string
     d.journeys.expected
       ? `  ${"Journeys".padEnd(14)} recall ${pct(d.journeys.recall).padStart(4)} (${d.journeys.matched}/${d.journeys.expected}), ${d.journeys.found} in the model`
       : `  ${"Journeys".padEnd(14)} ${d.journeys.found} in the model`,
+    `  ${"Journey depth".padEnd(14)} ${pct(d.journeyDepth)} of journeys are long enough and reach where they end`,
     `  ${"Step detail".padEnd(14)} ${pct(d.stepDetail)} of steps have an action and code that exists`,
     `  ${"Step depth".padEnd(14)} ${pct(d.stepPrecision)} of steps name the most specific element`,
     `  ${"Tests left out".padEnd(14)} ${pct(d.testExclusion)} of test and verification files`,
+    `  ${"Mapped".padEnd(14)} ${pct(d.mapped)} of source files belong to an element`,
     `  ${"Connected".padEnd(14)} ${pct(d.connected)} of elements`,
     `  ${"Described".padEnd(14)} ${pct(d.described)} of elements`,
   ];

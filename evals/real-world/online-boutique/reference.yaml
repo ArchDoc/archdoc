@@ -1,5 +1,6 @@
 # The services and calls in the project's own README, not a full model.
 # Scored for recall: a model may go further than this and isn't marked down.
+# The journeys follow checkout and adding to the cart through the services.
 archdoc: "2.0"
 namespace: boutique
 elements:
@@ -86,3 +87,30 @@ elements:
     kind: datastore
     technology: Redis
     description: Holds the carts.
+actors:
+  shopper:
+    kind: person
+    description: Browses the store, fills a cart, and checks out.
+    uses: { frontend: Shops }
+journeys:
+  place-order:
+    actor: shopper
+    goal: Buy what's in the cart
+    steps:
+      - { from: shopper, to: frontend, action: Places the order, code: src/frontend/handlers.go }
+      - { from: frontend, to: checkoutservice, action: Calls PlaceOrder, code: src/frontend/rpc.go }
+      - { from: checkoutservice, to: cartservice, action: Reads the cart, code: src/checkoutservice/main.go }
+      - { from: checkoutservice, to: productcatalogservice, action: Looks up each product, code: src/checkoutservice/main.go }
+      - { from: checkoutservice, to: currencyservice, action: Converts prices to the user's currency, code: src/checkoutservice/main.go }
+      - { from: checkoutservice, to: shippingservice, action: Quotes and ships the order, code: src/checkoutservice/main.go }
+      - { from: checkoutservice, to: paymentservice, action: Charges the card, code: src/checkoutservice/main.go }
+      - { from: checkoutservice, to: emailservice, action: Sends the confirmation, code: src/checkoutservice/main.go }
+      - { from: cartservice, to: redis-cart, action: Empties the cart, code: src/cartservice/src/cartstore/RedisCartStore.cs }
+  add-to-cart:
+    actor: shopper
+    goal: Put a product in the cart
+    steps:
+      - { from: shopper, to: frontend, action: Adds a product, code: src/frontend/handlers.go }
+      - { from: frontend, to: productcatalogservice, action: Looks up the product, code: src/frontend/rpc.go }
+      - { from: frontend, to: cartservice, action: Adds the item, code: src/frontend/rpc.go }
+      - { from: cartservice, to: redis-cart, action: Saves the cart, code: src/cartservice/src/cartstore/RedisCartStore.cs }

@@ -187,6 +187,29 @@ describe("assessDiscovery", () => {
     expect(a.stats.preciseSteps).toBe(1);
   });
 
+  it("flags source files no element covers, but not tests or vendored code", () => {
+    const m = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: tsdb
+        elements:
+          tsdb: { kind: container, description: Stores samples., code: [tsdb/db.go] }
+      `,
+    });
+    const tree = [
+      "tsdb/db.go",
+      "tsdb/head.go",
+      "tsdb/compact.go",
+      "tsdb/db_test.go",
+      "vendor/x/y.go",
+    ];
+    const a = assessDiscovery(m, tree);
+    expect(a.stats).toMatchObject({ sourceFiles: 3, unmappedFiles: 2 });
+    expect(a.gaps.find((g) => g.code === "done/unmapped-code")?.message).toContain(
+      "2 of 3 source files belong to no element, such as in tsdb/ (2)",
+    );
+  });
+
   it("says what to do in text", () => {
     const text = formatDiscovery(a);
     expect(text).toMatch(/^✗ Not done yet/);

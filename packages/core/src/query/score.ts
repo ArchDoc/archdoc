@@ -365,12 +365,16 @@ function ratios(expected: number, found: number, recalled: number, precise: numb
 export interface DiscoveryScore {
   /** Golden journeys that one of the model's journeys follows (half their element hops or more). */
   journeys: { expected: number; found: number; matched: number; recall: number; missed: string[] };
+  /** Journeys long enough to follow that reach the datastore, queue, or external their elements use, of the model's journeys (0 with none). */
+  journeyDepth: number;
   /** Steps with an action and code that exists, of all the model's steps (0 with none). */
   stepDetail: number;
   /** Steps that name the most specific elements the model has, of all its steps (0 with none). */
   stepPrecision: number;
   /** Test and verification source files the model doesn't give elements of their own, of those in the repository. */
   testExclusion: number;
+  /** Source files (not tests, vendored, or generated) some element covers, of all of them. */
+  mapped: number;
   /** Elements that connect to something, of the model's containers, components, datastores, queues, and externals. */
   connected: number;
   /** Elements with a description of their own, of the same. */
@@ -422,9 +426,7 @@ export function scoreDiscovery(
     // its component, and a queue delivering to a consumer is the consumer reading the queue.
     const covered = (have: (readonly [string, string])[]) =>
       want.filter(([from, to]) =>
-        have.some(
-          ([x, y]) => (near(x, from) && near(y, to)) || (near(x, to) && near(y, from)),
-        ),
+        have.some(([x, y]) => (near(x, from) && near(y, to)) || (near(x, to) && near(y, from))),
       ).length;
     const best = Math.max(0, ...foundHops.map(covered));
     if (best * 2 < want.length) missed.push(j.id);
@@ -439,9 +441,11 @@ export function scoreDiscovery(
     missed,
   };
   const parts = {
+    journeyDepth: s.journeys ? s.completeJourneys / s.journeys : 0,
     stepDetail: s.steps ? s.detailedSteps / s.steps : 0,
     stepPrecision: s.steps ? s.preciseSteps / s.steps : 0,
     testExclusion: frac(s.testFiles - s.testFilesModeled, s.testFiles),
+    mapped: frac(s.sourceFiles - s.unmappedFiles, s.sourceFiles),
     connected: frac(s.elements - s.orphans.length, s.elements),
     described: frac(s.described, s.elements),
   };
