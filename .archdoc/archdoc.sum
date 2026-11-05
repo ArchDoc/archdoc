@@ -1731,11 +1731,23 @@ seals:
     by: agent:claude-code
   step:start-a-model#7:
     kind: structure
-    hash: fnv-5465b825e0d4f889
-    files: {}
+    hash: fnv-9ca2039b430f6e27
+    files:
+      packages/analyzers/src/model-edit.ts:
+        - EditInput
+        - FindInput
+        - editAnswer
+        - findAnswer
     by: agent:claude-code
   step:start-a-model#8:
     kind: structure
-    hash: fnv-5465b825e0d4f889
-    files: {}
+    hash: fnv-c8acec8496b8ba9a
+    files:
+      packages/core/src/edit/edit.ts:
+        - EditOp
+        - EditOptions
+        - EditResult
+        - EditType
+        - EditedFile
+        - editModel
     by: agent:claude-code

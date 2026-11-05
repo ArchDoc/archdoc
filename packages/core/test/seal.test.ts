@@ -114,6 +114,26 @@ describe("seals", () => {
     expect(sealedPaths(m)).toEqual(["proto/charges.proto", "services/api/refunds.ts"]);
   });
 
+  it("points a step's fact at its file, without the line or function it names", () => {
+    const steps = model({
+      "archdoc.yaml": root(`
+        actors: { rider: { kind: person, uses: { api: Asks } } }
+        elements: { api: { kind: container, code: services/api/** } }
+        journeys:
+          ask:
+            actor: rider
+            goal: Ask
+            steps:
+              - { from: rider, to: api, action: Asks, code: services/api/routes.ts#routes }
+              - { from: rider, to: api, action: Asks again, code: services/api/routes.ts:12 }
+      `),
+    });
+    expect(sealableFacts(steps).flatMap((f) => (f.key.startsWith("step:") ? f.refs : []))).toEqual([
+      "services/api/routes.ts",
+      "services/api/routes.ts",
+    ]);
+  });
+
   const sealedAt = (r: ReturnType<typeof repo>, fields: Record<string, string> = { id: "uuid" }) =>
     fingerprints(m, { ...r, schemas: schemas(fields) });
 

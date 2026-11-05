@@ -296,6 +296,38 @@ describe("editModel", () => {
     expect(text.split("\n").findIndex((l) => l.includes("Validates"))).toBe(6);
   });
 
+  it("keeps each block step's dash when its first key changes or goes", () => {
+    const block = dedent(`
+      journeys:
+        place-order:
+          actor: buyer
+          goal: Buy
+          steps:
+            - from: web
+              to: shop.orders.store
+              action: Saves it
+            - from: shop.orders.store
+              to: db
+              action: Inserts the row
+    `);
+    const r = editModel(
+      [sources[0] as (typeof sources)[number], { path: "j.yaml", text: block }],
+      [
+        { op: "rename", id: "orders.store", to: "repository" },
+        { op: "step", journey: "place-order", at: 1, spec: { from: null, description: "Saves" } },
+      ],
+    );
+    expect(r.problems).toEqual([]);
+    expect(r.files.find((f) => f.path === "j.yaml")?.text).toBe(
+      block
+        .replace(
+          "- from: web\n        to: shop.orders.store\n        action: Saves it",
+          "- to: shop.orders.repository\n        action: Saves it\n        description: Saves",
+        )
+        .replace("- from: shop.orders.store", "- from: shop.orders.repository"),
+    );
+  });
+
   it("writes a new journey to a file of its own", () => {
     const r = edit({
       op: "add",

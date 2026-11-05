@@ -70,8 +70,12 @@ function diffMap(text: string, a: YAMLMap, b: YAMLMap, edits: Splice[]): void {
   const indent = columnOf(text, start(a.items[0]?.key));
   const aPairs = new Map(a.items.map((p) => [keyOf(p), p]));
   const bKeys = new Set(b.items.map(keyOf));
+  // A map that starts on its item's line (- from: a) keeps that line's dash:
+  // its first key is replaced from the key on, and nothing goes before it.
+  const first = a.items[0];
+  const inline = !!first && isInline(text, start(first.key));
   // Where the next new key goes: after the last pair that is still there.
-  let anchor: number = lineStart(text, start(a.items[0]?.key));
+  let anchor: number = inline ? pairSpan(text, a, first).end : lineStart(text, start(first?.key));
   for (const p of b.items) {
     const key = keyOf(p);
     const old = aPairs.get(key);
@@ -89,12 +93,26 @@ function diffMap(text: string, a: YAMLMap, b: YAMLMap, edits: Splice[]): void {
     } else if (isBlockSeq(ov) && isBlockSeq(nv) && ov.items.length && nv.items.length) {
       diffSeq(text, ov, nv, edits);
     } else {
-      edits.push({ ...span, text: indentLines(pairText(p), indent) });
+      edits.push({ ...span, text: indentLines(pairText(p), indent, span.inline) });
     }
   }
   for (const [key, old] of aPairs) {
-    if (!bKeys.has(key)) edits.push({ ...withComments(text, pairSpan(text, a, old)), text: "" });
+    if (bKeys.has(key)) continue;
+    const span = pairSpan(text, a, old);
+    if (span.inline) {
+      // The next key moves up onto the dash's line.
+      const next = a.items[a.items.indexOf(old) + 1];
+      if (next) edits.push({ start: span.start, end: start(next.key), text: "" });
+      else edits.push({ ...span, text: "{}\n" });
+      continue;
+    }
+    edits.push({ ...withComments(text, span), text: "" });
   }
+}
+
+/** Whether something other than indentation comes before `at` on its line, such as a dash. */
+function isInline(text: string, at: number): boolean {
+  return /\S/.test(text.slice(lineStart(text, at), at));
 }
 
 function diffSeq(text: string, a: YAMLSeq, b: YAMLSeq, edits: Splice[]): void {
@@ -174,12 +192,14 @@ interface Span {
 }
 
 /** A pair's lines: from its key's line to the end of its value's last line. */
-function pairSpan(text: string, map: YAMLMap, pair: Pair): Span {
+function pairSpan(text: string, map: YAMLMap, pair: Pair): Span & { inline: boolean } {
   const i = map.items.indexOf(pair);
-  const from = lineStart(text, start(pair.key));
+  const key = start(pair.key);
+  const inline = isInline(text, key);
+  const from = inline ? key : lineStart(text, key);
   const next = map.items[i + 1];
   const end = next ? lineStart(text, start(next.key)) : lineEnd(text, valueEnd(pair, map));
-  return { start: from, end: trimTrailingComments(text, from, end, next !== undefined) };
+  return { start: from, end: trimTrailingComments(text, from, end, next !== undefined), inline };
 }
 
 function itemSpan(text: string, seq: YAMLSeq, i: number): Span {
@@ -259,12 +279,12 @@ function columnOf(text: string, at: number): number {
   return at - lineStart(text, at);
 }
 
-function indentLines(block: string, indent: number): string {
+function indentLines(block: string, indent: number, inline = false): string {
   const pad = " ".repeat(indent);
   const body = block.endsWith("\n") ? block : `${block}\n`;
   return body
     .split("\n")
-    .map((l, i, all) => (i === all.length - 1 || l === "" ? l : pad + l))
+    .map((l, i, all) => (i === all.length - 1 || l === "" || (inline && i === 0) ? l : pad + l))
     .join("\n");
 }
 
