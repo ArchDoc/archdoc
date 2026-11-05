@@ -30,6 +30,20 @@ export function StepPanel(props: StepPanelProps) {
   const x = interactions[at];
   const step = x ? journey.steps[x.step] : undefined;
   const uses = useMemo(() => (x ? stepUses(model, x.from, x.to) : undefined), [model, x]);
+  // What check says is wrong with this step, such as a step that doesn't follow a use.
+  const problems = useMemo(() => {
+    const here = step?.location;
+    if (!here || x?.store) return [];
+    return model.diagnostics.filter(
+      (d) =>
+        d.code.startsWith("journey/") &&
+        // Said below, where what it sends would be.
+        d.code !== "journey/step-without-message" &&
+        d.severity !== "info" &&
+        d.location?.file === here.file &&
+        d.location.line === here.line,
+    );
+  }, [model, step, x]);
   if (!x || !step) {
     return (
       <div className="details">
@@ -77,6 +91,11 @@ export function StepPanel(props: StepPanelProps) {
           </span>
         ) : null}
       </p>
+      {problems.map((d) => (
+        <p key={`${d.code}${d.message}`} className="step-problem" role="note">
+          {d.message}
+        </p>
+      ))}
       {step.spec.description ? <p className="lede">{step.spec.description}</p> : null}
       {step.spec.when && !x.store ? (
         <p className="step-note">

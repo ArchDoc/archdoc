@@ -59,6 +59,13 @@ const ACTOR_ICONS: Record<string, string> = {
   team: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a6 6 0 0 1 12 0m-2 0a6 6 0 0 1 10 0",
   organization: "M4 21V5l8-3 8 3v16M9 21v-5h6v5M8 8h2m4 0h2M8 12h2m4 0h2",
   agent: "M5 9h14v10H5zM12 5v4M9 13h.01M15 13h.01M9 16h6M3 13h2m14 0h2",
+  system: "M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01M12 7h4M12 17h4",
+};
+
+/** What an actor's kind reads as on its box, where it differs from the kind. */
+const ACTOR_KINDS: Record<string, string> = {
+  agent: "AI agent",
+  system: "Automated system",
 };
 
 function Icon({ kind }: { kind: string }) {
@@ -113,7 +120,11 @@ export function Card({ data }: NodeProps<CardNode>) {
         </div>
         {!data.isGroup && (tone || data.detail) ? (
           <div className="card-detail">
-            {tone ? <span className="card-kind">{data.kind}</span> : null}
+            {tone ? (
+              <span className="card-kind">
+                {data.family === "actor" ? (ACTOR_KINDS[data.kind] ?? data.kind) : data.kind}
+              </span>
+            ) : null}
             {tone && data.detail ? " · " : null}
             {data.detail}
           </div>

@@ -33,7 +33,7 @@ elements:
     description: Invoices and customers.
 actors:
   client:
-    kind: agent
+    kind: system
     description: An app that issues invoices and looks up customers over HTTP.
     uses: { invoicing: Issues invoices and finds customers }
 journeys:

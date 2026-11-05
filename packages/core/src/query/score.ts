@@ -385,6 +385,10 @@ export interface DiscoveryScore {
   stepData: number;
   /** Datastores that say what they store and queues that name their messages, of both (1 with none). */
   storeData: number;
+  /** Data entries with fields or a schema source, of all of them (1 with none). */
+  dataFields: number;
+  /** Journey steps after the first that start where the flow already is, of those steps (1 with none). */
+  journeyFlow: number;
   /** Containers, datastores, and queues that say where they run, of those; undefined when the repository has no deployment files. */
   deployed?: number | undefined;
   /** Entry points a journey reaches, of those known; undefined when they aren't known. */
@@ -462,6 +466,8 @@ export function scoreDiscovery(
     system: s.system ? 1 : 0,
     stepData: frac(s.dataStepsDescribed, s.dataSteps),
     storeData: frac(s.storesDescribed, s.stores),
+    dataFields: frac(s.dataDefined, s.dataEntries),
+    journeyFlow: frac(s.flowStepsConnected, s.flowSteps),
   };
   const deployed = s.deploymentFiles ? frac(s.deployed, s.deployable) : undefined;
   const entryPoints = s.entryPoints ? s.entryPointsCovered / s.entryPoints : undefined;

@@ -480,9 +480,25 @@ async function manifests(ctx: AnalyzerContext): Promise<Found[]> {
   const manifestsAt = ctx.files.filter((f) => !SKIP_DIR.test(f));
   // package.json with a name; the root one only when it's the only one.
   const pkgs = manifestsAt.filter((f) => /(^|\/)package\.json$/.test(f));
+  // A workspace below the top, such as a Go server's web/ui with its app and its
+  // editor modules, is one app: its packages are its components, not containers.
+  const nested: string[] = [];
+  for (const f of pkgs) {
+    const dir = dirOf(f);
+    if (!dir) continue;
+    let json: Record<string, unknown> = {};
+    try {
+      json = JSON.parse(await read(f)) as Record<string, unknown>;
+    } catch {}
+    // It becomes the container, so it needs a name.
+    if (typeof json.name !== "string") continue;
+    if (manifestsAt.includes(`${dir}/pnpm-workspace.yaml`) || json.workspaces) nested.push(dir);
+  }
+  const inNested = (dir: string) => nested.some((n) => dir !== n && dir.startsWith(`${n}/`));
   for (const f of pkgs) {
     const dir = dirOf(f);
     if (!dir && pkgs.length > 1) continue;
+    if (inNested(dir)) continue;
     let json: Record<string, unknown>;
     try {
       json = JSON.parse(await read(f)) as Record<string, unknown>;
@@ -524,7 +540,11 @@ async function manifests(ctx: AnalyzerContext): Promise<Found[]> {
           ),
       ),
     ];
+    // The binary named after the module (cmd/prometheus in github.com/prometheus/prometheus)
+    // is what the module builds: the module's packages are its code, so it's one container.
+    const own = `${dir ? `${dir}/` : ""}cmd/${mod.split("/").pop()}`;
     for (const c of cmds) {
+      if (c === own) continue;
       out.push({
         key: basename(c),
         dir: c,
@@ -1269,7 +1289,7 @@ async function infrastructure(
       const unit = fnUnit.get(fn.id);
       if (t.kind === "schedule" && unit) {
         extras.actors.scheduler ??= {
-          kind: "agent",
+          kind: "system",
           description: `What runs the scheduled jobs (${iac.tool === "cdk" ? "EventBridge rules in the CDK app" : "EventBridge rules in Terraform"}).`,
           uses: {},
           provenance: INFERRED,

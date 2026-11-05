@@ -5,7 +5,7 @@ symptom: |
   Data entries changed (5)
   - Charge (entity): fields ~id (type undefined → uuid) …
 reproduce: archdoc report --base main      # run on main itself
-expands: review-ai-change#4                 # cli → core: diffs base vs. head
+expands: review-ai-change#5                 # cli → core: diffs base vs. head
 diagnosis: The report loads the base revision without its schema sources, so every field whose type comes from a schema looks new.
 steps:
   - { from: cli, to: analyzers, action: Loads head and applies schemas, code: packages/analyzers/src/check.ts:53, evidence: read }

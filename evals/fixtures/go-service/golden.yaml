@@ -50,7 +50,7 @@ elements:
     description: posting.created events.
 actors:
   client:
-    kind: agent
+    kind: system
     description: A service that posts to the ledger and reads balances over HTTP.
     uses: { ledger-api: Posts and reads balances }
 journeys:

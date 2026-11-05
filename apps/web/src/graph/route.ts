@@ -83,3 +83,60 @@ function intersects(p1: Point, p2: Point, p3: Point, p4: Point): boolean {
     ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps))
   );
 }
+
+/** A box in absolute coordinates. */
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * A short orthogonal route between two boxes no laid-out line joins, such as
+ * a journey step that doesn't follow a use: out of the side of `from` that
+ * faces `to`, one bend each way, into the side of `to` that faces back. Never
+ * around the map, the way a line from one box's right to another's left goes
+ * when the second box is to the left of the first.
+ */
+export function directRoute(from: Rect, to: Rect): Point[] {
+  const fc = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+  const tc = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
+  const gapX = Math.max(to.x - (from.x + from.width), from.x - (to.x + to.width));
+  const gapY = Math.max(to.y - (from.y + from.height), from.y - (to.y + to.height));
+  if (gapX <= 0 && gapY <= 0) {
+    // One box in or over the other: a straight line between their centers.
+    return [fc, tc];
+  }
+  if (gapX >= gapY) {
+    const right = tc.x > fc.x;
+    const start = { x: right ? from.x + from.width : from.x, y: fc.y };
+    const end = { x: right ? to.x : to.x + to.width, y: tc.y };
+    // Side by side and level enough: one straight line.
+    const top = Math.max(from.y, to.y);
+    const bottom = Math.min(from.y + from.height, to.y + to.height);
+    if (bottom - top > 16) {
+      const y = (top + bottom) / 2;
+      return [
+        { x: start.x, y },
+        { x: end.x, y },
+      ];
+    }
+    const mid = (start.x + end.x) / 2;
+    return [start, { x: mid, y: start.y }, { x: mid, y: end.y }, end];
+  }
+  const down = tc.y > fc.y;
+  const start = { x: fc.x, y: down ? from.y + from.height : from.y };
+  const end = { x: tc.x, y: down ? to.y : to.y + to.height };
+  const left = Math.max(from.x, to.x);
+  const right = Math.min(from.x + from.width, to.x + to.width);
+  if (right - left > 16) {
+    const x = (left + right) / 2;
+    return [
+      { x, y: start.y },
+      { x, y: end.y },
+    ];
+  }
+  const mid = (start.y + end.y) / 2;
+  return [start, { x: start.x, y: mid }, { x: end.x, y: mid }, end];
+}

@@ -14,6 +14,9 @@ steps:
   - from: federation
     to: other-repos
     action: Fetches the landscape repo
+  - from: developer
+    to: github
+    action: Pushes the change and opens the pull request
   - from: github
     to: github-action
     action: Runs on the pull request

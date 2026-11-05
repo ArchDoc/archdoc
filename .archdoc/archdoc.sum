@@ -1032,8 +1032,16 @@ seals:
         - default
   element:toolchain.web.graph:
     kind: structure
-    hash: fnv-5e17df33c604ec8f
+    hash: fnv-783ca62bd96b9f77
     files:
+      apps/web/src/graph/catalog.ts:
+        - EntryMove
+        - EntrySheet
+        - EntryStep
+        - StoreCard
+        - entrySheet
+        - storeCards
+        - travellingEntries
       apps/web/src/graph/data.ts:
         - DataFocus
         - FieldInfo
@@ -1126,9 +1134,11 @@ seals:
         - NODE_WIDTH
         - Point
         - UntangledLayout
+        - absoluteBoxes
         - layoutGraph
       apps/web/src/graph/route.ts:
         - countCrossings
+        - directRoute
         - pointAlong
         - roundedPath
     by: agent:claude-code
@@ -1197,7 +1207,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-17ee2d9c97e57d84
+    hash: fnv-595fcefe69472e1c
     files:
       apps/web/src/App.tsx:
         - App
@@ -1207,6 +1217,9 @@ seals:
         - describe
         - useStoredChoice
         - useStoredFlag
+      apps/web/src/components/DataCatalog.tsx:
+        - DataCatalog
+        - DataCatalogProps
       apps/web/src/components/DataPanels.tsx:
         - DataDetails
         - FieldDetails
@@ -1338,7 +1351,7 @@ seals:
         - SyncResult
         - formatLock
         - sync
-  step:change-what-others-use#6:
+  step:change-what-others-use#7:
     kind: structure
     hash: fnv-443be4498a9727cb
     files:
@@ -1348,6 +1361,7 @@ seals:
         - RemoteJourney
         - consumersElsewhere
         - otherModels
+    by: agent:claude-code
   step:check-model#1:
     kind: structure
     hash: fnv-23d2cd63641325cf
@@ -1612,12 +1626,13 @@ seals:
         - boundaryOf
         - crossingOf
         - groupLandscape
-  step:review-ai-change#3:
+  step:review-ai-change#4:
     kind: structure
     hash: fnv-6adb32320513fbde
     files:
       integrations/github-action/action.yml: []
-  step:review-ai-change#4:
+    by: agent:claude-code
+  step:review-ai-change#5:
     kind: structure
     hash: fnv-d120842fc73f894b
     files:

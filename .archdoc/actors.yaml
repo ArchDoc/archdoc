@@ -10,6 +10,10 @@ actors:
       cli:
         description: Validates, diffs, and checks the model locally
         sends: Command
+      github:
+        description: Pushes the change and opens the pull request
+        sends: PullRequest
+        provenance: { source: suggested, by: agent:claude-code }
 
   new-contributor:
     kind: role
@@ -50,3 +54,7 @@ actors:
         description: Validates the model after editing it
         technology: archdoc --json
         sends: Command
+      github:
+        description: Pushes its change with the model's and opens the pull request
+        sends: PullRequest
+        provenance: { source: suggested, by: agent:claude-code }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countCrossings, pointAlong, roundedPath } from "../src/graph/route.js";
+import { countCrossings, directRoute, pointAlong, roundedPath } from "../src/graph/route.js";
 
 const route = [
   { x: 0, y: 0 },
@@ -57,5 +57,35 @@ describe("countCrossings", () => {
     // An orthogonal route crossing two others.
     const stair = [p(0, 50), p(50, 50), p(50, 150), p(100, 150)];
     expect(countCrossings([stair, [p(25, 0), p(25, 200)], [p(0, 100), p(100, 100)]])).toBe(3);
+  });
+});
+
+describe("directRoute", () => {
+  const box = (x: number, y: number) => ({ x, y, width: 200, height: 60 });
+
+  it("goes left out of the left side when the target is to the left, never around the map", () => {
+    const points = directRoute(box(800, 400), box(100, 100));
+    expect(points[0]).toEqual({ x: 800, y: 430 });
+    expect(points.at(-1)).toEqual({ x: 300, y: 130 });
+    // No point strays outside the two boxes' span.
+    for (const p of points) {
+      expect(p.x).toBeGreaterThanOrEqual(100);
+      expect(p.x).toBeLessThanOrEqual(1000);
+      expect(p.y).toBeGreaterThanOrEqual(100);
+      expect(p.y).toBeLessThanOrEqual(460);
+    }
+  });
+
+  it("draws one straight line between boxes side by side", () => {
+    expect(directRoute(box(0, 0), box(400, 20))).toEqual([
+      { x: 200, y: 40 },
+      { x: 400, y: 40 },
+    ]);
+  });
+
+  it("goes down from the bottom when the target is below", () => {
+    const points = directRoute(box(0, 0), box(20, 300));
+    expect(points[0]?.y).toBe(60);
+    expect(points.at(-1)?.y).toBe(300);
   });
 });

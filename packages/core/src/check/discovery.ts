@@ -82,7 +82,7 @@ const ENTRY_COVERAGE = 0.8;
 
 /** One thing a model still lacks before it's done. */
 export interface DiscoveryGap {
-  /** done/level-too-wide, done/thin-container, done/flat-container, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/data-undescribed, done/step-elsewhere, done/coarse-step, done/store-data, done/no-environments, done/undeployed. */
+  /** done/level-too-wide, done/thin-container, done/flat-container, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/data-undescribed, done/data-fields, done/agent-actor, done/step-elsewhere, done/coarse-step, done/store-data, done/no-environments, done/undeployed. */
   code: string;
   message: string;
   element?: string | undefined;
@@ -124,6 +124,12 @@ export interface DiscoveryAssessment {
     /** Datastores and queues, and how many say what they hold (stores, or the messages sent through them). */
     stores: number;
     storesDescribed: number;
+    /** Data entries, and how many say what's in them: fields, or a schema source to read them from. */
+    dataEntries: number;
+    dataDefined: number;
+    /** Journey steps after the first, and how many start where the flow already is (at an element an earlier step reached, an actor, or an external). */
+    flowSteps: number;
+    flowStepsConnected: number;
     /** Deployment files in the repository (compose, Terraform, CDK, Kubernetes, Helm, and the like). */
     deploymentFiles: number;
     /** Containers, datastores, and queues, and how many say where they run (deploy). */
@@ -442,6 +448,61 @@ export function assessDiscovery(
     });
   }
 
+  // What's in each entry: a name and a description aren't a shape. Its fields come from the code.
+  const shapeless = [...model.data.values()].filter(
+    (d) => !d.spec.source && !Object.keys(d.spec.fields ?? {}).length,
+  );
+  if (shapeless.length) {
+    const ids = shapeless.map((d) => d.id);
+    gaps.push({
+      code: "done/data-fields",
+      message: `${ids.length === 1 ? `Data entry ${ids[0]} has` : `${ids.length} data entries have`} no fields${ids.length === 1 ? "" : `: ${ids.slice(0, 12).join(", ")}${ids.length > 12 ? `, and ${ids.length - 12} more` : ""}`}. Find where the code defines each one before you leave it: the class, struct, record, interface, or type the code builds or reads (a request body, an event payload, an ORM model), a schema file (SQL migrations, Prisma, protobuf, OpenAPI), or the IaC that creates its table. Point source: at a schema file archdoc reads (sql, prisma, proto, openapi), or write fields: with each field's type, and classification: pii for personal data.`,
+    });
+  }
+
+  // Who's an agent: an AI that acts on its own. Software that calls in is a system.
+  const AI =
+    /\b(ai|llm|gpt|claude|copilot|cursor|codex|gemini|model|assistant|chatbot|language model|agentic|mcp)\b/i;
+  const notAi = [...model.actors.values()].filter(
+    (a) =>
+      a.spec.kind === "agent" &&
+      !AI.test(`${a.id} ${a.spec.name ?? ""} ${a.spec.description ?? ""}`),
+  );
+  if (notAi.length) {
+    const ids = notAi.map((a) => a.id);
+    gaps.push({
+      code: "done/agent-actor",
+      message: `${ids.join(", ")} ${ids.length === 1 ? "is" : "are"} kind: agent, which is for AI agents (an LLM or assistant that acts on its own), and ${ids.length === 1 ? "its" : "their"} description doesn't say ${ids.length === 1 ? "it's" : "they're"} one. If ${ids.length === 1 ? "it's" : "they're"} software that calls in, such as another service, a scheduler or CronJob, a CI job, or a webhook sender, make ${ids.length === 1 ? "it" : "them"} kind: system. If ${ids.length === 1 ? "it is" : "they are"} an AI agent, say so in the description.`,
+    });
+  }
+
+  // A journey goes from one element to the next; check counts each step that doesn't as a warning.
+  let flowSteps = 0;
+  let flowStepsConnected = 0;
+  for (const j of journeys) {
+    const reached: string[] = [];
+    for (const s of j.steps) {
+      if (!s.from || !s.to) break;
+      if (reached.length) {
+        flowSteps++;
+        const from = s.from;
+        const outside =
+          from.type !== "element" || model.elements.get(from.id)?.spec.kind === "external";
+        if (
+          outside ||
+          reached.some(
+            (r) => r === from.id || r.startsWith(`${from.id}.`) || from.id.startsWith(`${r}.`),
+          )
+        )
+          flowStepsConnected++;
+      }
+      for (const t of [s.from, s.to])
+        reached.push(
+          t.type === "element" ? t.id : `${t.type}:${t.type === "external" ? t.ref : t.id}`,
+        );
+    }
+  }
+
   // Where it runs: the deployment files say, so the model should too.
   const deploymentFiles = files.filter(isDeploymentFile);
   const deployable = arch.filter(
@@ -580,6 +641,10 @@ export function assessDiscovery(
       dataStepsDescribed,
       stores: holders.length,
       storesDescribed: holders.length - emptyHolders.length,
+      dataEntries: model.data.size,
+      dataDefined: model.data.size - shapeless.length,
+      flowSteps,
+      flowStepsConnected,
       deploymentFiles: deploymentFiles.length,
       deployable: deployable.length,
       deployed: deployed.length,
@@ -647,7 +712,7 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
     `  ${s.sourceFiles - s.unmappedFiles} of ${s.sourceFiles} source files belong to an element`,
     `  ${s.testElements.length} test or verification element${s.testElements.length === 1 ? "" : "s"}; ${s.testFilesModeled} of ${s.testFiles} test files modeled`,
     `  ${s.actors} actor${s.actors === 1 ? "" : "s"}, ${s.journeys} journey${s.journeys === 1 ? "" : "s"}, ${s.detailedSteps} of ${s.steps} steps with an action and code`,
-    `  ${s.dataStepsDescribed} of ${s.dataSteps} steps across a boundary say what they carry; ${s.storesDescribed} of ${s.stores} datastores and queues say what they hold`,
+    `  ${s.dataStepsDescribed} of ${s.dataSteps} steps across a boundary say what they carry; ${s.storesDescribed} of ${s.stores} datastores and queues say what they hold; ${s.dataDefined} of ${s.dataEntries} data entries have fields`,
     `  ${s.deployed} of ${s.deployable} containers, datastores, and queues say where they run (${s.deploymentFiles} deployment file${s.deploymentFiles === 1 ? "" : "s"})${s.entryPoints ? `; journeys reach ${s.entryPointsCovered} of ${s.entryPoints} entry points` : ""}`,
   );
   const order = [
@@ -663,7 +728,9 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
     "done/undeployed",
     "done/store-data",
     "done/data-undescribed",
+    "done/data-fields",
     "done/no-actors",
+    "done/agent-actor",
     "done/few-journeys",
     "done/actor-without-journey",
     "done/uncovered-entry-points",

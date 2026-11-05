@@ -78,7 +78,7 @@ v1's idea that **users are actors who use components** stays, and it gets broade
 ```yaml
 actors:
   passenger:
-    kind: person                 # person | role | team | organization | agent
+    kind: person                 # person | role | team | organization | agent | system
     description: Books and pays for rides from the mobile app.
     segment: external customer
     uses:
@@ -109,7 +109,8 @@ actors:
   - `role`: a permission-based role, such as "dispatcher".
   - `team`: an internal team.
   - `organization`: a partner or customer org.
-  - `agent`: an AI agent or automation.
+  - `agent`: an AI agent, such as a coding assistant or an LLM that acts on its own.
+  - `system`: software that calls in on its own: another service, a scheduler, a CI job, a webhook sender.
 - **A team is one entity with two roles.** The same `support-team` actor can **use** systems and **own** elements (`owners: [support-team]`). The explorer can then show both "what does this team use?" and "what does this team own?"
 - `uses` from an actor works like v1's user `dependencies`. The core builds the reverse index, so every element can answer **"who uses me?"**, not only "what calls me?".
 

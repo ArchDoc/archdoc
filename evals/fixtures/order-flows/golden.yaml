@@ -13,7 +13,7 @@ actors:
     kind: team
     description: Reads the nightly sales report.
   scheduler:
-    kind: agent
+    kind: system
     description: The Kubernetes CronJob that starts the nightly report.
     uses: { reports: Runs it every night at 02:00 }
 elements:

@@ -11,6 +11,7 @@ person would write for it (`golden.yaml`):
 |---|---|
 | `ts-monorepo` | A pnpm workspace: a React storefront, an Express API with five components, a shared library, Postgres and Redis in compose |
 | `go-service` | One Go module with two binaries under `cmd/`, packages under `internal/`, Postgres migrations, NATS |
+| `go-server-ui` | A Go server whose packages sit beside its `cmd/` binary, a CLI that borrows some of them, and a web UI that's a pnpm workspace under `web/ui` (an app, a legacy app, and an editor module): one container each, not one per package |
 | `python-fastapi` | A FastAPI app in one package, split into api, services, models, and persistence |
 | `polyglot` | A TypeScript frontend, a Go backend with components, a Python worker, RabbitMQ and Postgres |
 | `single-package` | A TypeScript CLI that's one package, which the model has to split into components |
@@ -70,6 +71,11 @@ runs:
   `creates`, or `changes`).
 - **Store data**: the share of datastores that say what they store, and of
   queues something sends through.
+- **Data fields**: the share of data entries that say what's in them, with
+  fields or a schema source to read them from.
+- **Journey flow**: the share of journey steps after the first that start
+  where the flow already is: at an element an earlier step reached, an actor,
+  or an external.
 - **Deployed**: the share of containers, datastores, and queues an environment
   places, when the repository has deployment files (CDK, Terraform, compose,
   Kubernetes, and the like).

@@ -2,7 +2,14 @@ import type { Diagnostic } from "../diagnostics.js";
 import { isEventContract } from "../load/build.js";
 import type { Resolution, Resolver } from "../load/resolve.js";
 import type { YamlPath } from "../load/yaml.js";
-import { describeTarget, type Model, type NodeRef, nodeKey, type Target } from "../model.js";
+import {
+  describeTarget,
+  type JourneyNode,
+  type Model,
+  type NodeRef,
+  nodeKey,
+  type Target,
+} from "../model.js";
 
 /**
  * Resolves journey actors and steps, and checks that every step follows a
@@ -71,6 +78,50 @@ export function validateJourneys(
     );
   };
 
+  // An element counts as reached when it, an element inside it, or one it's inside was: a
+  // journey may drill from a container into its component, or step back out to it.
+  const related = (a: Target, b: Target): boolean => {
+    if (nodeKey(a) === nodeKey(b)) return true;
+    if (a.type !== "element" || b.type !== "element") return false;
+    return a.id.startsWith(`${b.id}.`) || b.id.startsWith(`${a.id}.`);
+  };
+
+  /**
+   * A journey goes from one element to the next: each step starts where the
+   * flow already is, at an element an earlier step reached, never at an
+   * element of the system out of nowhere. Actors and external systems act on
+   * their own, so a step may start at one any time.
+   */
+  const continuity = (journey: JourneyNode, label: string): Diagnostic[] => {
+    const out: Diagnostic[] = [];
+    // The first step sets the flow off, from the actor or from what publishes the message that
+    // starts it; every later step starts where the flow already is.
+    const reached: Target[] = [];
+    let last: Target | undefined;
+    for (const step of journey.steps) {
+      const { from, to } = step;
+      if (!from || !to) return out;
+      if (from.type === "external") return out;
+      // A person, an agent, or a system outside this one acts when it chooses: a step may start
+      // at any actor or external element, such as a payment provider calling a webhook.
+      const outside =
+        from.type === "actor" || model.elements.get(from.id)?.spec.kind === "external";
+      if (!outside && last && !reached.some((r) => related(r, from))) {
+        const n = step.index + 1;
+        const message = `${label}, step ${n}: starts at ${describeTarget(from)}, which no earlier step reaches (step ${n - 1} ended at ${describeTarget(last as Target)}). A journey goes from one element to the next. Read the code between them and add the step that gets the flow to ${step.spec.from}, or start this step where the flow already is.`;
+        out.push({
+          severity: "warning",
+          code: "journey/disconnected-step",
+          message,
+          location: step.location,
+        });
+      }
+      reached.push(from, to);
+      last = to;
+    }
+    return out;
+  };
+
   for (const journey of model.journeys.values()) {
     const site = sites.get(journey.id);
     const at = (path: YamlPath) => site?.file.locate([...site.path, ...path]);
@@ -116,6 +167,8 @@ export function validateJourneys(
         location: step.location,
       });
     }
+
+    diagnostics.push(...continuity(journey, label));
 
     function endpoint(
       r: Resolution,

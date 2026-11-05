@@ -11,6 +11,7 @@ import {
 import { ReactFlowProvider } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useStoredChoice, useStoredFlag } from "./components/Canvas.js";
+import { DataCatalog } from "./components/DataCatalog.js";
 import { Details } from "./components/Details.js";
 import {
   defaultEnvironment,
@@ -222,6 +223,8 @@ function Explorer({
   const [at, setAt] = useState(0);
   // A journey shows on the map unless someone picks its sequence, which this browser remembers.
   const [sequence, setSequence] = useStoredFlag("archdoc:journey-sequence", false);
+  // On the Data tab, an entry shows as its page, or lit up on the map of the system.
+  const [dataOnMap, setDataOnMap] = useStoredFlag("archdoc:data-map", false);
   const onMap = !sequence;
   const [preview, setPreview] = useState<string>();
   const [centerOn, setCenterOn] = useState<string>();
@@ -821,14 +824,64 @@ function Explorer({
       );
   } else if (tab === "data") {
     side = <DataList model={model} selected={selected} onSelect={select} />;
-    panel = details ?? (
-      <div className="details">
-        <p className="lede">
-          Pick an entry to see its fields, where it's stored, and where it goes. Pick a field to
-          follow its value from table to table.
-        </p>
-      </div>
+    const picked = selected?.startsWith("data:") || selected?.startsWith("field:");
+    const page = (
+      <DataCatalog
+        model={model}
+        selected={selected}
+        onSelect={select}
+        onJourney={(id, step) => {
+          openJourney(id);
+          setAt(step);
+        }}
+        onShow={(key) => {
+          onTab("overview");
+          select(key);
+        }}
+      />
     );
+    main = picked ? (
+      <section className="story" aria-label="Data entry">
+        <header className="story-head data-head">
+          <div className="story-title">
+            <p className="muted">
+              {selected?.startsWith("field:") ? "Field" : "Data entry"}{" "}
+              <code>{selected?.slice(selected.indexOf(":") + 1)}</code>
+            </p>
+          </div>
+          <fieldset className="segmented story-view" aria-label="Show the entry as">
+            <legend>Show as</legend>
+            {(
+              [
+                [false, "Page", "Its schema, where it's stored, and who makes and reads it"],
+                [
+                  true,
+                  "Map",
+                  "Where it's stored and the arrows it travels, on the map of the system",
+                ],
+              ] as const
+            ).map(([on, label, title]) => (
+              <button
+                key={label}
+                type="button"
+                className={dataOnMap === on ? "is-on" : undefined}
+                aria-pressed={dataOnMap === on}
+                title={title}
+                onClick={() => setDataOnMap(on)}
+              >
+                {label}
+              </button>
+            ))}
+          </fieldset>
+        </header>
+        <div className="story-body">{dataOnMap ? canvas : page}</div>
+      </section>
+    ) : (
+      page
+    );
+    // The page is the entry; the panel follows a field's value from table to table, and on the
+    // map it says what the entry is.
+    panel = selected?.startsWith("field:") || (picked && dataOnMap) ? details : undefined;
   } else {
     side = (
       <ChangesList
@@ -964,7 +1017,10 @@ function Explorer({
       <aside className="side" aria-label={tab === "overview" ? "Overview" : "List"}>
         {side}
       </aside>
-      <main className="main" aria-label={tab === "journeys" ? "Journey" : "Map"}>
+      <main
+        className="main"
+        aria-label={tab === "journeys" ? "Journey" : tab === "data" ? "Data" : "Map"}
+      >
         {main}
       </main>
       {panel ? (
