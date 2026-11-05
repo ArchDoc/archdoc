@@ -22,4 +22,4 @@ steps:
     code: packages/core/src/report/pr-report.ts
   - from: developer
     to: web
-    action: Opens the before/after view (archdoc view --base) and reviews the suggested facts
+    action: Opens the Diff (archdoc view --base), which reads the pull request's code change into its model, and reviews what's not in the model yet and the suggested facts

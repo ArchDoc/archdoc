@@ -953,6 +953,12 @@ p {
   line-height: 1.3;
 }
 
+.changes .change-scope {
+  margin: 0 6px 8px;
+  font-size: var(--fs-1);
+  line-height: 1.35;
+}
+
 .verdict-blocking {
   color: var(--breaks);
 }

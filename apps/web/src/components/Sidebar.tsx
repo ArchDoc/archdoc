@@ -1,7 +1,7 @@
 import { ASKED_CONCERNS, DataRegistry, type Model } from "@archdoc/core/browser";
 import { forwardRef, type ReactNode, useMemo, useState } from "react";
 import { sensitivity } from "../graph/data.js";
-import type { ChangeItem, Compare } from "../model/compare.js";
+import { type ChangeItem, type Compare, UNDECLARED } from "../model/compare.js";
 import { journeysByImportance } from "../model/stories.js";
 import type { LandscapeInfo } from "../model/useModel.js";
 
@@ -165,8 +165,10 @@ export function ChangesList(props: {
     if (i.key.startsWith("journey:")) props.onJourney(i.key.slice(8));
     else props.onSelect(i.key);
   };
+  // Uses the model doesn't declare are listed under "Not in the model yet", with their code.
+  const blocking = summary.blocking.filter((b) => b.code !== UNDECLARED);
   const attention = summary.attention.filter(
-    (a) => a.code !== "model/suggested" && !ASKED_CONCERNS.has(a.code),
+    (a) => a.code !== "model/suggested" && a.code !== UNDECLARED && !ASKED_CONCERNS.has(a.code),
   );
   const verb = { approve: "approves", inform: "knows", verify: "still works" };
   const other = c.diff.mappings.length + c.diff.logic.length + c.diff.rules.length;
@@ -205,13 +207,17 @@ export function ChangesList(props: {
       <h2 className="side-title">
         {c.head ?? "Working tree"} since {c.ref}
       </h2>
+      <p className="muted change-scope">
+        Read from {c.code.files.length} changed file{c.code.files.length === 1 ? "" : "s"}, into{" "}
+        {c.head ?? "the working tree"}'s model.
+      </p>
       <p className={`verdict verdict-${summary.verdict}`}>{summary.headline.join(" · ")}</p>
-      {summary.blocking.length ? (
+      {blocking.length ? (
         <section className="change-group">
           <h3>
-            Blocking <span className="count">{summary.blocking.length}</span>
+            Blocking <span className="count">{blocking.length}</span>
           </h3>
-          {summary.blocking.map((b) => (
+          {blocking.map((b) => (
             <Concern
               key={`${b.code}${b.detail}`}
               tone="breaks"
@@ -248,12 +254,16 @@ export function ChangesList(props: {
           </ul>
         </section>
       ) : null}
+      {list("Not in the model yet", groups.unmodeled)}
       {list("Journeys affected", groups.journeys)}
       {list("Elements and uses", groups.elements)}
+      {list("Entry points", groups.entries)}
       {list("Data", groups.data)}
       {list("Suggested facts to review", groups.suggested)}
-      {c.count === 0 && groups.suggested.length === 0 ? (
-        <p className="empty">The model didn't change.</p>
+      {c.count === 0 && groups.suggested.length === 0 && groups.unmodeled.length === 0 ? (
+        <p className="empty">
+          {c.code.files.length ? "The changed code isn't in any element." : "No code changed."}
+        </p>
       ) : null}
       {other ? (
         <p className="empty">

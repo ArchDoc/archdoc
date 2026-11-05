@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  checkRepository,
+  codeChange,
   contextOf,
   importSchemas,
   type Snapshot,
@@ -22,7 +22,6 @@ import {
   repoInfo,
   resolveGitRef,
   resolveSnippets,
-  type SourcesAtRef,
 } from "@archdoc/core";
 import { landscapePayload, loadLandscape } from "./landscape.js";
 import { isModelPath } from "./model-path.js";
@@ -73,11 +72,12 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   const clients = new Set<ServerResponse>();
   const initial = await readModelSources(options.target, { cwd: options.cwd });
   const cwd = options.cwd;
-  if (
-    options.base &&
-    !isModelPath(cwd, options.base) &&
-    !(await resolveGitRef(cwd, options.base))
-  ) {
+  if (options.base && isModelPath(cwd, options.base)) {
+    throw new Error(
+      `The explorer's Diff reads the change from code, so --base takes a branch, not a model file. Compare model files with archdoc diff ${options.base}.`,
+    );
+  }
+  if (options.base && !(await resolveGitRef(cwd, options.base))) {
     throw new Error(`"${options.base}" is not a commit, branch, or tag in this repository.`);
   }
 
@@ -114,10 +114,9 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         };
         try {
           const base = ref("base");
-          if (!base) return json(res, 400, { error: "Pick a base branch to compare with." });
+          if (!base) return json(res, 400, { error: "Pick the branch to compare with." });
           const head = ref("head");
-          // Both sides as the PR comment reads them: the merge base and the head, with
-          // schemas, other repos, files, and samples, and the findings the head introduced.
+          // The code changed on head since it left base, read into head's model.
           const compared = await comparison(options.target, cwd, base, head);
           if (!compared) return json(res, 404, { error: "No ArchDoc model here." });
           return json(res, 200, compared);
@@ -233,8 +232,8 @@ export function findWebDir(): string | undefined {
 
 /**
  * What /api/model sends, and what `archdoc site` writes: the working tree's
- * model, and with `base`, the model at the merge base with it and the findings
- * the change introduced, so the Changes tab shows what the PR comment says.
+ * model, and with `base`, the code changed since the merge base with it, read
+ * into this model, so the Diff tab opens on it.
  */
 export async function modelResponse(options: {
   target: string;
@@ -247,11 +246,12 @@ export async function modelResponse(options: {
   const body = { ...(await payloadOf(snap, repo, options.cwd)), seals: await sealsOf(options) };
   if (!options.base) return body;
   if (isModelPath(options.cwd, options.base)) {
-    // Another model file: only its files, compared with this one's.
-    return { ...body, base: await sourcesOfFile(options.base, options.cwd) };
+    throw new Error(
+      `The Diff reads the change from code, so --base takes a branch, not a model file. Compare model files with archdoc diff ${options.base}.`,
+    );
   }
   const compared = await comparison(options.target, options.cwd, options.base, undefined);
-  return compared ? { ...body, base: compared.base, change: compared.change } : body;
+  return compared ? { ...body, change: compared.change } : body;
 }
 
 /**
@@ -280,34 +280,28 @@ async function sealsOf(options: { target: string; cwd: string }) {
   };
 }
 
-/** The merge base of `base` and `head` (or the working tree), as a payload, and the findings the head introduced. */
+/**
+ * The code changed on `head` (or the working tree) since it left `base`, read
+ * into head's model, and head's model when it isn't the working tree. Base's
+ * model is never read: the change comes from the code alone.
+ */
 async function comparison(target: string, cwd: string, base: string, head: string | undefined) {
-  const checked = await checkRepository({ model: target, cwd, base, head });
-  if (!checked.base) return undefined;
-  const merged = await snapshot(target, { cwd, ref: checked.base.commit });
-  if (!merged) return undefined;
-  // Named after the branch it's the merge base with, as the comparison is.
-  const relabel = (p: string) =>
-    p.startsWith(`${checked.base?.commit}:`) ? `${base}:${p.slice(p.indexOf(":") + 1)}` : p;
-  const at: Snapshot = {
-    ...merged,
-    root: relabel(merged.root),
-    sources: merged.sources.map((x) => ({ ...x, path: relabel(x.path) })),
-  };
+  const headSnap = head ? await snapshot(target, { cwd, ref: head }) : undefined;
+  if (head && !headSnap) return undefined;
+  const read = await codeChange({ model: target, cwd, base, head });
   const linksAt = async (s: Snapshot) => ({
     webUrl: (await repoInfo(s.baseDir)).webUrl,
     commit: s.commit,
   });
-  const headSnap = head ? await snapshot(target, { cwd, ref: head }) : undefined;
   return {
-    base: { ref: base, ...(await payloadOf(at, await linksAt(at), cwd)) },
     head: headSnap && { ref: head, ...(await payloadOf(headSnap, await linksAt(headSnap), cwd)) },
     change: {
       base,
       head,
-      commit: checked.base.commit,
-      findings: checked.findings,
-      changedFiles: checked.base.changedFiles,
+      commit: read.commit,
+      findings: read.findings,
+      changedFiles: read.changedFiles,
+      code: read.change,
     },
   };
 }
@@ -369,11 +363,4 @@ async function readTraces(snap: Snapshot): Promise<{ path: string; text: string 
     if (text !== undefined) out.push({ path, text });
   }
   return out;
-}
-
-/** Another model on disk, as the base to compare with, in place of a git ref. */
-async function sourcesOfFile(path: string, cwd?: string): Promise<SourcesAtRef> {
-  const read = await readModelSources(path, { cwd });
-  if (!read) throw new Error(`No ArchDoc model at ${path}.`);
-  return { ref: path, commit: "", root: read.root, sources: read.sources };
 }

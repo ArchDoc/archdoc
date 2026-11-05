@@ -1,24 +1,31 @@
 import {
   type ChangeSummary,
-  check,
-  diffModels,
-  type Finding,
+  CODE_DIFF_BY,
+  type CodeChange,
   type MarkedFinding,
   type Model,
   type ModelDiff,
+  projectCodeChange,
   type RelationshipView,
   summarizeChange,
   toReview,
 } from "@archdoc/core/browser";
 
-/** What the Changes tab shows: the model at one ref against another. */
+/**
+ * What the Diff tab shows: a branch's code change since it left another
+ * branch, read into the branch's own model. Never the other branch's model.
+ */
 export interface Compare {
-  /** The base the changes are since, such as main. */
+  /** The branch the change is since, such as main. */
   ref: string;
-  /** The head: a branch, or undefined for the working tree. */
+  /** The branch with the change, or undefined for the working tree. */
   head?: string | undefined;
+  /** The head's model, as written. */
   base: Model;
+  /** The head's model with what its code change says applied: what the canvas draws. */
+  after: Model;
   diff: ModelDiff;
+  code: CodeChange;
   /** IDs of journeys the changes affect. */
   journeys: Set<string>;
   groups: ChangeGroups;
@@ -28,10 +35,19 @@ export interface Compare {
   count: number;
 }
 
-/** What the server found comparing the two revisions with their code, as `archdoc report` does. */
+/** What the server read from the code changed between the two branches. */
 export interface ChangeFindings {
+  /** The branch the change is since. */
+  base: string;
+  /** The branch with the change; undefined for the working tree. */
+  head?: string | undefined;
+  /** Their merge base. */
+  commit: string;
+  /** check's findings on the head, marked with whether the change introduced them. */
   findings: MarkedFinding[];
   changedFiles: string[];
+  /** The code change in the model's terms. */
+  code: CodeChange;
 }
 
 export interface ChangeItem {
@@ -51,38 +67,27 @@ export interface ChangeGroups {
   journeys: ChangeItem[];
   elements: ChangeItem[];
   data: ChangeItem[];
+  /** Routes, consumers, jobs, and commands the code added or removed. */
+  entries: ChangeItem[];
+  /** What the code says that the head's model doesn't, yet. */
+  unmodeled: ChangeItem[];
   /** Facts an agent suggested, waiting for a person to review. */
   suggested: ChangeItem[];
 }
 
 /**
- * Compares two revisions the way `archdoc report` does, from the same
- * summary. With what the server found in the code (`change`), its findings
- * and changed files; without (a static site, two model files), the findings
- * the models alone have.
+ * Reads a branch's code change into its model: what the code added, changed,
+ * and removed, as elements, uses, and entry points, each marked with whether
+ * the model already says it, and the same summary the PR comment renders.
  */
-export function compareModels(
-  ref: string,
-  base: Model,
-  head: string | undefined,
-  after: Model,
-  change?: ChangeFindings | undefined,
-): Compare {
-  const diff = diffModels(base, after);
-  let findings: MarkedFinding[];
-  if (change) {
-    findings = change.findings;
-  } else {
-    const key = (f: Finding) => `${f.code} ${f.message}`;
-    const before = new Set(check(base).findings.map(key));
-    findings = check(after).findings.map((f) => ({ ...f, introduced: !before.has(key(f)) }));
-  }
+export function compareCode(model: Model, change: ChangeFindings): Compare {
+  const { model: after, diff } = projectCodeChange(model, change.code);
   const summary = summarizeChange({
     model: after,
-    base,
-    changedFiles: change?.changedFiles ?? [],
+    base: model,
+    changedFiles: change.changedFiles,
     diff,
-    findings,
+    findings: change.findings,
     diagrams: false,
   });
   const concern = (kind: "error" | "warning") => (c: ChangeSummary["blocking"][number]) => ({
@@ -95,24 +100,38 @@ export function compareModels(
     breaks: [
       ...summary.blocking.map(concern("error")),
       ...summary.attention
-        .filter((c) => c.code !== "data/sensitive" && c.code !== "model/suggested")
+        .filter(
+          (c) =>
+            c.code !== "data/sensitive" &&
+            c.code !== "model/suggested" &&
+            // The code change lists these itself, by whether the model has them.
+            c.code !== UNDECLARED,
+        )
         .map(concern("warning")),
     ],
     journeys: journeyItems(summary, diff),
-    elements: elementItems(diff),
+    elements: elementItems(diff, change.code),
     data: dataItems(after, summary, diff),
+    entries: entryItems(change.code),
+    unmodeled: unmodeledItems(change.code, blockingUses(change.findings)),
     suggested: suggestedItems(diff),
   };
   return {
-    ref,
-    head,
-    base,
+    ref: change.base,
+    head: change.head,
+    base: model,
+    after,
     diff,
+    code: change.code,
     journeys: new Set(summary.journeys.filter((j) => !j.namespace).map((j) => j.id)),
     groups,
     summary,
     count:
-      groups.breaks.length + groups.journeys.length + groups.elements.length + groups.data.length,
+      groups.breaks.length +
+      groups.journeys.length +
+      groups.elements.length +
+      groups.data.length +
+      groups.entries.length,
   };
 }
 
@@ -142,14 +161,15 @@ function journeyItems(report: ChangeSummary, diff: ModelDiff): ChangeItem[] {
   return items;
 }
 
-function elementItems(diff: ModelDiff): ChangeItem[] {
+function elementItems(diff: ModelDiff, code: CodeChange): ChangeItem[] {
+  const files = new Map(code.elements.map((e) => [e.id, e]));
   return [
     ...diff.elements.map((c) => ({
       key: `element:${c.id}`,
       kind: c.kind,
       label: c.id,
-      hint: "element",
-      detail: detail(c),
+      hint: files.get(c.id)?.modeled === false ? "new code, not in the model" : "element",
+      detail: filesDetail(files.get(c.id)?.files) ?? detail(c),
     })),
     ...diff.actors.map((c) => ({
       key: c.kind === "removed" ? "" : `actor:${c.id}`,
@@ -158,18 +178,95 @@ function elementItems(diff: ModelDiff): ChangeItem[] {
       hint: "actor",
       detail: detail(c),
     })),
-    ...diff.relationships.map((c) => {
-      const r = (c.after ?? c.before) as RelationshipView;
-      return {
-        key:
-          r.from.type === "element" || r.from.type === "actor" ? `${r.from.type}:${r.from.id}` : "",
-        kind: c.kind,
-        label: `${end(r.from)} → ${end(r.to)}`,
-        hint: "uses",
-        detail: c.kind === "changed" ? c.fields.join(", ") : r.description,
-      };
-    }),
+    ...code.uses.map((u) => ({
+      key: `element:${u.from}`,
+      kind: u.kind,
+      label: `${u.from} → ${u.to}`,
+      hint: u.typeOnly ? "uses (types only)" : "uses",
+      detail: u.evidence[0],
+    })),
   ];
+}
+
+function filesDetail(list: { status: string }[] | undefined): string | undefined {
+  if (!list?.length) return undefined;
+  const count = (status: string) => list.filter((f) => f.status === status).length;
+  return (
+    [
+      ["added", count("added")],
+      ["modified", count("modified")],
+      ["deleted", count("deleted")],
+    ] as const
+  )
+    .filter(([, n]) => n > 0)
+    .map(([what, n]) => `${n} file${n === 1 ? "" : "s"} ${what}`)
+    .join(", ");
+}
+
+function entryItems(code: CodeChange): ChangeItem[] {
+  return code.entries.map((e) => ({
+    key: e.element ? `element:${e.element}` : "",
+    kind: e.kind,
+    label: `${e.entry.kind} ${e.entry.label}`,
+    hint: e.element ?? e.entry.file,
+    detail:
+      e.kind === "removed"
+        ? undefined
+        : e.journeys.length
+          ? `through ${e.journeys.join(", ")}`
+          : "no journey follows it",
+  }));
+}
+
+/**
+ * What the code says that the head's model doesn't: new code no element maps,
+ * uses the code added that the model lacks, uses the code dropped that the
+ * model still has, and elements whose code is gone.
+ */
+function unmodeledItems(code: CodeChange, blocking: Set<string>): ChangeItem[] {
+  const items: ChangeItem[] = [];
+  for (const p of code.proposed) {
+    items.push({
+      key: `element:${p.id}`,
+      kind: "warning",
+      label: p.id,
+      hint: `new ${p.kind}`,
+      detail: `${p.code} has no element`,
+    });
+  }
+  for (const e of code.elements) {
+    if (e.modeled && e.kind === "removed") {
+      items.push({
+        key: "",
+        kind: "warning",
+        label: e.id,
+        hint: "code removed",
+        detail: "the model still has it",
+      });
+    }
+  }
+  for (const u of code.uses) {
+    if (u.kind === "added" && !u.modeled) {
+      const blocks = blocking.has(`${u.from} ${u.to}`);
+      items.push({
+        key: `element:${u.from}`,
+        kind: blocks ? "error" : "warning",
+        label: `${u.from} → ${u.to}`,
+        hint: blocks ? "use not in the model, blocks the merge" : "use not in the model",
+        detail: u.evidence[0],
+      });
+    }
+    if (u.kind === "removed" && u.modeled) {
+      items.push({
+        key: `element:${u.from}`,
+        kind: "warning",
+        label: `${u.from} → ${u.to}`,
+        hint: "the code no longer uses it",
+        detail: "the model still has it",
+      });
+    }
+  }
+  return items;
 }
 
 function dataItems(model: Model, report: ChangeSummary, diff: ModelDiff): ChangeItem[] {
@@ -204,9 +301,32 @@ function dataItems(model: Model, report: ChangeSummary, diff: ModelDiff): Change
   return items;
 }
 
+/** The uses check blocks on because the model doesn't declare them, as `from to`. */
+function blockingUses(findings: MarkedFinding[]): Set<string> {
+  const out = new Set<string>();
+  for (const f of findings) {
+    if (f.code !== UNDECLARED || f.severity !== "error" || !f.introduced || !f.element) continue;
+    const to = new RegExp(`^${escapeRegExp(f.element)} depends on (\\S+), but`).exec(
+      f.message,
+    )?.[1];
+    if (to) out.add(`${f.element} ${to}`);
+  }
+  return out;
+}
+
+/** A finding the Diff lists under "Not in the model yet", with the code that says it. */
+export const UNDECLARED = "drift/undeclared-dependency";
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function suggestedItems(diff: ModelDiff): ChangeItem[] {
+  // What the code change itself proposes is listed as not in the model, not as suggested.
   const suggested = (c: { kind: string; after?: unknown }) =>
-    c.kind !== "removed" && toReview(c.after) !== undefined;
+    c.kind !== "removed" &&
+    toReview(c.after) !== undefined &&
+    (c.after as { provenance?: { by?: string } }).provenance?.by !== CODE_DIFF_BY;
   return [
     ...diff.elements.filter(suggested).map((c) => ({
       key: `element:${c.id}`,

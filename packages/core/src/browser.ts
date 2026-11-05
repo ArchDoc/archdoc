@@ -122,6 +122,19 @@ export {
 } from "./data/simulate.js";
 export * from "./diagnostics.js";
 export {
+  CODE_DIFF_BY,
+  type CodeChange,
+  type CodeSide,
+  deriveCodeChange,
+  type ElementCodeChange,
+  type EntryChange,
+  type FileChange,
+  type FileStatus,
+  type ProposedElement,
+  projectCodeChange,
+  type UseChange,
+} from "./diff/code-diff.js";
+export {
   type Change,
   type ChangeKind,
   countChanges,

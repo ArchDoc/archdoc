@@ -118,8 +118,15 @@ elements:
                 description: Resolves rule selectors and journey steps
           differ:
             kind: component
-            description: Semantic diff between two model revisions (actors, elements, relationships, journeys, data, rules).
+            description: Semantic diff between two model revisions (actors, elements, relationships, journeys, data, rules), and the code diff the explorer's Diff tab shows. deriveCodeChange reads a branch's changed files (with what the analyzers saw at both ends) into the branch's own model as elements, uses, proposed elements for new code no element maps, and entry points, each marked with whether the model already says it; projectCodeChange draws that change onto the model.
             code: [{ path: packages/core/src/diff/** }]
+            uses:
+              codemap:
+                description: Maps each changed file and dependency to the element that owns it
+                provenance: { source: suggested, by: agent:claude-code }
+              checker:
+                description: Leaves out test code and dev tooling the way check does, and describes the dependencies it maps
+                provenance: { source: suggested, by: agent:claude-code }
           imports:
             kind: component
             description: Other repos' models. Packs and reads bundles, checks the lockfile and every reference, contract, and journey step into another repo at its pinned version, and indexes who uses this repo from the others (through the landscape).
@@ -178,7 +185,7 @@ elements:
         kind: container
         deploy: [release.npm]
         technology: TypeScript (ts.preProcessFile), yaml
-        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, check, seal, paths), and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers, their components, and the code in those) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements.
+        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. codeChange reads what a branch's code changed since it left another branch (analyzers and entry points at both ends of the merge base) into the branch's model, for the explorer's Diff. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, check, seal, paths), and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers, their components, and the code in those) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements.
         code: [{ path: packages/analyzers/** }]
         uses:
           source-tree: Reads manifests, imports, and infra files
@@ -266,7 +273,7 @@ elements:
         elements:
           model-loader:
             kind: component
-            description: Fetches the model files and rebuilds the model on every change event; reads it for the tabs (which tabs sit under Explore and Build, journey cards and lanes, the comparison, the address), with the facts whose sealed code changed.
+            description: Fetches the model files and rebuilds the model on every change event; reads it for the tabs (which tabs sit under Explore and Build, journey cards and lanes, the Diff of a branch's code change read into its model with branch 1 defaulting to the working tree and branch 2 to main, the address), with the facts whose sealed code changed.
             code: [{ path: apps/web/src/model/** }]
             uses:
               graph: Hands the model to the canvas
