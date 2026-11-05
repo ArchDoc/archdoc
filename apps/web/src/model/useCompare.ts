@@ -132,8 +132,20 @@ function build(s: Sources): Model {
   return s.sources.length ? modelOf(s) : buildModel([]);
 }
 
-/** The explorer's tabs. */
-export type Tab = "overview" | "journeys" | "traces" | "data" | "infrastructure" | "changes";
+/**
+ * The explorer's tabs. Explore holds the model as it is (overview, journeys, traces, data,
+ * infrastructure); Build holds the work on it (plan, triage, and the diff, whose id stays
+ * "changes" so old #changes links still open it).
+ */
+export type Tab =
+  | "overview"
+  | "journeys"
+  | "traces"
+  | "data"
+  | "infrastructure"
+  | "plan"
+  | "triage"
+  | "changes";
 
 /** What the address says to open. */
 export interface HashState {
@@ -150,7 +162,7 @@ export interface HashState {
 }
 
 /**
- * What the address opens, such as #changes=main...feature (so a link opens the
+ * What the address opens, such as #diff=main...feature (so a link opens the
  * same comparison), #journeys=request-refund, or #data=payments.Refund.
  */
 export function readHash(hash = window.location.hash): HashState {
@@ -159,7 +171,8 @@ export function readHash(hash = window.location.hash): HashState {
     const eq = part.indexOf("=");
     const name = eq < 0 ? part : part.slice(0, eq);
     const value = eq < 0 ? "" : decodeURIComponent(part.slice(eq + 1));
-    if (name === "changes") {
+    // #changes is the Diff's old name: links made before it was renamed still open it.
+    if (name === "diff" || name === "changes") {
       const [base, head] = value.split("...");
       return { tab: "changes", pair: base ? { base, head: head || undefined } : undefined };
     }
@@ -176,6 +189,7 @@ export function readHash(hash = window.location.hash): HashState {
         : undefined;
       return { tab: "data", data };
     }
+    if (name === "plan" || name === "triage") return { tab: name };
     if (name === "overview") return { tab: "overview" };
   }
   return {};
@@ -185,8 +199,11 @@ export function readHash(hash = window.location.hash): HashState {
 export function hashOf(state: HashState): string {
   const pair = state.pair;
   switch (state.tab) {
+    case "plan":
+    case "triage":
+      return `#${state.tab}`;
     case "changes":
-      return `#changes${pair ? `=${encodeURIComponent(pair.base)}${pair.head ? `...${encodeURIComponent(pair.head)}` : ""}` : ""}`;
+      return `#diff${pair ? `=${encodeURIComponent(pair.base)}${pair.head ? `...${encodeURIComponent(pair.head)}` : ""}` : ""}`;
     case "traces":
       return `#traces${state.trace ? `=${encodeURIComponent(state.trace)}` : ""}`;
     case "infrastructure":

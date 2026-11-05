@@ -66,7 +66,7 @@ The comment is for deciding; the explorer is for looking around. With `site: tru
         id: archdoc
         with:
           site: true
-          explorer-url: https://acme.github.io/archdoc-previews/${{ github.event.number }}/#changes
+          explorer-url: https://acme.github.io/archdoc-previews/${{ github.event.number }}/#diff
       # Publish ${{ steps.archdoc.outputs.site }} to that path with your usual deploy step.
 ```
 

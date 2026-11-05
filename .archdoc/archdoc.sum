@@ -1144,7 +1144,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-ec21bedb05a35305
+    hash: fnv-7677cf5679c63748
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
@@ -1173,6 +1173,14 @@ seals:
         - repoOf
         - stepUses
         - targetLabel
+      apps/web/src/model/tabs.ts:
+        - Section
+        - SectionInfo
+        - TabInfo
+        - TabsInput
+        - landingTab
+        - sectionOf
+        - sections
       apps/web/src/model/traces.ts:
         - Traces
         - anchorChip
@@ -1204,10 +1212,10 @@ seals:
         - SealsInfo
         - modelOf
         - useModel
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-595fcefe69472e1c
+    hash: fnv-a55686fd843da405
     files:
       apps/web/src/App.tsx:
         - App
@@ -1260,6 +1268,8 @@ seals:
         - SearchBox
         - dataGroups
         - search
+      apps/web/src/components/Soon.tsx:
+        - Soon
       apps/web/src/components/StepPanel.tsx:
         - StepPanel
         - StepPanelProps
@@ -1297,7 +1307,7 @@ seals:
         - TableNode
         - nodeTypes
       apps/web/src/styles.css: []
-    by: agent:claude-code
+    by: agent:claude
   step:agent-preflight#1:
     kind: structure
     hash: fnv-b5eb9a68eba1ed3e
