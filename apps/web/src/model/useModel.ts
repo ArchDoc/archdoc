@@ -23,11 +23,7 @@ export interface ModelPayload {
   /** Where each code snippet is, by snippetKey, so a symbol links to its lines. */
   snippets?: Record<string, SnippetPlace>;
   repo?: RepoLinks;
-  /** With `archdoc view --base <ref>`: the model at the merge base with that ref, read like this one. */
-  base?: { ref: string; commit?: string; root: string; sources: ModelSource[] } & Partial<
-    Pick<ModelPayload, "schemas" | "federation">
-  >;
-  /** With a base: what the change introduced, found with the code, as `archdoc report` finds it. */
+  /** With `archdoc view --base <ref>`: the code changed since the merge base with that ref, in the model's terms. */
   change?: ChangeFindings;
   /** A composed landscape (`archdoc view --landscape`, `archdoc landscape build`): its repos and domains. */
   landscape?: LandscapeInfo;
@@ -101,8 +97,8 @@ export type ModelState =
       files: string[];
       snippets: Record<string, SnippetPlace>;
       repo: RepoLinks;
-      /** The model at the base ref, for the before/after view. */
-      base?: { ref: string; model: Model; change?: ChangeFindings | undefined } | undefined;
+      /** With `archdoc view --base`: the working tree's code change since that branch. */
+      change?: ChangeFindings | undefined;
       /** Set when the model is a composed landscape. */
       landscape?: LandscapeInfo | undefined;
       samples: { path: string; text: string }[];
@@ -162,11 +158,7 @@ export function useModel(): ModelState {
         files: payload.files ?? [],
         snippets: payload.snippets ?? {},
         repo: payload.repo ?? {},
-        base: payload.base && {
-          ref: payload.base.ref,
-          model: payload.base.sources.length ? modelOf(payload.base) : buildModel([]),
-          change: payload.change,
-        },
+        change: payload.change,
         landscape: payload.landscape,
         samples: payload.samples ?? [],
         traces: payload.traces ?? [],

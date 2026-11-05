@@ -119,13 +119,13 @@ describe("archdoc site", () => {
       expect(r.code).toBe(0);
       const body = JSON.parse(await readFile(join(out, "api", "model"), "utf8")) as {
         watch: boolean;
-        base: { ref: string; root: string; schemas: unknown[] };
-        change: { findings: { introduced?: boolean }[] };
+        base?: unknown;
+        change: { base: string; findings: { introduced?: boolean }[]; code: { files: unknown[] } };
       };
       expect(body.watch).toBe(false);
-      expect(body.base.ref).toBe("main");
-      expect(body.base.root).toBe("main:.archdoc/archdoc.yaml");
-      expect(body.base.schemas.length).toBeGreaterThan(0);
+      expect(body.base).toBeUndefined();
+      expect(body.change.base).toBe("main");
+      expect(Array.isArray(body.change.code.files)).toBe(true);
       expect(body.change.findings.some((f) => f.introduced === false)).toBe(true);
     } finally {
       delete process.env.ARCHDOC_WEB_DIR;

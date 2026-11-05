@@ -50,7 +50,7 @@ seals:
     by: agent:claude-code
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-98308c7a1c10bde0
+    hash: fnv-c6cedc986289c7e8
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -79,6 +79,10 @@ seals:
         - CheckRepositoryOptions
         - CheckRepositoryResult
         - checkRepository
+      packages/analyzers/src/code-change.ts:
+        - CodeChangeOptions
+        - CodeChangeResult
+        - codeChange
       packages/analyzers/src/go.ts:
         - GoModule
         - GoReplace
@@ -496,8 +500,20 @@ seals:
     by: agent:claude-code
   element:toolchain.core.differ:
     kind: structure
-    hash: fnv-08c07b4acf9c6e2a
+    hash: fnv-b2bd5d6388296ce7
     files:
+      packages/core/src/diff/code-diff.ts:
+        - CODE_DIFF_BY
+        - CodeChange
+        - CodeSide
+        - ElementCodeChange
+        - EntryChange
+        - FileChange
+        - FileStatus
+        - ProposedElement
+        - UseChange
+        - deriveCodeChange
+        - projectCodeChange
       packages/core/src/diff/diff.ts:
         - Change
         - ChangeKind
@@ -507,6 +523,7 @@ seals:
         - countChanges
         - diffModels
         - isEmptyDiff
+    by: agent:claude-code
   element:toolchain.core.imports:
     kind: structure
     hash: fnv-ba24317aaad5fd50
@@ -1144,14 +1161,15 @@ seals:
     by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-ec21bedb05a35305
+    hash: fnv-980e89b9f5f13c51
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
         - ChangeGroups
         - ChangeItem
         - Compare
-        - compareModels
+        - UNDECLARED
+        - compareCode
       apps/web/src/model/stories.ts:
         - IMPORTANCE
         - JourneyCard
@@ -1190,6 +1208,7 @@ seals:
         - Pair
         - Refs
         - Tab
+        - defaultBase
         - hashOf
         - readHash
         - useCompared

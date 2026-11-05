@@ -28,7 +28,10 @@ export function useRefs(): Refs | undefined {
   return refs;
 }
 
-/** Which two versions the Changes tab compares. No head means the working tree. */
+/**
+ * Which two branches the Diff tab compares: the change on `head` (branch 1,
+ * the working tree when undefined) since it left `base` (branch 2, such as main).
+ */
 export interface Pair {
   base: string;
   head?: string | undefined;
@@ -40,13 +43,13 @@ export type Compared =
   | { status: "error"; message: string }
   | {
       status: "ready";
-      base: Model;
+      /** Branch 1's model and files, when it isn't the working tree. */
       head?: Head | undefined;
-      /** What the server found comparing them with the code. */
-      change?: ChangeFindings | undefined;
+      /** The code changed since the merge base, in the head model's terms. */
+      change: ChangeFindings;
     };
 
-/** A branch as the Changes tab shows it: its model, and the files and samples at its commit. */
+/** A branch as the Diff tab shows it: its model, and the files and samples at its commit. */
 export interface Head {
   ref: string;
   model: Model;
@@ -63,14 +66,11 @@ interface Sources extends Partial<ModelPayload> {
   sources: ModelSource[];
 }
 
-/** The model at each side of the pair, read from git by the view server. */
-export function useCompared(
-  pair: Pair | undefined,
-  preset: { ref: string; model: Model; change?: ChangeFindings | undefined } | undefined,
-): Compared {
+/** The code change between the pair, read by the view server from git. */
+export function useCompared(pair: Pair | undefined, preset: ChangeFindings | undefined): Compared {
   const [state, setState] = useState<Compared>(IDLE);
   // What the page loaded with needs no request, so it also works on a static host.
-  const fromPreset = !!pair && !pair.head && pair.base === preset?.ref;
+  const fromPreset = !!pair && !pair.head && pair.base === preset?.base;
   useEffect(() => {
     if (!pair || fromPreset) return;
     let cancelled = false;
@@ -83,20 +83,15 @@ export function useCompared(
       .then(async (res) => {
         const body = (await res.json().catch(() => ({}))) as {
           error?: string;
-          base?: Sources;
           head?: Sources;
           change?: ChangeFindings;
         };
-        if (!res.ok || !body.base)
+        if (!res.ok || !body.change)
           throw new Error(body.error ?? `The server answered ${res.status}.`);
-        return {
-          base: build(body.base),
-          head: body.head && head(body.head),
-          change: body.change,
-        };
+        return { head: body.head && head(body.head), change: body.change };
       })
       .then(
-        (models) => !cancelled && setState({ status: "ready", ...models }),
+        (read) => !cancelled && setState({ status: "ready", ...read }),
         (err: unknown) =>
           !cancelled &&
           setState({ status: "error", message: err instanceof Error ? err.message : String(err) }),
@@ -105,10 +100,10 @@ export function useCompared(
       cancelled = true;
     };
   }, [pair, fromPreset]);
-  const presetModel = fromPreset ? preset : undefined;
+  const presetChange = fromPreset ? preset : undefined;
   const ready = useMemo<Compared | undefined>(
-    () => presetModel && { status: "ready", base: presetModel.model, change: presetModel.change },
-    [presetModel],
+    () => presetChange && { status: "ready", change: presetChange },
+    [presetChange],
   );
   if (!pair) return IDLE;
   return ready ?? state;
@@ -119,7 +114,7 @@ const IDLE: Compared = { status: "idle" };
 function head(p: Sources): Head {
   return {
     ref: p.ref,
-    model: modelOf(p),
+    model: p.sources.length ? modelOf(p) : buildModel([]),
     files: p.files ?? [],
     snippets: p.snippets ?? {},
     repo: p.repo ?? {},
@@ -128,8 +123,15 @@ function head(p: Sources): Head {
   };
 }
 
-function build(s: Sources): Model {
-  return s.sources.length ? modelOf(s) : buildModel([]);
+/**
+ * The branch to compare with when no one has picked one: main, or the
+ * repository's other usual default, never the branch being compared.
+ */
+export function defaultBase(refs: Refs | undefined): string | undefined {
+  if (!refs) return undefined;
+  if (refs.base) return refs.base;
+  const others = refs.branches.filter((b) => b !== refs.current);
+  return ["main", "master", "trunk", "develop"].find((b) => others.includes(b));
 }
 
 /** The explorer's tabs. */

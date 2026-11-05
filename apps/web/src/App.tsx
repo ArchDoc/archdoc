@@ -45,10 +45,11 @@ import {
   systemBox,
 } from "./graph/graph.js";
 import { type GroupBy, type Grouping, groupLandscape } from "./graph/groups.js";
-import { type Compare, compareModels } from "./model/compare.js";
+import { type Compare, compareCode } from "./model/compare.js";
 import { journeyLanes, journeysByImportance } from "./model/stories.js";
 import { firstCause, readTraces } from "./model/traces.js";
 import {
+  defaultBase,
   type HashState,
   type Pair,
   type Refs,
@@ -66,15 +67,15 @@ export function App() {
   const [initial] = useState<HashState>(() => readHash());
   const [tab, setTab] = useState<Tab>(initial.tab ?? "overview");
   const [chosen, setChosen] = useState<Pair | undefined>(initial.pair);
-  const preset = state.status === "ready" ? state.base : undefined;
-  // `archdoc view --base` picks the base until someone picks another.
-  const presetRef = preset?.ref ?? refs?.base;
+  const preset = state.status === "ready" ? state.change : undefined;
+  // `archdoc view --base` picks branch 2 until someone picks another; otherwise main.
+  const presetRef = preset?.base ?? defaultBase(refs);
   const pair = useMemo<Pair | undefined>(
     () => chosen ?? (presetRef ? { base: presetRef } : undefined),
     [chosen, presetRef],
   );
   const compared = useCompared(pair, preset);
-  // A branch replaces the working tree while the Changes tab shows it: its model and files.
+  // A branch replaces the working tree while the Diff tab shows it: its model and files.
   const branch = tab === "changes" && compared.status === "ready" ? compared.head : undefined;
   const shown = branch ?? (state.status === "ready" ? state : undefined);
   const headModel =
@@ -82,10 +83,10 @@ export function App() {
       ? (compared.head ?? (state.status === "ready" ? state : undefined))?.model
       : undefined;
   const compare = useMemo<Compare | undefined>(() => {
-    if (!pair || compared.status !== "ready" || !headModel) return undefined;
-    // Both revisions read the same way, with what the server found in the code.
-    return compareModels(pair.base, compared.base, pair.head, headModel, compared.change);
-  }, [pair, compared, headModel]);
+    if (compared.status !== "ready" || !headModel) return undefined;
+    // Branch 1's model, with what its code change says read into it.
+    return compareCode(headModel, compared.change);
+  }, [compared, headModel]);
 
   if (state.status === "loading") return <Splash>Loading the model…</Splash>;
   if (state.status === "error" || !shown) {
@@ -106,18 +107,18 @@ export function App() {
           compare,
           note:
             compared.status === "loading"
-              ? `Reading the model at ${[pair?.base, pair?.head].filter(Boolean).join(" and ")}…`
+              ? `Reading the code ${pair?.head ?? "the working tree"} changed since ${pair?.base}…`
               : compared.status === "error"
                 ? compared.message
                 : pair
                   ? undefined
-                  : "Pick a branch to compare with.",
+                  : "Pick the branch to compare with.",
         }
       : undefined;
   return (
     <ReactFlowProvider>
       <Explorer
-        model={shown.model}
+        model={tab === "changes" && compare ? compare.after : shown.model}
         watch={state.watch}
         reloads={state.reloads}
         files={shown.files}
@@ -920,8 +921,8 @@ function Explorer({
             id: "changes" as const,
             label: "Changes",
             title: changes.pair
-              ? `What changes ${changes.pair.head ?? "the working tree"} makes to the model since ${changes.pair.base}`
-              : "Compare the model on two branches",
+              ? `What the code ${changes.pair.head ?? "in the working tree"} changed since ${changes.pair.base}, read into its model`
+              : "What a branch's code changed, read into its model",
           },
         ]
       : []),
@@ -1161,15 +1162,19 @@ function exists(model: Model, key: string, landscape?: LandscapeInfo): boolean {
 
 const WORKING_TREE = "";
 
-/** The two versions the Changes tab compares: a base, and a branch or the working tree. */
+/**
+ * The two branches the Diff tab compares: branch 1, the one with the change
+ * (the working tree unless someone picks another), and branch 2, the one it
+ * left (main unless someone picks another).
+ */
 function PairPicker({ changes }: { changes: ChangesControl }) {
   const { refs, pair } = changes;
   if (!refs?.branches.length) {
-    // A static page compares only what it was built with.
+    // A static page shows only the change it was built with.
     return pair ? (
       <span className="pair">
-        <span className="pair-ref">{pair.base}</span> →{" "}
-        <span className="pair-ref">{pair.head ?? "this version"}</span>
+        <span className="pair-ref">{pair.head ?? "this version"}</span> since{" "}
+        <span className="pair-ref">{pair.base}</span>
       </span>
     ) : null;
   }
@@ -1181,33 +1186,33 @@ function PairPicker({ changes }: { changes: ChangesControl }) {
     ));
   return (
     <fieldset className="pair">
-      <legend>Compare</legend>
+      <legend>Diff</legend>
       <label>
-        <span className="sr-only">Base</span>
-        <select
-          value={pair?.base ?? ""}
-          onChange={(e) => changes.onPair({ base: e.target.value, head: pair?.head })}
-          title="The version the changes are since"
-        >
-          {pair ? null : <option value="">Pick a base…</option>}
-          {options(pair?.base)}
-        </select>
-      </label>
-      <span aria-hidden="true">→</span>
-      <label>
-        <span className="sr-only">Head</span>
+        <span className="sr-only">Branch 1</span>
         <select
           value={pair?.head ?? WORKING_TREE}
           disabled={!pair}
           onChange={(e) =>
             pair && changes.onPair({ base: pair.base, head: e.target.value || undefined })
           }
-          title="The version with the changes"
+          title="Branch 1: the branch with the change, read from its code"
         >
           <option value={WORKING_TREE}>
             Working tree{refs.current ? ` (${refs.current})` : ""}
           </option>
           {options(pair?.head)}
+        </select>
+      </label>
+      <span aria-hidden="true">since</span>
+      <label>
+        <span className="sr-only">Branch 2</span>
+        <select
+          value={pair?.base ?? ""}
+          onChange={(e) => changes.onPair({ base: e.target.value, head: pair?.head })}
+          title="Branch 2: the branch it left, such as main"
+        >
+          {pair ? null : <option value="">Pick a branch…</option>}
+          {options(pair?.base)}
         </select>
       </label>
     </fieldset>

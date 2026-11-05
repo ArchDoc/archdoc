@@ -50,26 +50,22 @@ describe("view server", () => {
     });
   });
 
-  it("compares with another model file, and sends no samples (simulation is hidden)", async () => {
+  it("refuses a model file as the base: the Diff reads the change from code", async () => {
     const examples = join(tmp, "examples");
     await mkdir(examples, { recursive: true });
     const model = (desc: string) =>
       `archdoc: "2.0"\nnamespace: shop\nelements:\n  web: { kind: container, description: ${desc} }\n`;
     await writeFile(join(examples, "shop.yaml"), model("Before"));
     await writeFile(join(examples, "shop.next.yaml"), model("After"));
+    await expect(
+      startViewServer({ target: "shop.next.yaml", cwd: examples, webDir: web, base: "shop.yaml" }),
+    ).rejects.toThrow("archdoc diff shop.yaml");
+    // A model file on its own sends no samples (simulation is hidden).
     await writeFile(join(examples, "buy.sample.json"), "{}");
-    server = await startViewServer({
-      target: "shop.next.yaml",
-      cwd: examples,
-      webDir: web,
-      base: "shop.yaml",
-    });
+    server = await startViewServer({ target: "shop.next.yaml", cwd: examples, webDir: web });
     const payload = (await (await fetch(`${server.url}/api/model`)).json()) as {
-      base: { ref: string; sources: { text: string }[] };
       samples?: unknown;
     };
-    expect(payload.base.ref).toBe("shop.yaml");
-    expect(payload.base.sources[0]?.text).toContain("Before");
     expect(payload.samples).toBeUndefined();
   });
 

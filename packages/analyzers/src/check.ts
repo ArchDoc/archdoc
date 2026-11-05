@@ -10,6 +10,7 @@ import {
   loadTraces,
   type MarkedFinding,
   mergeBase,
+  type ObservedDependency,
   resolveGitRef,
   sealedPaths,
   TRACES_DIR,
@@ -38,7 +39,20 @@ export interface CheckRepositoryResult {
   result: CheckResult;
   findings: MarkedFinding[];
   /** With `base`: the model at the merge base, loaded the same way, and the files changed since. */
-  base?: { model: LoadedModel; ref: string; commit: string; changedFiles: string[] } | undefined;
+  base?:
+    | {
+        model: LoadedModel;
+        ref: string;
+        commit: string;
+        changedFiles: string[];
+        /** The repository at the merge base, and what the analyzers saw in it. */
+        snapshot: Snapshot;
+        observed: ObservedDependency[];
+      }
+    | undefined;
+  /** The repository checked (the head), and what the analyzers saw in it. */
+  snapshot: Snapshot;
+  observed: ObservedDependency[];
 }
 
 /**
@@ -63,7 +77,8 @@ export async function checkRepository(
   const headObserved = options.code === false ? [] : await analyze(contextOf(head.snapshot));
   const result = await checkRevision(head, headObserved, options.code);
 
-  if (!options.base) return { model, result, findings: result.findings };
+  const checked = { model, result, snapshot: head.snapshot, observed: headObserved };
+  if (!options.base) return { ...checked, findings: result.findings };
 
   if (!(await resolveGitRef(model.baseDir, options.base))) {
     throw new Error(`${options.base} is not a commit, branch, or tag.`);
@@ -79,14 +94,15 @@ export async function checkRepository(
   const already = new Set(baseResult.findings.map((f) => findingKey(f).replaceAll(`${at}:`, "")));
   const findings = result.findings.map((f) => ({ ...f, introduced: !already.has(findingKey(f)) }));
   return {
-    model,
-    result,
+    ...checked,
     findings,
     base: {
       model: before.model,
       ref: options.base,
       commit: before.snapshot.commit ?? at,
       changedFiles: changed,
+      snapshot: before.snapshot,
+      observed: baseObserved,
     },
   };
 }
