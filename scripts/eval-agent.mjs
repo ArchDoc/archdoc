@@ -185,9 +185,9 @@ const flows = async (root) => {
 // A Bash command that runs a script the agent wrote: a heredoc, or an inline program.
 const SCRIPT = /<<-?\s*['"]?\w+|\b(?:python3?|node|ruby|perl)\s+(?:-[ce]\b|-\s|-$)|\bbash\s+-c\b/;
 
-/** How the agent spent its session: tool calls, Bash calls, and scripts it wrote to explore. */
+/** How the agent spent its session: tool calls, Bash calls, scripts it wrote to explore, and how it found and changed the model (archdoc find and edit, or reading and editing the YAML by hand). */
 function effort(transcript) {
-  const out = { tools: 0, bash: 0, scripts: 0 };
+  const out = { tools: 0, bash: 0, scripts: 0, find: 0, edit: 0, handEdits: 0, yamlReads: 0 };
   for (const line of transcript.split("\n")) {
     let m;
     try {
@@ -199,9 +199,18 @@ function effort(transcript) {
     for (const c of m.message?.content ?? []) {
       if (c.type !== "tool_use") continue;
       out.tools++;
+      const file = String(c.input?.file_path ?? "");
+      const model = /(^|\/)\.archdoc\//.test(file);
+      if (c.name === "mcp__archdoc__archdoc_find") out.find++;
+      else if (c.name === "mcp__archdoc__archdoc_edit") out.edit++;
+      else if ((c.name === "Edit" || c.name === "Write") && model) out.handEdits++;
+      else if (c.name === "Read" && model) out.yamlReads++;
       if (c.name !== "Bash") continue;
       out.bash++;
-      if (SCRIPT.test(String(c.input?.command ?? ""))) out.scripts++;
+      const command = String(c.input?.command ?? "");
+      if (/\barchdoc\s+find\b/.test(command)) out.find++;
+      if (/\barchdoc\s+edit\b/.test(command)) out.edit++;
+      if (SCRIPT.test(command)) out.scripts++;
     }
   }
   return out;
@@ -505,6 +514,10 @@ for (const name of chosen) {
     minutes: mean(mine.map((r) => r.ms / 60000)),
     bash: mean(mine.map((r) => r.bash).filter((t) => t !== undefined)),
     scripts: mean(mine.map((r) => r.scripts).filter((t) => t !== undefined)),
+    find: mean(mine.map((r) => r.find).filter((t) => t !== undefined)),
+    edit: mean(mine.map((r) => r.edit).filter((t) => t !== undefined)),
+    handEdits: mean(mine.map((r) => r.handEdits).filter((t) => t !== undefined)),
+    yamlReads: mean(mine.map((r) => r.yamlReads).filter((t) => t !== undefined)),
   });
 }
 
@@ -528,8 +541,8 @@ const lines = [
     ? "Each cell is init → agent: what archdoc init alone scores, then the agent's mean over its runs. Scored against each repository's partial reference.yaml, so containers, components, datastores, and uses are recall (a model may go further and isn't marked down); nesting and code are the share right; overall is their mean."
     : "Each cell is init → agent: what archdoc init alone scores, then the agent's mean over its runs. Containers, components, datastores, and uses are F1; nesting and code are the share right.",
   "",
-  `| ${title(what)} | ${metrics.map(title).join(" | ")} | Range | Errors | Minutes | Turns | Bash | Scripts | Cost |`,
-  `|---|${metrics.map(() => "---").join("|")}|---|---|---|---|---|---|---|`,
+  `| ${title(what)} | ${metrics.map(title).join(" | ")} | Range | Errors | Minutes | Turns | Bash | Scripts | Find | Edit | Hand edits | YAML reads | Cost |`,
+  `|---|${metrics.map(() => "---").join("|")}|---|---|---|---|---|---|---|---|---|---|---|`,
   ...rows.map(
     (f) =>
       [
@@ -541,11 +554,14 @@ const lines = [
         f.turns === undefined ? "–" : Math.round(f.turns),
         f.bash === undefined ? "–" : Math.round(f.bash),
         f.scripts === undefined ? "–" : Math.round(f.scripts),
+        ...["find", "edit", "handEdits", "yamlReads"].map((k) =>
+          f[k] === undefined ? "–" : Math.round(f[k]),
+        ),
         f.cost === undefined ? "–" : `$${f.cost.toFixed(2)}`,
       ].join(" | ") + " |",
   ),
   "",
-  "Minutes is the agent's wall time; turns, its turns; Bash, its Bash calls; scripts, the Bash calls that ran a program it wrote (a heredoc, python -c, node -e) to explore the repository, which init and archdoc paths should make unnecessary. Each is a mean over runs.",
+  "Minutes is the agent's wall time; turns, its turns; Bash, its Bash calls; scripts, the Bash calls that ran a program it wrote (a heredoc, python -c, node -e) to explore the repository, which init and archdoc paths should make unnecessary. Find and edit are its archdoc_find and archdoc_edit calls (MCP or CLI); hand edits, its Edit and Write calls on .archdoc/ files; YAML reads, its Read calls on them. Each is a mean over runs.",
   "",
   `Overall, mean over ${real ? "repositories" : "fixtures"}: init ${pct(mean(rows.map((f) => f.init.overall)))} → agent ${pct(mean(rows.map((f) => f.agent.overall).filter((x) => x !== undefined)))}.`,
 ];

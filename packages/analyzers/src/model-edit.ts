@@ -22,6 +22,10 @@ import type { Answer, Where } from "./answers.js";
 const NO_MODEL =
   "No ArchDoc model here. Expected .archdoc/archdoc.yaml. Run archdoc init to start one.";
 
+/** The shapes the schema wants, for an edit whose spec didn't fit. */
+const SHAPES =
+  'Shapes: uses { "<target>": "description" }; stores { Order: { entity: Order, description } }; data kind entity, message, or event, with fields { id: { type: uuid } }; a step\'s sends and creates an entry or a list; changes { "Order.status": "pending -> paid" }; importance critical, high, or normal.';
+
 export interface FindInput {
   /** Words, such as "checkout pricing" or "orders queue". */
   query?: string | undefined;
@@ -124,6 +128,7 @@ export async function editAnswer(where: Where, input: EditInput): Promise<Answer
         `Nothing written: this edit would add ${newErrors.length} error${newErrors.length === 1 ? "" : "s"} to the model.`,
         ...newErrors.slice(0, 12).map((d) => `  ✗ ${formatDiagnostic(d)}`),
         ...(newErrors.length > 12 ? [`  … and ${newErrors.length - 12} more`] : []),
+        ...(newErrors.some((d) => d.code.startsWith("schema/")) ? ["", SHAPES] : []),
         "",
         "What it would have done:",
         ...r.done.map((d) => `  ${d}`),

@@ -382,4 +382,34 @@ describe("editModel", () => {
     ]);
     expect(ok.files[0]?.text).toContain("ops: { kind: team, description: d }");
   });
+
+  it("takes the shorter shapes agents write for stores, uses, data, and types", () => {
+    const r = edit([
+      {
+        op: "add",
+        id: "data:Receipt",
+        spec: { description: "A receipt.", fields: { id: { type: "uuid" } } },
+      },
+      {
+        op: "set",
+        id: "db",
+        spec: { stores: { receipts: "Every receipt", orders: { description: "Orders" } } },
+      },
+      { op: "add", id: "orders.cache", spec: { kind: "datastore", stores: ["Order"] } },
+      { op: "add", type: "element", id: "orders.mailer", spec: { uses: ["orders.cache"] } },
+    ]);
+    expect(r.problems).toEqual([]);
+    expect(r.done[0]).toContain("Added data entry Receipt");
+    expect(r.done[0]).toContain("(kind entity: say kind message or event to change it)");
+    const stores = (id: string) => r.model.elements.get(id)?.spec.stores;
+    expect(stores("shop.db")).toMatchObject({
+      orders: { entity: "Order", key: "id", description: "Orders" },
+      receipts: { entity: "receipts", description: "Every receipt" },
+    });
+    expect(stores("shop.orders.cache")).toMatchObject({ Order: { entity: "Order" } });
+    expect(r.model.elements.get("shop.orders.mailer")?.spec.uses).toEqual({ "orders.cache": null });
+    expect(errors(r.model)).toEqual([]);
+    const set = edit({ op: "set", id: "web", spec: { uses: ["db"] } });
+    expect(set.problems[0]).toContain("uses is a map of target to description");
+  });
 });
