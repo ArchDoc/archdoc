@@ -216,9 +216,10 @@ p {
   height: 100%;
   display: grid;
   grid-template-columns: var(--side-width) minmax(0, 1fr);
-  grid-template-rows: 52px auto minmax(0, 1fr);
+  grid-template-rows: 52px auto auto minmax(0, 1fr);
   grid-template-areas:
     "top top"
+    "nav nav"
     "diag diag"
     "side main";
 }
@@ -227,8 +228,20 @@ p {
   grid-template-columns: var(--side-width) minmax(0, 1fr) var(--panel-width, 380px);
   grid-template-areas:
     "top top top"
+    "nav nav nav"
     "diag diag diag"
     "side main panel";
+}
+
+/* Plan and Triage: one page, no list beside it. */
+.app.tab-plan,
+.app.tab-triage {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "top"
+    "nav"
+    "diag"
+    "main";
 }
 
 .app.tab-overview {
@@ -321,6 +334,69 @@ p {
 .tab-count.has-breaks {
   background: var(--breaks-soft);
   color: var(--breaks);
+}
+
+.tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* The tabs under Explore or Build, in a row below the top bar. */
+.subtabs {
+  grid-area: nav;
+  display: flex;
+  height: 38px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  min-width: 0;
+}
+
+.subtab {
+  font-size: var(--fs-2);
+  padding: 0 10px;
+}
+
+.tab-soon {
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: var(--fs-1);
+  font-weight: 400;
+}
+
+.soon {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+}
+
+.soon-card {
+  max-width: 520px;
+  padding: 28px 32px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.soon-card h1 {
+  margin: 4px 0 8px;
+}
+
+.soon-badge {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.soon-lead {
+  font-weight: 600;
 }
 
 .topbar-right {
@@ -3339,8 +3415,8 @@ table.observed td.is-wrong code {
     height: auto;
     min-height: 100%;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto auto;
-    grid-template-areas: "top" "diag" "side" "main" "panel";
+    grid-template-rows: auto auto auto auto auto auto;
+    grid-template-areas: "top" "nav" "diag" "side" "main" "panel";
   }
   .topbar {
     flex-wrap: wrap;
@@ -3357,6 +3433,10 @@ table.observed td.is-wrong code {
   .topbar-right {
     margin-left: auto;
     flex-wrap: wrap;
+  }
+  .subtabs {
+    height: auto;
+    padding: 0 12px;
   }
   .segmented legend,
   .pair legend,

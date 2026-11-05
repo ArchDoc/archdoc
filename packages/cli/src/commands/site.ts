@@ -43,7 +43,7 @@ export async function site(target: string, options: SiteOptions, io: Io): Promis
     io.out(`✓ Wrote ${where}/.`);
     io.out(
       options.base
-        ? `  Publish the folder with any static host, and link to it with #changes to open the change since ${options.base}.`
+        ? `  Publish the folder with any static host, and link to it with #diff to open the change since ${options.base}.`
         : "  Publish the folder with any static host.",
     );
     return 0;
