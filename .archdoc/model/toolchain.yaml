@@ -79,7 +79,7 @@ elements:
               - { path: packages/core/src/codemap/snippet.ts, symbol: findSnippet, description: The lines or declaration a code reference points at }
           report:
             kind: component
-            description: Text, JSON, and Mermaid answers shared by the CLI, MCP, and the explorer, so people and agents read the same words. summarizeChange is the one verdict on a change that the PR comment, the Changes tab, and archdoc check all render (formatCheck keeps it short enough for an agent); it also draws the change and its journeys, with their branches.
+            description: Text, JSON, and Mermaid answers shared by the CLI, MCP, and the explorer, so people and agents read the same words. summarizeChange is the one verdict on a change that the PR comment, the explorer's Diff tab, and archdoc check all render (formatCheck keeps it short enough for an agent); it also draws the change and its journeys, with their branches.
             code: [{ path: packages/core/src/report/** }]
             uses:
               imports:
@@ -118,8 +118,15 @@ elements:
                 description: Resolves rule selectors and journey steps
           differ:
             kind: component
-            description: Semantic diff between two model revisions (actors, elements, relationships, journeys, data, rules).
+            description: Semantic diff between two model revisions (actors, elements, relationships, journeys, data, rules), and the code diff the explorer's Diff tab shows. deriveCodeChange reads a branch's changed files (with what the analyzers saw at both ends) into the branch's own model as elements, uses, proposed elements for new code no element maps, and entry points, each marked with whether the model already says it; projectCodeChange draws that change onto the model.
             code: [{ path: packages/core/src/diff/** }]
+            uses:
+              codemap:
+                description: Maps each changed file and dependency to the element that owns it
+                provenance: { source: suggested, by: agent:claude-code }
+              checker:
+                description: Leaves out test code and dev tooling the way check does, and describes the dependencies it maps
+                provenance: { source: suggested, by: agent:claude-code }
           imports:
             kind: component
             description: Other repos' models. Packs and reads bundles, checks the lockfile and every reference, contract, and journey step into another repo at its pinned version, and indexes who uses this repo from the others (through the landscape).
@@ -177,17 +184,15 @@ elements:
             kind: component
             description: "Changes model files by ID (add, set, remove, rename, use, step) and rewrites the references a rename or move breaks. Pure: takes the files' text and returns the changed text, rewriting only the lines each change touches, so comments and everything else keep their text."
             code: packages/core/src/edit/**
-            provenance: { source: suggested, by: agent:claude-code }
             uses:
               loader:
                 description: Resolves IDs and references the way the model does
-                provenance: { source: suggested, by: agent:claude-code }
 
       analyzers:
         kind: container
         deploy: [release.npm]
         technology: TypeScript (ts.preProcessFile), yaml
-        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, find, check, seal, paths), applies edits by ID and refuses one that adds errors to the model, and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers, their components, and the code in those) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements.
+        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. codeChange reads what a branch's code changed since it left another branch (analyzers and entry points at both ends of the merge base) into the branch's model, for the explorer's Diff. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, find, check, seal, paths), applies edits by ID and refuses one that adds errors to the model, and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers, their components, and the code in those) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements.
         code: [{ path: packages/analyzers/** }]
         uses:
           source-tree: Reads manifests, imports, and infra files
@@ -198,7 +203,6 @@ elements:
             sends: [Seal, ModelFile]
           editor:
             description: Edits the model by ID for archdoc edit and archdoc_edit
-            provenance: { source: suggested, by: agent:claude-code }
 
       federation:
         kind: container
@@ -269,7 +273,7 @@ elements:
         kind: container
         deploy: [workstation.browser]
         technology: React 19, Vite, @xyflow/react, elkjs
-        description: Explorer. Tabs for Overview (journeys as cards, owners, a top-level map), Journeys (on the map by default, or as a sequence with lanes per participant, branches by outcome, one step at a time), Traces (a bug's path as lanes beneath the modeled step, checked in the browser), Data (entries, tables, lineage), Infrastructure (one environment at a time, its nodes as boxes inside boxes colored by what they are, what runs on each, and the uses between them), and Changes (the PR comment's verdict and what changed on the map). The map starts at the C4 context and opens a level at a time (containers, then components), left to right or top down; a box's kind is its shape and its color, with a key, and every use says what it's for on its line. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain.
+        description: Explorer. Two top-level tabs, Explore and Build, each with tabs beneath it. Explore has Overview (journeys as cards, owners, a top-level map), Journeys (on the map by default, or as a sequence with lanes per participant, branches by outcome, one step at a time), Traces (a bug's path as lanes beneath the modeled step, checked in the browser), Data (entries, tables, lineage), Infrastructure (one environment at a time, its nodes as boxes inside boxes colored by what they are, what runs on each, and the uses between them), and Build has Plan and Triage (placeholders, coming soon) and Diff (the PR comment's verdict and what changed on the map). The map starts at the C4 context and opens a level at a time (containers, then components), left to right or top down; a box's kind is its shape and its color, with a key, and every use says what it's for on its line. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain.
         code: [{ path: apps/web/** }]
         uses:
           core:
@@ -278,7 +282,7 @@ elements:
         elements:
           model-loader:
             kind: component
-            description: Fetches the model files and rebuilds the model on every change event; reads it for the tabs (journey cards and lanes, the comparison, the address), with the facts whose sealed code changed.
+            description: Fetches the model files and rebuilds the model on every change event; reads it for the tabs (which tabs sit under Explore and Build, journey cards and lanes, the Diff of a branch's code change read into its model with branch 1 defaulting to the working tree and branch 2 to main, the address), with the facts whose sealed code changed.
             code: [{ path: apps/web/src/model/** }]
             uses:
               graph: Hands the model to the canvas
@@ -288,7 +292,7 @@ elements:
             code: [{ path: apps/web/src/graph/** }]
           ui:
             kind: component
-            description: Tabs, the map (cards colored by kind, one box for its key, layout, and descriptions, the level control, and the minimap), journey lanes and the step panel, the Data tab's pages, the side lists, and the details panel with code links.
+            description: Tabs (Explore and Build, and the tabs beneath each, with Build's Plan and Triage placeholders), the map (cards colored by kind, one box for its key, layout, and descriptions, the level control, and the minimap), journey lanes and the step panel, the Data tab's pages, the side lists, and the details panel with code links.
             code: [{ path: apps/web/src/components/**, description: Components }, apps/web/src/App.tsx, { path: apps/web/src/styles.css, description: Styles and tokens }]
             uses:
               graph: Renders the laid-out graph

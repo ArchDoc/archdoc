@@ -50,7 +50,7 @@ seals:
     by: agent:claude-code
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-c4087078a1594eaa
+    hash: fnv-c6cedc986289c7e8
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -79,6 +79,10 @@ seals:
         - CheckRepositoryOptions
         - CheckRepositoryResult
         - checkRepository
+      packages/analyzers/src/code-change.ts:
+        - CodeChangeOptions
+        - CodeChangeResult
+        - codeChange
       packages/analyzers/src/go.ts:
         - GoModule
         - GoReplace
@@ -113,11 +117,6 @@ seals:
         - initModel
       packages/analyzers/src/manifests.ts:
         - manifests
-      packages/analyzers/src/model-edit.ts:
-        - EditInput
-        - FindInput
-        - editAnswer
-        - findAnswer
       packages/analyzers/src/paths.ts:
         - EntryPath
         - FLOW_KINDS
@@ -209,7 +208,7 @@ seals:
       packages/cli/tsconfig.json: []
   element:toolchain.cli.commands:
     kind: structure
-    hash: fnv-7a7cf5198268e23b
+    hash: fnv-5b3ab1ed68e6563b
     files:
       packages/cli/src/commands/check.ts:
         - CheckOptions
@@ -229,11 +228,6 @@ seals:
       packages/cli/src/commands/diff.ts:
         - DiffOptions
         - diff
-      packages/cli/src/commands/edit.ts:
-        - EditOptions
-        - FindOptions
-        - editCommand
-        - findCommand
       packages/cli/src/commands/federation.ts:
         - PublishCommandOptions
         - SyncCommandOptions
@@ -324,7 +318,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.checker:
     kind: structure
-    hash: fnv-1a5a63cc5753aad4
+    hash: fnv-eeb8cf29d7a91377
     files:
       packages/core/src/check/check.ts:
         - CheckOptions
@@ -340,7 +334,6 @@ seals:
         - DiscoveryGap
         - DiscoveryOptions
         - EntryPoint
-        - INIT_DESCRIPTION
         - LEVEL_LIMITS
         - assessDiscovery
         - formatDiscovery
@@ -507,8 +500,20 @@ seals:
     by: agent:claude-code
   element:toolchain.core.differ:
     kind: structure
-    hash: fnv-08c07b4acf9c6e2a
+    hash: fnv-b2bd5d6388296ce7
     files:
+      packages/core/src/diff/code-diff.ts:
+        - CODE_DIFF_BY
+        - CodeChange
+        - CodeSide
+        - ElementCodeChange
+        - EntryChange
+        - FileChange
+        - FileStatus
+        - ProposedElement
+        - UseChange
+        - deriveCodeChange
+        - projectCodeChange
       packages/core/src/diff/diff.ts:
         - Change
         - ChangeKind
@@ -518,21 +523,6 @@ seals:
         - countChanges
         - diffModels
         - isEmptyDiff
-  element:toolchain.core.editor:
-    kind: structure
-    hash: fnv-a4158f33d1a820ab
-    files:
-      packages/core/src/edit/edit.ts:
-        - EditOp
-        - EditOptions
-        - EditResult
-        - EditType
-        - EditedFile
-        - editModel
-      packages/core/src/edit/patch.ts:
-        - parseForEdit
-        - patchYaml
-        - stringify
     by: agent:claude-code
   element:toolchain.core.imports:
     kind: structure
@@ -612,7 +602,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.query:
     kind: structure
-    hash: fnv-8658ee421d14a642
+    hash: fnv-7776449bc140db8d
     files:
       packages/core/src/query/code-index.ts:
         - CodeIndex
@@ -661,16 +651,6 @@ seals:
         - ExperimentalUse
         - experimentalUses
         - formatExperimentalUses
-      packages/core/src/query/find.ts:
-        - FIND_GAPS
-        - FindGap
-        - FindQuery
-        - FindResult
-        - FindRow
-        - FindType
-        - find
-        - formatFind
-        - formatOutline
       packages/core/src/query/impact.ts:
         - AffectedJourney
         - Impact
@@ -1181,14 +1161,15 @@ seals:
     by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-ec21bedb05a35305
+    hash: fnv-93d4b1dcac1d6cfc
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
         - ChangeGroups
         - ChangeItem
         - Compare
-        - compareModels
+        - UNDECLARED
+        - compareCode
       apps/web/src/model/stories.ts:
         - IMPORTANCE
         - JourneyCard
@@ -1210,6 +1191,14 @@ seals:
         - repoOf
         - stepUses
         - targetLabel
+      apps/web/src/model/tabs.ts:
+        - Section
+        - SectionInfo
+        - TabInfo
+        - TabsInput
+        - landingTab
+        - sectionOf
+        - sections
       apps/web/src/model/traces.ts:
         - Traces
         - anchorChip
@@ -1227,6 +1216,7 @@ seals:
         - Pair
         - Refs
         - Tab
+        - defaultBase
         - hashOf
         - readHash
         - useCompared
@@ -1244,7 +1234,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-595fcefe69472e1c
+    hash: fnv-a55686fd843da405
     files:
       apps/web/src/App.tsx:
         - App
@@ -1297,6 +1287,8 @@ seals:
         - SearchBox
         - dataGroups
         - search
+      apps/web/src/components/Soon.tsx:
+        - Soon
       apps/web/src/components/StepPanel.tsx:
         - StepPanel
         - StepPanelProps
@@ -1694,13 +1686,6 @@ seals:
     files:
       integrations/claude-plugin/skills/archdoc/SKILL.md: []
     by: agent:claude-code
-  step:start-a-model#10:
-    kind: structure
-    hash: fnv-b48ae5654113843f
-    files:
-      apps/web/src/App.tsx:
-        - App
-    by: agent:claude-code
   step:start-a-model#2:
     kind: structure
     hash: fnv-3c8e7a02bbae7918
@@ -1722,32 +1707,8 @@ seals:
     by: agent:claude-code
   step:start-a-model#6:
     kind: structure
-    hash: fnv-3c8e7a02bbae7918
+    hash: fnv-b48ae5654113843f
     files:
-      packages/mcp/src/server.ts:
-        - ArchdocServerOptions
-        - INSTRUCTIONS
-        - createArchdocServer
-    by: agent:claude-code
-  step:start-a-model#7:
-    kind: structure
-    hash: fnv-9ca2039b430f6e27
-    files:
-      packages/analyzers/src/model-edit.ts:
-        - EditInput
-        - FindInput
-        - editAnswer
-        - findAnswer
-    by: agent:claude-code
-  step:start-a-model#8:
-    kind: structure
-    hash: fnv-c8acec8496b8ba9a
-    files:
-      packages/core/src/edit/edit.ts:
-        - EditOp
-        - EditOptions
-        - EditResult
-        - EditType
-        - EditedFile
-        - editModel
+      apps/web/src/App.tsx:
+        - App
     by: agent:claude-code

@@ -120,23 +120,52 @@ describe("against a git history", () => {
     expect((await run("report", "--base", "main", "--no-diagrams")).out).not.toContain("mermaid");
   });
 
-  it("view --base serves the model at the ref beside the working tree", async () => {
+  it("view --base serves the working tree's code change since the ref, read into its model", async () => {
+    await write(
+      "services/reports/src/index.ts",
+      'import { trips } from "@shop/api";\nexport const r = trips;\n',
+    );
     const server = await startViewServer({ target: ".", cwd: repo, webDir: repo, base: "main" });
     try {
       type Sources = { path: string }[];
       const payload = (await (await fetch(`${server.url}/api/model`)).json()) as {
         sources: Sources;
-        base: { sources: Sources };
+        base?: unknown;
+        change: {
+          base: string;
+          commit: string;
+          code: {
+            files: { path: string; status: string; element?: string; proposed?: string }[];
+            uses: { from: string; to: string; kind: string; modeled: boolean }[];
+            proposed: { id: string; code: string; kind: string }[];
+          };
+        };
       };
       expect(payload.sources.map((s) => s.path)).toContain(".archdoc/more.yaml");
-      expect(payload.base).toMatchObject({
-        ref: "main",
+      // Main's model is never read: the change comes from the code.
+      expect(payload.base).toBeUndefined();
+      expect(payload.change).toMatchObject({
+        base: "main",
         commit: git("rev-parse", "main").trim(),
-        root: "main:.archdoc/archdoc.yaml",
       });
-      expect(payload.base.sources.map((s) => s.path)).toEqual(["main:.archdoc/archdoc.yaml"]);
+      expect(payload.change.code.files).toContainEqual({
+        path: "apps/web/src/pay.ts",
+        status: "added",
+        element: "web",
+      });
+      expect(payload.change.code.uses).toContainEqual(
+        expect.objectContaining({ from: "web", to: "billing", kind: "added", modeled: false }),
+      );
+      // New code no element maps becomes the element it would be, with the uses it makes.
+      expect(payload.change.code.proposed).toEqual([
+        expect.objectContaining({ id: "reports", code: "services/reports/**", kind: "container" }),
+      ]);
+      expect(payload.change.code.uses).toContainEqual(
+        expect.objectContaining({ from: "reports", to: "api", kind: "added", modeled: false }),
+      );
     } finally {
       await server.close();
+      await rm(join(repo, "services/reports"), { recursive: true, force: true });
     }
     await expect(
       startViewServer({ target: ".", cwd: repo, webDir: repo, base: "nope" }),
@@ -155,7 +184,8 @@ describe("against a git history", () => {
       expect(refs.branches).toEqual(expect.arrayContaining(["main", "feature"]));
 
       type Pair = {
-        base: { ref: string; commit: string };
+        base?: unknown;
+        change: { base: string; head?: string; code: { files: unknown[] } };
         head?: {
           ref: string;
           files: string[];
@@ -167,7 +197,9 @@ describe("against a git history", () => {
       const pair = (await (
         await fetch(`${server.url}/api/compare?base=main&head=feature`)
       ).json()) as Pair;
-      expect(pair.base).toMatchObject({ ref: "main", commit: git("rev-parse", "main").trim() });
+      expect(pair.base).toBeUndefined();
+      // feature has no commits of its own yet: its code didn't change.
+      expect(pair.change).toMatchObject({ base: "main", head: "feature", code: { files: [] } });
       // A branch comes with what the working tree does, read from its commit.
       expect(pair.head).toMatchObject({
         ref: "feature",
@@ -182,6 +214,9 @@ describe("against a git history", () => {
       // Without a head, the explorer compares with the working tree it already has.
       const tree = (await (await fetch(`${server.url}/api/compare?base=main`)).json()) as Pair;
       expect(tree.head).toBeUndefined();
+      expect(tree.change.code.files).toContainEqual(
+        expect.objectContaining({ path: "apps/web/src/pay.ts", status: "added" }),
+      );
 
       const bad = await fetch(`${server.url}/api/compare?base=--output=x`);
       expect(bad.status).toBe(400);

@@ -69,13 +69,12 @@ data:
       sources: { type: "ModelFile[]" }
       files: { type: "string[]" }
       schemas: { type: json, description: What data entries' schema sources say }
-      base: { type: json, description: The model's files at --base }
       federation: { type: json, description: Vendored models of other repos }
       commit: { type: string, description: "The commit it was read at, for a branch" }
       snippets: { type: json, description: "Where each code snippet is, so a symbol links to its lines" }
       traces: { type: json, description: The bug traces beside the model }
       seals: { type: json, description: "Facts whose code changed since they were sealed, and the ones never sealed" }
-      change: { type: json, description: "With --base: the verdict and findings the PR comment gives" }
+      change: { type: json, description: "With --base: the code changed since the merge base, read into this model (files, elements, uses, proposed elements, entry points), and the findings the PR comment gives" }
 
   ExplorerAction:
     kind: message

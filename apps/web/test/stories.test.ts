@@ -130,10 +130,17 @@ describe("the address", () => {
       tab: "data",
       data: "field:shop.Refund.amount",
     });
+    expect(readHash("#diff=main...feature")).toEqual({
+      tab: "changes",
+      pair: { base: "main", head: "feature" },
+    });
+    // Links from before the Diff was renamed still open it.
     expect(readHash("#changes=main...feature")).toEqual({
       tab: "changes",
       pair: { base: "main", head: "feature" },
     });
+    expect(readHash("#plan")).toEqual({ tab: "plan" });
+    expect(readHash("#triage")).toEqual({ tab: "triage" });
     expect(readHash("")).toEqual({});
   });
 
@@ -143,6 +150,7 @@ describe("the address", () => {
     expect(hashOf({ tab: "data", data: "field:shop.Refund.amount" })).toBe(
       "#data=shop.Refund.amount",
     );
-    expect(hashOf({ tab: "changes", pair: { base: "main" } })).toBe("#changes=main");
+    expect(hashOf({ tab: "changes", pair: { base: "main" } })).toBe("#diff=main");
+    expect(hashOf({ tab: "plan" })).toBe("#plan");
   });
 });

@@ -24,6 +24,11 @@ export {
   checkRepository,
 } from "./check.js";
 export {
+  type CodeChangeOptions,
+  type CodeChangeResult,
+  codeChange,
+} from "./code-change.js";
+export {
   type GoModule,
   type GoReplace,
   goImports,
