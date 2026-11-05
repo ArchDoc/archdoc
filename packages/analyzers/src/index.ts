@@ -49,6 +49,7 @@ export {
 } from "./iac.js";
 export { formatInit, type InitResult, inferModel, initModel } from "./init.js";
 export { manifests } from "./manifests.js";
+export { type EditInput, editAnswer, type FindInput, findAnswer } from "./model-edit.js";
 export {
   type EntryPath,
   FLOW_KINDS,

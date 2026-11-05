@@ -32,12 +32,14 @@ The skill is [`claude-plugin/skills/archdoc/SKILL.md`](../claude-plugin/skills/a
 
 ## MCP tools
 
-One tool per question. Every tool reloads the model on every call, and the CLI command of the same name prints the same answer. All of them are read-only except `archdoc_seal`, which writes only `.archdoc/archdoc.sum`, and `archdoc_init`, which writes `.archdoc/` only when there's none.
+One tool per question. Every tool reloads the model on every call, and the CLI command of the same name prints the same answer. All of them are read-only except `archdoc_edit`, which changes the model by ID, `archdoc_seal`, which writes only `.archdoc/archdoc.sum`, and `archdoc_init`, which writes `.archdoc/` only when there's none.
 
 | Tool | Answers |
 |---|---|
 | `archdoc_context` | Where do I start, and what does it affect? For a task in words or the files to change (even ones that don't exist yet): files and functions to open first, other callers of the same functions, data, rules, journeys, tests, owners, and who uses it, other repos included. For an error: the journey steps it showed up in, and a trace to start from. With nothing: an overview |
 | `archdoc_show` | What is this one thing? An element (with its code), actor, journey, data entry, `Entry.field` (lineage), trace, or a sealed fact |
+| `archdoc_find` | Which parts of the model are these? By words, inside an element, owning a file, or missing a description, use, deploy, or fields, each with its ID and where it's written. `outline: true`: the element tree with code and uses |
+| `archdoc_edit` | Change the model by ID: `add`, `set` (a JSON merge patch), `remove`, `rename` (references follow), `use`, and `step` ops, many per call, all written or none. Writes only the lines it changes, refuses an edit that adds errors, and says what it fixed and broke |
 | `archdoc_check` | What's wrong or stale? Model problems, undeclared imports, broken rules and journeys, stale paths, traces, and facts whose sealed code changed, each with its fix. With `base`, only what the change caused, and the verdict the PR comment will give; `format: "markdown"` returns that comment |
 | `archdoc_seal` | Record that the facts you checked still describe their code, and say what's left |
 | `archdoc_init` | Start a model in a repository without one, every fact marked inferred |

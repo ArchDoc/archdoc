@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
+import { FIND_GAPS } from "@archdoc/core";
 import { SPEC_VERSION } from "@archdoc/spec";
 import { Command, Option } from "commander";
 import { check } from "./commands/check.js";
 import { map, show } from "./commands/code.js";
 import { context, evalCommand } from "./commands/context.js";
 import { diff } from "./commands/diff.js";
+import { type EditOptions, editCommand, type FindOptions, findCommand } from "./commands/edit.js";
 import { publish, sync } from "./commands/federation.js";
 import { init } from "./commands/init.js";
 import { landscapeBuild } from "./commands/landscape.js";
@@ -170,6 +172,38 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
         opts: { model?: string; depth?: string; all?: boolean; hops?: boolean },
       ) => run(paths(entry, opts, io)),
     );
+
+  program
+    .command("find")
+    .description(
+      "Parts of the model by words or by what they are (type, kind, inside an element, owning a file, missing a description, use, deploy, or fields), with the ID to edit; --outline for the element tree",
+    )
+    .argument("[words...]", 'words, such as "checkout pricing"')
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("--type <type>", "element, actor, journey, data, or environment")
+    .option("--kind <kind>", "an element, actor, or data kind, or a journey's importance")
+    .option("--under <id>", "only what's inside this element")
+    .option("--path <path>", "elements whose code covers this file or directory, the owner first")
+    .option("--missing <gaps>", `what they lack, comma-separated: ${FIND_GAPS.join(", ")}`)
+    .option("--outline", "the element tree, from the top or from --under")
+    .option("--depth <n>", "with --outline, how many levels (default 3)")
+    .option("--limit <n>", "how many to list (default 40)")
+    .action((words: string[], opts: FindOptions) => run(findCommand(words, opts, io)));
+
+  program
+    .command("edit")
+    .description(
+      "Change the model by ID: add, set, remove, rename (references follow), use, and step. Writes only the lines it changes, and says what it fixed and broke",
+    )
+    .argument("[ops]", "the ops as JSON (one, or a list), or - for stdin")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("-f, --file <path>", "read the ops from a JSON file (- for stdin)")
+    .option(
+      "--by <author>",
+      "mark what's added as suggested by this author, such as agent:claude-code",
+    )
+    .option("--dry-run", "say what would change, and write nothing")
+    .action((ops: string | undefined, opts: EditOptions) => run(editCommand(ops, opts, io)));
 
   program
     .command("show")

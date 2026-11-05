@@ -296,11 +296,13 @@ The [GitHub Action](./integrations/github-action) comments on every pull request
 |---|---|
 | `archdoc_context` | Where do I start, and what does it affect? From a task in words, the files to change, or an error |
 | `archdoc_show` | What is this one thing? An element (with its code), actor, journey, data entry, `Entry.field` (lineage), trace, or sealed fact |
+| `archdoc_find` | Which parts of the model are these? By words, place, the file they own, or what they still lack; or the element tree |
+| `archdoc_edit` | Change the model by ID: add, set, remove, rename (references follow), use, and step, writing only the lines that change |
 | `archdoc_check` | What's wrong or stale, and with a base, what does my change do? The PR comment's verdict, each finding with its fix |
 | `archdoc_seal` | I checked these facts against their code. Says what's left |
 | `archdoc_init` | There's no model yet: start one, every fact marked inferred |
 
-A task is `context`, edit, `check`, `seal`: three or four calls. The agent edits `.archdoc/` the way it edits code, marking what it adds `provenance: { source: suggested }`, and `check` catches anything that doesn't validate. Only `seal` and `init` write.
+A task is `context`, edit, `check`, `seal`: three or four calls. The agent changes `.archdoc/` by ID with `archdoc_edit`, which marks what it adds `provenance: { source: suggested }`, writes only the lines it changes, and refuses an edit that doesn't validate; `check` catches the rest, such as drift from the code. Only `edit`, `seal`, and `init` write.
 
 ### Start a model
 

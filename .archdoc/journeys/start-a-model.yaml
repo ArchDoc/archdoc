@@ -25,6 +25,27 @@ steps:
     to: coding-agent
     action: Returns what it found and what to add next, which the agent does with the code open, calling archdoc_check until it's clean
     sends: ToolResult
+  - from: coding-agent
+    to: mcp
+    action: Finds what's left with archdoc_find, and reshapes, connects, and describes the model by ID with archdoc_edit, a step of work per call
+    code: packages/mcp/src/server.ts
+    sends: ToolCall
+  - from: mcp
+    to: analyzers
+    action: Applies the ops and checks the model they make, refusing an edit that adds errors
+    code: packages/analyzers/src/model-edit.ts#editAnswer
+    sends: ModelEdit
+  - from: analyzers
+    to: toolchain.core.editor
+    action: Changes only the lines each op touches, and rewrites the references a rename breaks
+    code: packages/core/src/edit/edit.ts#editModel
+    sends:
+      - ModelSources
+      - ModelEdit
+  - from: analyzers
+    to: model-files
+    action: Writes the changed files, and answers with what the edit fixed and the new warnings
+    sends: ModelFile
   - from: developer
     to: web
     action: Reviews the inferred and suggested facts in archdoc view, accepts them, and runs archdoc seal --all

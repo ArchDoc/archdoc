@@ -31,21 +31,51 @@ describe("archdoc MCP server", () => {
     expect(INSTRUCTIONS.length).toBeLessThan(1200);
   });
 
-  it("has one tool per question, read-only except seal and init", async () => {
+  it("has one tool per question, read-only except edit, seal, and init", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "archdoc_check",
       "archdoc_context",
+      "archdoc_edit",
+      "archdoc_find",
       "archdoc_init",
       "archdoc_paths",
       "archdoc_seal",
       "archdoc_show",
     ]);
     const writers = tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
-    expect(writers.sort()).toEqual(["archdoc_init", "archdoc_seal"]);
+    expect(writers.sort()).toEqual(["archdoc_edit", "archdoc_init", "archdoc_seal"]);
     expect(tools.find((t) => t.name === "archdoc_seal")?.annotations?.destructiveHint).toBe(false);
-    // Every agent session reads this list, so it stays small.
-    expect(JSON.stringify(tools).length).toBeLessThan(6000);
+    expect(tools.find((t) => t.name === "archdoc_edit")?.annotations?.destructiveHint).toBe(true);
+    // Every agent session reads this list, so it stays small. find and edit
+    // take most of it: they replace reading and hand-editing the YAML.
+    expect(JSON.stringify(tools).length).toBeLessThan(10500);
+  });
+
+  it("finds parts of the model, and outlines it", async () => {
+    const r = await call("archdoc_find", { path: "packages/core/src/load/fs.ts" });
+    expect(r.text).toMatch(
+      /whose code covers packages\/core\/src\/load\/fs\.ts:\n {2}toolchain\.core\.loader \(component\)/,
+    );
+    const outline = await call("archdoc_find", {
+      outline: true,
+      under: "toolchain.core",
+      depth: 1,
+    });
+    expect(outline.text).toContain("toolchain.core (container)");
+    expect((await call("archdoc_find", { under: "nope" })).isError).toBe(true);
+  });
+
+  it("edits only with ops that make sense, and a dry run writes nothing", async () => {
+    const r = await call("archdoc_edit", {
+      ops: [{ op: "set", id: "toolchain.mcp", spec: { technology: "Node.js" } }],
+      dryRun: true,
+    });
+    expect(r.isError).toBe(false);
+    expect(r.text).toContain("Would change .archdoc/model/toolchain.yaml:");
+    const bad = await call("archdoc_edit", { ops: [{ op: "set", id: "nope", spec: {} }] });
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toContain('Nothing is called "nope"');
   });
 
   it("lists where flows start, and follows one through its calls", async () => {

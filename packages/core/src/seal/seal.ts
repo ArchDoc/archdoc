@@ -117,7 +117,8 @@ export function sealableFacts(model: Model): SealedFact[] {
         key: `step:${j.id}#${s.index + 1}`,
         label: `journey ${j.id}, step ${s.index + 1}`,
         kind: "structure",
-        refs: [s.spec.code.replace(/:\d+(-\d+)?$/, "")],
+        // The file, without the line (path:42) or the function (path#placeOrder) it names.
+        refs: [s.spec.code.replace(/#.*$/, "").replace(/:\d+(-\d+)?$/, "")],
         location: s.location ?? j.location,
       });
     }

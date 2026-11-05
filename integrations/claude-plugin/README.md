@@ -10,7 +10,7 @@ Architecture your AI agents can read, and your PRs can't quietly break.
 The plugin brings two things:
 
 - **The `archdoc` skill** ([`skills/archdoc/SKILL.md`](./skills/archdoc/SKILL.md)): Claude starts each task from the repository's model in `.archdoc/`, edits the model with the code, and checks and seals before it's done. For a bug, it places the error and writes a trace. In a repository with no model, it starts one.
-- **The MCP server** ([`.mcp.json`](./.mcp.json)): `archdoc_context`, `archdoc_show`, `archdoc_check`, `archdoc_seal`, and `archdoc_init`, from `@archdoc/cli` at the version released with this plugin. It runs in the repository Claude Code is open in, through `npx`, so it needs Node 22.12 or later.
+- **The MCP server** ([`.mcp.json`](./.mcp.json)): `archdoc_context`, `archdoc_show`, `archdoc_paths`, `archdoc_find`, `archdoc_edit`, `archdoc_check`, `archdoc_seal`, and `archdoc_init`, from `@archdoc/cli` at the version released with this plugin. It runs in the repository Claude Code is open in, through `npx`, so it needs Node 22.12 or later.
 
 To start, open a repository and ask: "Start an architecture model for this repository." Then, on any task, Claude reads the model first.
 
