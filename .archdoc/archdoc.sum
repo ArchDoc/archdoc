@@ -50,7 +50,7 @@ seals:
     by: agent:claude-code
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-98308c7a1c10bde0
+    hash: fnv-c4087078a1594eaa
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -113,6 +113,11 @@ seals:
         - initModel
       packages/analyzers/src/manifests.ts:
         - manifests
+      packages/analyzers/src/model-edit.ts:
+        - EditInput
+        - FindInput
+        - editAnswer
+        - findAnswer
       packages/analyzers/src/paths.ts:
         - EntryPath
         - FLOW_KINDS
@@ -204,7 +209,7 @@ seals:
       packages/cli/tsconfig.json: []
   element:toolchain.cli.commands:
     kind: structure
-    hash: fnv-5b3ab1ed68e6563b
+    hash: fnv-7a7cf5198268e23b
     files:
       packages/cli/src/commands/check.ts:
         - CheckOptions
@@ -224,6 +229,11 @@ seals:
       packages/cli/src/commands/diff.ts:
         - DiffOptions
         - diff
+      packages/cli/src/commands/edit.ts:
+        - EditOptions
+        - FindOptions
+        - editCommand
+        - findCommand
       packages/cli/src/commands/federation.ts:
         - PublishCommandOptions
         - SyncCommandOptions
@@ -314,7 +324,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.checker:
     kind: structure
-    hash: fnv-eeb8cf29d7a91377
+    hash: fnv-1a5a63cc5753aad4
     files:
       packages/core/src/check/check.ts:
         - CheckOptions
@@ -330,6 +340,7 @@ seals:
         - DiscoveryGap
         - DiscoveryOptions
         - EntryPoint
+        - INIT_DESCRIPTION
         - LEVEL_LIMITS
         - assessDiscovery
         - formatDiscovery
@@ -507,6 +518,22 @@ seals:
         - countChanges
         - diffModels
         - isEmptyDiff
+  element:toolchain.core.editor:
+    kind: structure
+    hash: fnv-a4158f33d1a820ab
+    files:
+      packages/core/src/edit/edit.ts:
+        - EditOp
+        - EditOptions
+        - EditResult
+        - EditType
+        - EditedFile
+        - editModel
+      packages/core/src/edit/patch.ts:
+        - parseForEdit
+        - patchYaml
+        - stringify
+    by: agent:claude-code
   element:toolchain.core.imports:
     kind: structure
     hash: fnv-ba24317aaad5fd50
@@ -585,7 +612,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.query:
     kind: structure
-    hash: fnv-7776449bc140db8d
+    hash: fnv-8658ee421d14a642
     files:
       packages/core/src/query/code-index.ts:
         - CodeIndex
@@ -634,6 +661,16 @@ seals:
         - ExperimentalUse
         - experimentalUses
         - formatExperimentalUses
+      packages/core/src/query/find.ts:
+        - FIND_GAPS
+        - FindGap
+        - FindQuery
+        - FindResult
+        - FindRow
+        - FindType
+        - find
+        - formatFind
+        - formatOutline
       packages/core/src/query/impact.ts:
         - AffectedJourney
         - Impact
@@ -1657,6 +1694,13 @@ seals:
     files:
       integrations/claude-plugin/skills/archdoc/SKILL.md: []
     by: agent:claude-code
+  step:start-a-model#10:
+    kind: structure
+    hash: fnv-b48ae5654113843f
+    files:
+      apps/web/src/App.tsx:
+        - App
+    by: agent:claude-code
   step:start-a-model#2:
     kind: structure
     hash: fnv-3c8e7a02bbae7918
@@ -1678,8 +1722,20 @@ seals:
     by: agent:claude-code
   step:start-a-model#6:
     kind: structure
-    hash: fnv-b48ae5654113843f
+    hash: fnv-3c8e7a02bbae7918
     files:
-      apps/web/src/App.tsx:
-        - App
+      packages/mcp/src/server.ts:
+        - ArchdocServerOptions
+        - INSTRUCTIONS
+        - createArchdocServer
+    by: agent:claude-code
+  step:start-a-model#7:
+    kind: structure
+    hash: fnv-5465b825e0d4f889
+    files: {}
+    by: agent:claude-code
+  step:start-a-model#8:
+    kind: structure
+    hash: fnv-5465b825e0d4f889
+    files: {}
     by: agent:claude-code

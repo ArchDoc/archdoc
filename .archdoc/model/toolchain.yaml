@@ -35,7 +35,7 @@ elements:
         kind: container
         deploy: [release.npm]
         technology: TypeScript
-        description: Deterministic engine. Loads, validates, queries, diffs, maps to code, checks rules and data, and checks references into other repos.
+        description: Deterministic engine. Loads, validates, queries, diffs, edits by ID, maps to code, checks rules and data, and checks references into other repos.
         code: [{ path: packages/core/** }]
         uses:
           spec:
@@ -58,7 +58,7 @@ elements:
                 description: Loads archdoc.lock and the vendored models of other repos
           query:
             kind: component
-            description: Element, actor, and overview queries, where elements are deployed (an environment's nodes, what runs on each, and the uses between them), search by words (and by file paths and symbols with a code index), impact (consumers, actors, journeys, owners, rules, and consumers and journeys in other repos), context briefs that rank the files and symbols to start a task in, eval scoring (of context briefs against past commits, and of a whole model against a golden one, for its structure and for how well it was discovered), and which experimental parts of the format a model uses.
+            description: Element, actor, and overview queries, where elements are deployed (an environment's nodes, what runs on each, and the uses between them), search by words (and by file paths and symbols with a code index), find (parts of the model by words, place, the file they own, or what they still lack, and an outline of the element tree), impact (consumers, actors, journeys, owners, rules, and consumers and journeys in other repos), context briefs that rank the files and symbols to start a task in, eval scoring (of context briefs against past commits, and of a whole model against a golden one, for its structure and for how well it was discovered), and which experimental parts of the format a model uses.
             code: [{ path: packages/core/src/query/** }]
             uses:
               checker:
@@ -173,12 +173,21 @@ elements:
                 description: Finds the journey steps through the elements an error names
               imports:
                 description: Resolves hops and journeys in other repos
+          editor:
+            kind: component
+            description: "Changes model files by ID (add, set, remove, rename, use, step) and rewrites the references a rename or move breaks. Pure: takes the files' text and returns the changed text, rewriting only the lines each change touches, so comments and everything else keep their text."
+            code: packages/core/src/edit/**
+            provenance: { source: suggested, by: agent:claude-code }
+            uses:
+              loader:
+                description: Resolves IDs and references the way the model does
+                provenance: { source: suggested, by: agent:claude-code }
 
       analyzers:
         kind: container
         deploy: [release.npm]
         technology: TypeScript (ts.preProcessFile), yaml
-        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, check, seal, paths), and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers, their components, and the code in those) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements.
+        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, find, check, seal, paths), applies edits by ID and refuses one that adds errors to the model, and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers, their components, and the code in those) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements.
         code: [{ path: packages/analyzers/** }]
         uses:
           source-tree: Reads manifests, imports, and infra files
@@ -187,6 +196,9 @@ elements:
           model-files:
             description: Writes archdoc.sum for seal, and a starting model for init
             sends: [Seal, ModelFile]
+          editor:
+            description: Edits the model by ID for archdoc edit and archdoc_edit
+            provenance: { source: suggested, by: agent:claude-code }
 
       federation:
         kind: container
@@ -210,7 +222,7 @@ elements:
         kind: container
         deploy: [release.npm, workstation.node, ci.actions]
         technology: Node.js, commander
-        description: "`archdoc` command. For agents, the same answers as the MCP tools: init, context, show, check, seal, and paths. For people and CI: validate, view, site, map, diff, report, trace list, mcp, and schema. sync, publish, landscape build, and view --landscape are experimental and left out of --help. eval and migrate are hidden maintainer commands."
+        description: "`archdoc` command. For agents, the same answers as the MCP tools: init, context, show, find, edit, check, seal, and paths. For people and CI: validate, view, site, map, diff, report, trace list, mcp, and schema. sync, publish, landscape build, and view --landscape are experimental and left out of --help. eval and migrate are hidden maintainer commands."
         code: [{ path: packages/cli/** }]
         uses:
           core:
@@ -244,7 +256,7 @@ elements:
         kind: container
         deploy: [release.npm, workstation.agent]
         technology: Node.js, @modelcontextprotocol/sdk (stdio)
-        description: "MCP tools for agents, one per question: archdoc_context (where to start, from a task, paths, or an error), archdoc_show (one thing by ID), archdoc_check (what's wrong or stale, and with a base, what the change does), archdoc_seal (record checked facts), archdoc_paths (where flows start and the calls each makes), and archdoc_init (start a model). Only seal and init write."
+        description: "MCP tools for agents, one per question: archdoc_context (where to start, from a task, paths, or an error), archdoc_show (one thing by ID), archdoc_find (parts of the model by words, place, file, or what they lack, or its outline), archdoc_edit (change the model by ID), archdoc_check (what's wrong or stale, and with a base, what the change does), archdoc_seal (record checked facts), archdoc_paths (where flows start and the calls each makes), and archdoc_init (start a model). Only edit, seal, and init write."
         code: [{ path: packages/mcp/** }]
         uses:
           core:

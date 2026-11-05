@@ -132,6 +132,15 @@ export {
   type StepChange,
 } from "./diff/diff.js";
 export {
+  type EditedFile,
+  type EditOp,
+  type EditOptions,
+  type EditResult,
+  type EditType,
+  editModel,
+} from "./edit/edit.js";
+export { patchYaml } from "./edit/patch.js";
+export {
   type BundleMeta,
   bundleSchemas,
   createBundle,
@@ -213,6 +222,17 @@ export {
   experimentalUses,
   formatExperimentalUses,
 } from "./query/experimental.js";
+export {
+  FIND_GAPS,
+  type FindGap,
+  type FindQuery,
+  type FindResult,
+  type FindRow,
+  type FindType,
+  find,
+  formatFind,
+  formatOutline,
+} from "./query/find.js";
 export {
   type AffectedJourney,
   type Impact,

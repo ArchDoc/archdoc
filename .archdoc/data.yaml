@@ -150,3 +150,11 @@ data:
       number: { type: int }
       base: { type: string }
       head: { type: string }
+  ModelEdit:
+    kind: message
+    description: "The ops an agent sends archdoc_edit (or archdoc edit) to change the model by ID: add, set, remove, rename, use, and step, run in order and written all or none."
+    fields:
+      ops: { type: json, description: "The ops, in order, each naming what it changes by ID" }
+      by: { type: string, description: "Who suggests what the ops add, such as agent:claude-code" }
+      dryRun: { type: bool, description: "Say what would change, and write nothing" }
+    provenance: { source: suggested, by: agent:claude-code }

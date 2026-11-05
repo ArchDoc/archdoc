@@ -32,7 +32,7 @@ export function isVerificationCode(path: string): boolean {
 }
 
 /** A description archdoc init wrote: it says where the element came from, not what it does. */
-const INIT_DESCRIPTION =
+export const INIT_DESCRIPTION =
   /^(The \S+ (package|binary|module|crate|project|action|service in \S+|the repository runs)|The Python project|The whole repository, until you know its parts|The database (\S+ describes|the migrations in \S+ build)|An? (directory|code directory|source file)|(Function|Class) \S+)( \([^)]*\))?\.$/;
 
 /** The limits a level of the model is held to, so it can be read top-down. */

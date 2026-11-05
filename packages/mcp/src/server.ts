@@ -2,12 +2,15 @@ import {
   type Answer,
   checkAnswer,
   contextAnswer,
+  editAnswer,
+  findAnswer,
   initAnswer,
   pathsAnswer,
   sealAnswer,
   showAnswer,
   type Where,
 } from "@archdoc/analyzers";
+import { type EditOp, FIND_GAPS } from "@archdoc/core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -24,7 +27,8 @@ export const INSTRUCTIONS = `This repository's architecture is modeled in .archd
 - archdoc_context: start every task here, with the task in words, the files you'll change, or an error. It says which files and functions to open, what else does the same job, the journeys, data, rules, tests, owners, and who uses it. Name the affected journeys in your plan; ask before changing a critical one.
 - archdoc_paths: where flows start (routes, consumers, jobs, commands) and the calls each makes. Trace a flow with it, not grep.
 - archdoc_show: one thing by ID (element, actor, journey, data entry, Entry.field, trace, or a fact like element:<id>).
-- archdoc_check: after you edit, with base "main". It lists what your change broke or made stale, each with its fix, and facts whose code changed. Edit .archdoc/ to fix the model, with provenance: { source: suggested, by: agent:<name> } on what you add.
+- archdoc_find, archdoc_edit: find parts of the model and change them by ID, many ops a call, instead of reading and editing its YAML. Pass by: agent:<name>.
+- archdoc_check: after you edit, with base "main". It lists what your change broke or made stale, each with its fix, and facts whose code changed.
 - archdoc_seal: once you've checked each changed fact against its code, seal it. Never seal a fact you haven't read.`;
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
@@ -68,6 +72,79 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
       annotations: READ_ONLY,
     },
     (input) => respond(showAnswer(where, input)),
+  );
+
+  server.registerTool(
+    "archdoc_find",
+    {
+      title: "Find parts of the model",
+      description:
+        "Parts of the model by words or by what they are, each with its ID for archdoc_edit, kind, description, code, uses, and file:line. Filter by type, kind, under (inside an element), path (elements whose code covers a file, owner first), or missing (what they lack). outline: true gives the element tree with code and uses: read it instead of the YAML.",
+      inputSchema: {
+        query: z.string().optional().describe('Words, such as "checkout pricing"'),
+        type: z.enum(["element", "actor", "journey", "data", "environment"]).optional(),
+        kind: z.string().optional().describe("Such as container, datastore, person, or critical"),
+        under: z.string().optional().describe("An element ID"),
+        path: z.string().optional().describe("A file or directory"),
+        missing: z
+          .array(z.enum(FIND_GAPS as [string, ...string[]]))
+          .optional()
+          .describe("uses: nothing connects to it"),
+        outline: z.boolean().optional(),
+        depth: z.number().int().min(1).max(10).optional().describe("Outline levels; 3 by default"),
+        limit: z.number().int().min(1).max(500).optional(),
+      },
+      annotations: READ_ONLY,
+    },
+    (input) => respond(findAnswer(where, input as Parameters<typeof findAnswer>[1])),
+  );
+
+  const op = z.object({
+    op: z.enum(["add", "set", "remove", "rename", "use", "step"]),
+    id: z.string().optional().describe("What add, set, remove, or rename acts on"),
+    type: z
+      .enum(["element", "actor", "journey", "data", "environment"])
+      .optional()
+      .describe("Required by add; elsewhere only when an ID names two things"),
+    spec: z
+      .union([z.string(), z.record(z.string(), z.unknown())])
+      .optional()
+      .describe("The fields: what add writes, set merges, use and step say"),
+    to: z.string().optional().describe("rename: the new ID. use: the element used"),
+    from: z.string().optional().describe("use: the element or actor that uses it"),
+    journey: z.string().optional().describe("step: the journey"),
+    at: z.number().int().min(1).optional().describe("step: which step, from 1"),
+    insert: z.boolean().optional().describe("step: insert before step at"),
+    remove: z.boolean().optional().describe("use, step: remove it"),
+  });
+
+  server.registerTool(
+    "archdoc_edit",
+    {
+      title: "Change the model by ID",
+      description: `Change .archdoc/ by ID instead of editing its YAML. Ops run in order, and all are written or none: one that fails, or an edit that would add errors, writes nothing and says why. Writes only the lines it changes, and answers with what it did, the findings it fixed, and new warnings. IDs resolve the way references do (orders.api for shop.orders.api).
+- add {type, id, spec}: an element (shop.orders.api goes inside shop.orders; kind defaults to the level below), actor, data entry, journey (its own file), environment, or node (production.aws.lambda).
+- set {id, spec}: a JSON merge patch (objects merge, lists replace, null removes), such as {description, code, deploy} or {fields: {total: {type: int}}}.
+- remove {id}: an element goes with what's inside it and the uses of it.
+- rename {id, to}: rewrites every reference. An element's dotted to moves it inside that parent.
+- use {from, to, spec}: adds or updates a use (spec: "what it does" or {description, sends}); remove: true removes it.
+- step {journey, spec}: appends {from, to, action, code, sends}; with at, merges into that step; at with insert or remove inserts or removes.`,
+      inputSchema: {
+        ops: z.array(op).min(1),
+        by: z
+          .string()
+          .optional()
+          .describe("Marks what you add as suggested by you, such as agent:claude-code"),
+        dryRun: z.boolean().optional().describe("Write nothing"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (input) => respond(editAnswer(where, { ...input, ops: input.ops as EditOp[] })),
   );
 
   server.registerTool(
