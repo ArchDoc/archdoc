@@ -75,7 +75,7 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     .option("-w, --watch", "reload the explorer when model files change")
     .option(
       "-b, --base <ref>",
-      "show what changed in the model since this branch or commit, or since another model file",
+      "open on the Diff: the code changed since it left this branch, read into the model",
     )
     .addOption(
       new Option(

@@ -1,0 +1,17 @@
+# Payments move out of the API into a new workspace package, @shop/billing,
+# which charges through a payment provider. The model on the branch still
+# says the API has a payments component.
+fixture: ts-monorepo
+delete:
+  - apps/api/src/payments/charge.ts
+expected:
+  elements:
+    added: [shop.billing]
+    changed: [shop.api.orders]
+    removed: [shop.api.payments]
+    # Its package.json gained a dependency: fine to mention or not.
+    optional: [shop.api]
+  uses:
+    added: [shop.api.orders -> shop.billing]
+    removed: [shop.api.orders -> shop.api.payments, shop.api.payments -> shop.api.storage]
+    optional: [shop.api -> shop.billing]

@@ -250,4 +250,38 @@ describe("deriveCodeChange", () => {
     });
     expect(c.proposed).toMatchObject([{ id: "shop.sync", code: "tools/sync.ts" }]);
   });
+
+  it("proposes a new package beside the only one there, not inside it", () => {
+    const one = model({
+      "archdoc.yaml": root(`
+        elements:
+          shop:
+            kind: system
+            elements:
+              api:
+                kind: container
+                code: apps/api/**
+                elements:
+                  orders: { kind: component, code: apps/api/src/orders/** }
+              shared: { kind: container, code: packages/shared/** }
+      `),
+    });
+    const files = ["apps/api/src/orders/service.ts", "packages/shared/src/index.ts"];
+    const c = deriveCodeChange({
+      model: one,
+      base: { files, observed: [] },
+      head: {
+        files: [...files, "packages/billing/src/index.ts"],
+        // Workspace packages resolve to their directory.
+        observed: [dep("apps/api/src/orders/service.ts", "packages/billing")],
+      },
+      changed: ["apps/api/src/orders/service.ts", "packages/billing/src/index.ts"],
+    });
+    expect(c.proposed).toMatchObject([
+      { id: "shop.billing", parent: "shop", kind: "container", code: "packages/billing/**" },
+    ]);
+    expect(c.uses).toMatchObject([
+      { from: "shop.api.orders", to: "shop.billing", kind: "added", modeled: false },
+    ]);
+  });
 });
