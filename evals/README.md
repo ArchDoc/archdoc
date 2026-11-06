@@ -190,6 +190,59 @@ above a single container holding everything.
 A real-world run costs more than a fixture run: about $1 to $6 for the agent,
 capped by `maxBudgetUsd` in each `repo.yaml`, and about $0.15 to $0.30 a pass to judge.
 
+## The branch diff
+
+The evals above measure modeling. `diff/` measures the other half of a
+change: whether an agent can show a person what their branch changes in the
+architecture, which the Diff tab (`archdoc view --base main`, served by
+`/api/compare`) reads from the branch's code. Each scenario in `diff/<name>/`
+starts from a fixture with its golden model committed on main, then commits a
+code change on a branch named for the scenario:
+
+| Scenario | Fixture | What the branch does |
+|---|---|---|
+| `move-payments` | `ts-monorepo` | Moves payments out of the API into a new workspace package, `@shop/billing`: a new container, a removed component, and the uses that move with them |
+| `drop-config` | `single-package` | Drops the config file every rule read, and adds a rule: a removed component and the uses of it |
+
+`scenario.yaml` names the fixture, the files the branch deletes, and what it
+changed: the elements it added, changed, and removed, and the uses it added and
+dropped, with `optional` for what's fine to mention or not. `branch/` holds the
+files it adds or rewrites, at their paths in the fixture.
+
+**The Diff tab** runs in `pnpm test` (`packages/analyzers/test/diff-evals.test.ts`):
+what `codeChange` reads from each branch has to be what the scenario says.
+
+**Agent** calls a model, so it costs money, about $0.10 to $0.20 for both
+scenarios, and runs only when the change touches the branch diff:
+
+```sh
+pnpm build
+pnpm eval:diff                        # every scenario, once
+pnpm eval:diff --changed origin/main  # only if the change since main touches the diff
+pnpm eval:diff move-payments --runs 3
+```
+
+It asks Claude Code, headless, with the skill, the MCP server, and the CLI
+from this checkout (`npx @archdoc/cli` runs it too), to show what the branch
+changes compared with main, and to end with the change as JSON in the
+model's IDs. It may read files, use the archdoc tools, and run `git status`,
+`diff`, `log`, and `branch`, and edits nothing. The report scores that change
+against the scenario (F1 over the elements and uses, an ID may leave out the
+namespace), next to what the Diff tab scores, and says whether the agent
+opened the explorer or wrote the site with `--base`, linked to `#diff`, and
+read the change with `archdoc check --base`, `archdoc report`, `archdoc diff`,
+or `git diff`. Results go to `evals/results/diff-<time>/`.
+
+`--changed <ref>` runs it only when the change since the merge base with that
+ref touches what the branch diff depends on (`DIFF_PATHS` in
+`scripts/eval-diff-lib.mjs`): the differ and the code map, `codeChange`, the
+compare API and the `view`, `site`, and `diff` commands, the Diff tab's
+model, the eval itself, and, in the skills, only changed lines about the diff
+(`--base`, `#diff`, diff, compare), since most skill edits are about modeling.
+Otherwise it spends nothing. CI runs it that way on pull requests
+(`.github/workflows/eval-diff.yml`) when the repository has an
+`ANTHROPIC_API_KEY` secret, with the report in the job summary.
+
 ## Adding a fixture
 
 1. Add `fixtures/<name>/repo/` with a few files per element and real imports

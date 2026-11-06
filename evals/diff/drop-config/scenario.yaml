@@ -1,0 +1,14 @@
+# mdlint drops its .mdlintrc.json config, so every rule always runs, and adds
+# a rule. The model on the branch still has the config component and the
+# uses of it.
+fixture: single-package
+delete:
+  - src/config.ts
+expected:
+  elements:
+    added: []
+    changed: [mdlint.commands, mdlint.rules]
+    removed: [mdlint.config]
+  uses:
+    added: []
+    removed: [mdlint.commands -> mdlint.config, mdlint.rules -> mdlint.config]
