@@ -1,5 +1,17 @@
 # @archdoc/cli
 
+## 0.7.2
+
+### Patch Changes
+
+- d5019df: The Diff proposes a new package beside the only package already there, not inside it (`packages/billing` next to `packages/shared` is a new container), and shows the use from code that imports it. `archdoc view --help` says `--base` opens on the Diff, read from the code since the branch left that ref.
+- Updated dependencies [d5019df]
+  - @archdoc/core@0.7.2
+  - @archdoc/analyzers@0.7.2
+  - @archdoc/federation@0.7.2
+  - @archdoc/mcp@0.7.2
+  - @archdoc/spec@0.7.2
+
 ## 0.7.1
 
 ### Patch Changes
