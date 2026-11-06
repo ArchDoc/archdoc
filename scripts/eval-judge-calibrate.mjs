@@ -7,7 +7,11 @@
 // passes).
 //
 //   pnpm build
-//   node scripts/eval-judge-calibrate.mjs [fixture...] [--passes 3] [--out <dir>]
+//   node scripts/eval-judge-calibrate.mjs [fixture...] [--passes 3] [--out <dir>] [--no-cache]
+//
+// It keeps 3 passes (the evals default to 1) to show how far passes spread.
+// Verdicts are cached like the evals' (scripts/eval-judge.mjs); --no-cache
+// judges again, such as to measure the spread anew.
 import { execFileSync } from "node:child_process";
 import {
   cpSync,
@@ -30,6 +34,7 @@ const flag = (name, fallback) => {
   return i < 0 ? fallback : argv.splice(i, 2)[1];
 };
 const passes = Number(flag("--passes", "3"));
+const cache = !argv.includes("--no-cache");
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const out = resolve(flag("--out", join(here, "evals/results", `judge-${stamp}`)));
 const names = argv.filter((a) => !a.startsWith("--"));
@@ -92,7 +97,14 @@ for (const name of chosen) {
   const row = { fixture: name };
   await Promise.all(
     Object.entries(models).map(async ([kind, dir]) => {
-      row[kind] = await judge({ repoDir: repo, modelDir: dir, found: load(dir), passes, core });
+      row[kind] = await judge({
+        repoDir: repo,
+        modelDir: dir,
+        found: load(dir),
+        passes,
+        core,
+        cache,
+      });
       console.log(`${name} ${kind}: ${Math.round((row[kind].digestibility ?? 0) * 100)}%`);
     }),
   );

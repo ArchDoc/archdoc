@@ -10,12 +10,27 @@
 //
 //   node scripts/eval-judge.mjs <repo-dir> [--model-dir <dir with archdoc yaml>]
 //        [--reference evals/real-world/<name>/reference.yaml]
-//        [--questions evals/real-world/<name>/questions.yaml] [--passes 3]
+//        [--questions evals/real-world/<name>/questions.yaml] [--passes 1] [--no-cache]
 //
 // The judge model is fixed (JUDGE_MODEL) so scores compare across releases;
 // change it only with a note in the report that scores reset.
+//
+// Verdicts are cached in evals/.cache/judge/, keyed by everything the judge
+// is sent (model, system prompt, schema, prompt text) and the number of
+// passes, so a model judged before (init's, for a pinned commit and an
+// unchanged analyzer) isn't paid for again. A change to the rubric, the
+// prompt, or the model being judged changes the key. --no-cache skips it.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -24,7 +39,19 @@ export const JUDGE_MODEL = "claude-opus-5-5";
 
 const here = new URL("..", import.meta.url).pathname;
 /** yaml, from @archdoc/core's dependencies (the root package has none). */
-export const { parse: parseYaml } = createRequire(join(here, "packages/core/package.json"))("yaml");
+export const { parse: parseYaml, stringify: stringifyYaml } = createRequire(
+  join(here, "packages/core/package.json"),
+)("yaml");
+
+/** Where verdicts are cached (ignored by git). */
+const CACHE = join(here, "evals/.cache/judge");
+/**
+ * The most model text the judge is sent, in characters (about 25K tokens).
+ * Past it, code elements are left out (they say which file holds a function,
+ * which the judge doesn't score), then the text is cut: a model that size
+ * fails granularity anyway, and one such model cost $2.87 to judge.
+ */
+export const MAX_MODEL_CHARS = 100_000;
 
 /** The rubric. Each dimension is scored 1 to 5 against these anchors. */
 export const RUBRIC = [
@@ -161,8 +188,8 @@ function docs(repo) {
 }
 
 /** The model as the judge reads it: every YAML file under the model directory, except the lock, vendored models, and traces. */
-export function modelText(dir) {
-  const out = [];
+export function modelText(dir, max = MAX_MODEL_CHARS) {
+  const files = [];
   const walk = (d, rel) => {
     for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) =>
       a.name.localeCompare(b.name),
@@ -171,12 +198,44 @@ export function modelText(dir) {
       if (e.isDirectory()) {
         if (!["vendor", "traces"].includes(e.name)) walk(join(d, e.name), r);
       } else if (/\.ya?ml$/.test(e.name) && e.name !== "archdoc.lock") {
-        out.push(`--- .archdoc/${r}\n${readFileSync(join(d, e.name), "utf8")}`);
+        files.push({ path: `.archdoc/${r}`, text: readFileSync(join(d, e.name), "utf8") });
       }
     }
   };
   walk(dir, "");
-  return out.join("\n\n");
+  const render = (fs) => fs.map((f) => `--- ${f.path}\n${f.text}`).join("\n\n");
+  let text = render(files);
+  if (text.length <= max) return text;
+  // Too big: leave out the code elements, and say so.
+  let dropped = 0;
+  const strip = (elements) => {
+    if (!elements || typeof elements !== "object") return;
+    for (const [id, e] of Object.entries(elements)) {
+      if (e && typeof e === "object" && e.kind === "code") {
+        delete elements[id];
+        dropped++;
+      } else strip(e?.elements);
+    }
+  };
+  const slim = files.map((f) => {
+    try {
+      const y = parseYaml(f.text);
+      if (!y?.elements) return f;
+      const before = dropped;
+      strip(y.elements);
+      return dropped > before ? { ...f, text: stringifyYaml(y) } : f;
+    } catch {
+      return f;
+    }
+  });
+  text = render(slim);
+  const notes = [];
+  if (dropped) notes.push(`${dropped} code elements (kind: code) were left out to fit.`);
+  if (text.length > max) {
+    notes.push(`The model was cut at ${max} characters of ${text.length}.`);
+    text = text.slice(0, max);
+  }
+  return `(This model is too large to show whole. ${notes.join(" ")})\n\n${text}`;
 }
 
 function prompt({ model, repo, reference, questions }) {
@@ -300,9 +359,10 @@ export async function judge({
   found,
   reference,
   questions,
-  passes = 3,
+  passes = 1,
   claude = "claude",
   core,
+  cache = true,
 }) {
   const r = tree(repoDir);
   const text = prompt({
@@ -311,7 +371,23 @@ export async function judge({
     reference,
     questions,
   });
-  const runs = await Promise.all(Array.from({ length: passes }, () => callJudge(text, claude)));
+  const key = createHash("sha256")
+    .update(JSON.stringify({ model: JUDGE_MODEL, system: SYSTEM, schema, text, passes }))
+    .digest("hex");
+  const cached = join(CACHE, `${key}.json`);
+  let runs;
+  let hit = false;
+  if (cache && existsSync(cached)) {
+    runs = JSON.parse(readFileSync(cached, "utf8")).runs;
+    hit = true;
+  } else {
+    runs = await Promise.all(Array.from({ length: passes }, () => callJudge(text, claude)));
+    // Only a full set of verdicts is kept: a failed pass is tried again next time.
+    if (cache && runs.every((x) => x.verdict)) {
+      mkdirSync(CACHE, { recursive: true });
+      writeFileSync(cached, JSON.stringify({ model: JUDGE_MODEL, passes, runs }));
+    }
+  }
   const ok = runs.filter((x) => x.verdict);
   const scores = Object.fromEntries(
     ids.map((id) => [
@@ -334,7 +410,9 @@ export async function judge({
         return [id, xs.length ? Math.max(...xs) - Math.min(...xs) : undefined];
       }),
     ),
-    cost: runs.reduce((a, x) => a + (x.cost ?? 0), 0),
+    // What this call spent: nothing when the verdicts came from the cache.
+    cost: hit ? 0 : runs.reduce((a, x) => a + (x.cost ?? 0), 0),
+    cached: hit,
     verdicts: ok.map((x) => x.verdict),
     errors: runs.filter((x) => x.error).map((x) => x.error),
   };
@@ -381,10 +459,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const i = argv.indexOf(name);
     return i < 0 ? undefined : argv.splice(i, 2)[1];
   };
+  const noCache = argv.indexOf("--no-cache");
+  if (noCache >= 0) argv.splice(noCache, 1);
+  const cache = noCache < 0;
   const modelDir = resolve(flag("--model-dir") ?? join(argv[0] ?? ".", ".archdoc"));
   const referencePath = flag("--reference");
   const questionsPath = flag("--questions");
-  const passes = Number(flag("--passes") ?? "3");
+  const passes = Number(flag("--passes") ?? "1");
   const repoDir = resolve(argv[0] ?? ".");
   const core = await import(join(here, "packages/core/dist/index.js"));
   const questions = questionsPath ? parseYaml(readFileSync(questionsPath, "utf8")) : undefined;
@@ -406,6 +487,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     questions,
     passes,
     core,
+    cache,
   });
   console.log(
     JSON.stringify(argv.includes("--verbose") ? r : { ...r, verdicts: undefined }, null, 2),

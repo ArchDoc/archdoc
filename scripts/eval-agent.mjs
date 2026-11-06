@@ -6,10 +6,13 @@
 // the init half runs in `pnpm test` (packages/analyzers/test/evals.test.ts).
 //
 //   pnpm build
-//   node scripts/eval-agent.mjs [fixture...] [--runs 3] [--parallel 2] [--model <id>]
+//   node scripts/eval-agent.mjs [fixture...] [--runs 1] [--parallel 2] [--model <id>]
 //        [--max-turns 80] [--out evals/results/<time>] [--claude claude] [--keep]
-//        [--set fixtures|real-world] [--judge | --no-judge] [--judge-passes 3]
-//        [--max-budget-usd <per run>]
+//        [--set fixtures|real-world] [--judge | --no-judge] [--judge-passes 1]
+//        [--no-judge-cache] [--max-budget-usd <per run>]
+//
+// Without --runs, each fixture runs once, except those in NOISY, which run
+// twice: their score moves a few points between runs.
 //
 // --set real-world runs the open-source repositories in evals/real-world
 // instead: each is cloned once into evals/.cache/repos at its pinned commit,
@@ -40,7 +43,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { JUDGE_MODEL, judge, parseYaml } from "./eval-judge.mjs";
 
 const here = new URL("..", import.meta.url).pathname;
@@ -73,11 +76,15 @@ const set = flag("--set", "fixtures");
 if (!["fixtures", "real-world"].includes(set)) throw new Error("--set is fixtures or real-world.");
 const real = set === "real-world";
 const judging = argv.includes("--no-judge") ? false : real || argv.includes("--judge");
-const judgePasses = Number(flag("--judge-passes", "3"));
+const judgePasses = Number(flag("--judge-passes", "1"));
+const judgeCache = !argv.includes("--no-judge-cache");
 const budget = flag("--max-budget-usd", undefined);
 const fixtures = join(here, real ? "evals/real-world" : "evals/fixtures");
 const cache = join(here, "evals/.cache/repos");
-const runs = Number(flag("--runs", "3"));
+const runsFlag = flag("--runs", undefined);
+/** Fixtures whose score moves a few points between runs (93–97%, 95–98% in 0.7.0): two runs by default. */
+const NOISY = new Set(real ? [] : ["ts-monorepo", "go-service"]);
+const runsFor = (name) => Number(runsFlag ?? (NOISY.has(name) ? 2 : 1));
 const parallel = Number(flag("--parallel", "2"));
 const model = flag("--model", undefined);
 const maxTurnsFlag = flag("--max-turns", undefined);
@@ -216,9 +223,15 @@ function effort(transcript) {
   return out;
 }
 
-/** A fresh copy of a fixture's repository, committed, the way an agent would find one. */
+/**
+ * A fresh copy of a fixture's repository, committed, the way an agent would
+ * find one. It's named for the fixture, inside a unique scratch directory, so
+ * init names the model the same way every time (its namespace comes from the
+ * directory) and the judge's cache recognizes init's model on the next run.
+ */
 function scratchRepo(name) {
-  const dir = mkdtempSync(join(tmpdir(), `archdoc-eval-${name}-`));
+  const dir = join(mkdtempSync(join(tmpdir(), "archdoc-eval-")), name);
+  mkdirSync(dir);
   if (real) {
     // The pinned commit's files, without the upstream history: an agent's git log can't leak the answer.
     const src = cached(name);
@@ -349,6 +362,7 @@ async function judged(name, repoDir, modelDir, found) {
     questions: questions(name),
     passes: judgePasses,
     claude,
+    cache: judgeCache,
     core: await import(join(here, "packages/core/dist/index.js")),
   });
   return j;
@@ -392,7 +406,7 @@ async function oneRun(name, i) {
     run.error ??= "wrote no .archdoc/";
   }
   if (keep) run.repo = dir;
-  else rmSync(dir, { recursive: true, force: true });
+  else rmSync(dirname(dir), { recursive: true, force: true });
   const score = run.score
     ? `${pct(run.score.overall)} overall${run.judge ? `, ${pct(run.judge.digestibility)} digestible` : ""}`
     : "no score";
@@ -420,7 +434,7 @@ async function initScore(name) {
     }
     out.judge = await judged(name, dir, join(dir, ".archdoc"), found);
   }
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dirname(dir), { recursive: true, force: true });
   return out;
 }
 
@@ -429,7 +443,7 @@ const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : un
 
 // Every fixture × run, `parallel` at a time.
 mkdirSync(out, { recursive: true });
-const jobs = chosen.flatMap((name) => Array.from({ length: runs }, (_, i) => [name, i]));
+const jobs = chosen.flatMap((name) => Array.from({ length: runsFor(name) }, (_, i) => [name, i]));
 const results = [];
 await Promise.all(
   Array.from({ length: Math.max(1, parallel) }, async () => {
@@ -524,7 +538,16 @@ for (const name of chosen) {
 writeFileSync(
   join(out, "results.json"),
   JSON.stringify(
-    { set, prompt, model, judge: judging ? JUDGE_MODEL : undefined, runs, fixtures: rows, results },
+    {
+      set,
+      prompt,
+      model,
+      judge: judging ? JUDGE_MODEL : undefined,
+      judgePasses: judging ? judgePasses : undefined,
+      runs: Object.fromEntries(chosen.map((name) => [name, runsFor(name)])),
+      fixtures: rows,
+      results,
+    },
     null,
     2,
   ),
@@ -532,10 +555,15 @@ writeFileSync(
 const title = (m) => m[0].toUpperCase() + m.slice(1);
 const cell = (f, m) => `${pct(f.init[m])} → **${pct(f.agent[m])}**`;
 const what = real ? "repository" : "fixture";
+const runCounts = [...new Set(chosen.map(runsFor))];
+const runsLabel =
+  runCounts.length === 1
+    ? `${runCounts[0]} run${runCounts[0] === 1 ? "" : "s"} per ${what}`
+    : chosen.map((name) => `${name} ×${runsFor(name)}`).join(", ");
 const lines = [
   real ? "# ArchDoc agent evals: real-world repositories" : "# ArchDoc agent evals",
   "",
-  `${new Date().toISOString()} · ${runs} run${runs === 1 ? "" : "s"} per ${what}${model ? ` · ${model}` : ""}${judging ? ` · judged by ${JUDGE_MODEL}, ${judgePasses} passes` : ""}`,
+  `${new Date().toISOString()} · ${runsLabel}${model ? ` · ${model}` : ""}${judging ? ` · judged by ${JUDGE_MODEL}, ${judgePasses} pass${judgePasses === 1 ? "" : "es"}` : ""}`,
   "",
   real
     ? "Each cell is init → agent: what archdoc init alone scores, then the agent's mean over its runs. Scored against each repository's partial reference.yaml, so containers, components, datastores, and uses are recall (a model may go further and isn't marked down); nesting and code are the share right; overall is their mean."
@@ -631,6 +659,14 @@ if (judging) {
           f.judge ? `$${f.judge.cost.toFixed(2)}` : "–",
         ].join(" | ") + " |",
     ),
+  );
+  // What judging cost this time, init's models included, and how much the cache saved.
+  const initVerdicts = rows.map((f) => f.init.judge).filter(Boolean);
+  const verdicts = [...results.map((r) => r.judge).filter(Boolean), ...initVerdicts];
+  const spent = (js) => js.reduce((a, j) => a + (j.cost ?? 0), 0);
+  lines.push(
+    "",
+    `Judge cost is the mean per agent run, $0 when its verdict came from the cache (evals/.cache/judge/). Judging spent $${spent(verdicts).toFixed(2)} in all, $${spent(initVerdicts).toFixed(2)} of it on init's models; ${verdicts.filter((j) => j.cached).length} of ${verdicts.length} verdicts came from the cache.`,
   );
 }
 lines.push(

@@ -94,10 +94,14 @@ that each golden model's journeys score as found, with detailed steps.
 
 ```sh
 pnpm build
-pnpm eval:agent                       # every fixture, 3 runs each
-pnpm eval:agent ts-monorepo --runs 1  # one fixture, once
+pnpm eval:agent                       # every fixture, once (ts-monorepo and go-service twice)
+pnpm eval:agent ts-monorepo --runs 3  # one fixture, three times
 pnpm eval:agent --model <model> --parallel 4
 ```
+
+Each fixture runs once by default: most score within a point or two from run
+to run. The two that move more (ts-monorepo and go-service, `NOISY` in
+`scripts/eval-agent.mjs`) run twice. `--runs` sets the count for every fixture.
 
 It copies each fixture to a scratch directory, runs Claude Code headless
 (`claude -p`) there with the skill, the MCP server, and the CLI from this
@@ -145,10 +149,26 @@ They're scored two ways:
   well decomposed and easy to digest. The judge reads the model, the
   repository's tree and docs, and the reference, and scores fidelity,
   granularity, coverage, relationships, infrastructure, descriptions, and
-  journeys from 1 to 5 against written anchors, three passes, median kept. It
+  journeys from 1 to 5 against written anchors, one pass by default
+  (`--judge-passes 3` keeps the median of three). It
   also runs the onboarding test: it answers each question with one element of
   the model, and it's a hit when that element covers a file with the answer.
   The judge model is fixed (`JUDGE_MODEL`) so scores compare across releases.
+
+The judge's verdicts are cached in `evals/.cache/judge/`, keyed by everything
+it's sent (the judge model, system prompt, schema, and prompt with the model
+text) and the number of passes. Init's model for a pinned commit is the same
+from run to run, so it's judged once per analyzer change instead of on every
+run; any change to the rubric, the prompt, or the model judged misses the cache.
+`--no-judge-cache` judges again. The report says what judging spent, init's
+models included, and how many verdicts came from the cache. A model over
+100,000 characters is sent without its code elements, then cut, so one huge
+model can't run up the bill.
+
+One pass is enough for comparing releases: in the 0.6.2 to 0.7.0 runs, the three
+passes differed by at most one point on a dimension (two, once), and agreed on
+every onboarding answer, while the same repository's digestibility moved up to
+29 points between agent runs.
 
 `pnpm eval:agent --judge` judges the fixtures too. Before trusting a change to
 the rubric or the judge model, run `node scripts/eval-judge-calibrate.mjs`: on
@@ -156,7 +176,7 @@ every fixture the golden model should score above what init writes, and that
 above a single container holding everything.
 
 A real-world run costs more than a fixture run: about $1 to $6 for the agent,
-capped by `maxBudgetUsd` in each `repo.yaml`, and about $0.30 to judge.
+capped by `maxBudgetUsd` in each `repo.yaml`, and about $0.15 to $0.30 a pass to judge.
 
 ## Adding a fixture
 
