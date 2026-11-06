@@ -15,7 +15,8 @@ import { Resolver } from "../load/resolve.js";
 import { parseForEdit, patchYaml, stringify } from "./patch.js";
 
 /** What an edit adds, sets, or renames. */
-export type EditType = "element" | "actor" | "journey" | "data" | "environment";
+/** What an op acts on; node is a deployment node, written as an environment's (production.aws.lambda). */
+export type EditType = "element" | "actor" | "journey" | "data" | "environment" | "node";
 
 /**
  * One change to the model, by ID, so an agent never has to find the right
@@ -24,7 +25,13 @@ export type EditType = "element" | "actor" | "journey" | "data" | "environment";
  */
 export type EditOp =
   /** A new element (inside the element its ID names), actor, journey, data entry, environment, or deployment node. */
-  | { op: "add"; type: EditType; id: string; spec?: Record<string, unknown> | undefined }
+  | {
+      op: "add";
+      /** Without it: a node when the ID is inside an environment, a journey when the spec has steps, else an element. */
+      type?: EditType | undefined;
+      id: string;
+      spec?: Record<string, unknown> | undefined;
+    }
   /** Merges fields into one thing (a JSON merge patch: null removes a field, objects merge, lists replace). */
   | { op: "set"; id: string; type?: EditType | undefined; spec: Record<string, unknown> }
   /** Removes one thing; for an element, its children and the uses that point at it too. */
@@ -217,7 +224,8 @@ class Editor {
     return line;
   }
 
-  private run(op: EditOp): string {
+  private run(raw: EditOp): string {
+    const op = this.lenient(raw);
     const needs: Record<string, string[]> = {
       add: ["type", "id"],
       set: ["id", "spec"],
@@ -234,7 +242,7 @@ class Editor {
     if (missing.length) throw new EditError(`${op.op} needs ${missing.join(" and ")}.`);
     switch (op.op) {
       case "add":
-        return this.add(op.type, op.id, op.spec ?? {});
+        return this.add(op.type ?? "element", op.id, op.spec ?? {});
       case "set":
         return this.set(op.id, op.type, op.spec);
       case "remove":
@@ -250,6 +258,34 @@ class Editor {
           `Unknown op "${(op as { op: string }).op}". Use add, set, remove, rename, use, or step.`,
         );
     }
+  }
+
+  /**
+   * Reads an op the way an agent most likely meant it: `data:Order` as the
+   * data entry Order, and an add without a type as a node when its ID is
+   * inside an environment, a journey when it has steps, else an element.
+   */
+  private lenient(op: EditOp): EditOp {
+    const o = { ...op } as Record<string, unknown>;
+    if (typeof o.id === "string") {
+      const m = /^(element|actor|journey|data|environment|node):(.+)$/.exec(o.id);
+      if (m) {
+        o.id = m[2];
+        o.type ??= m[1] === "node" ? "environment" : m[1];
+      }
+    }
+    if (o.type === "node") o.type = "environment";
+    if (o.op === "add" && !o.type && typeof o.id === "string") {
+      const first = o.id.split(".")[0] ?? "";
+      const spec = asRecord(o.spec);
+      o.type =
+        o.id.includes(".") && this.index.environments.has(first)
+          ? "environment"
+          : Array.isArray(spec.steps)
+            ? "journey"
+            : "element";
+    }
+    return o as EditOp;
   }
 
   // ---------------------------------------------------------------- index
@@ -402,7 +438,7 @@ class Editor {
   private add(type: EditType, rawId: string, spec: Record<string, unknown>): string {
     const id = rawId.trim();
     if (!id) throw new EditError("Give an ID.");
-    const value = { ...spec };
+    const value = type === "element" ? shapeElement(spec) : { ...spec };
     if (this.options.by && value.provenance === undefined) {
       value.provenance = { source: "suggested", by: this.options.by };
     }
@@ -436,12 +472,14 @@ class Editor {
             `${type === "actor" ? "Actor" : "Data entry"} ${id} already exists. Use set to change it.`,
           );
         const section = type === "actor" ? "actors" : "data";
+        const kindless = type === "data" && value.kind === undefined;
+        if (kindless) value.kind = "entity";
         const file = this.sectionFile(section).file;
         ensureMap(file.after, [section]).set(
           id,
           tidy(file.after.createNode(order(value, type === "actor" ? ACTOR_ORDER : DATA_ORDER))),
         );
-        return `Added ${type === "actor" ? "actor" : "data entry"} ${id} in ${where(file, [section, id])}.`;
+        return `Added ${type === "actor" ? "actor" : "data entry"} ${id} in ${where(file, [section, id])}${kindless ? " (kind entity: say kind message or event to change it)" : ""}.`;
       }
       case "journey": {
         checkKey(id);
@@ -525,10 +563,18 @@ class Editor {
 
   // ----------------------------------------------------------------- set
 
-  private set(id: string, type: EditType | undefined, spec: Record<string, unknown>): string {
-    if (!spec || typeof spec !== "object" || Array.isArray(spec))
+  private set(id: string, type: EditType | undefined, given: Record<string, unknown>): string {
+    if (!given || typeof given !== "object" || Array.isArray(given))
       throw new EditError("spec is an object of fields to set.");
     const found = this.find(id, type);
+    if (found.type === "element" && (Array.isArray(given.uses) || typeof given.uses === "string"))
+      throw new EditError(
+        'uses is a map of target to description, such as { "orders.api": "Posts orders" }; or add each with a use op.',
+      );
+    const spec =
+      found.type === "element"
+        ? shapeElement(given, asRecord(asRecord(plainAt(found.site)).stores))
+        : given;
     for (const key of ["elements", "nodes"]) {
       if (key in spec && found.type !== "journey" && found.type !== "data") {
         throw new EditError(`Add children with add, not set ${key}.`);
@@ -1065,6 +1111,48 @@ const STEP_ORDER = ["from", "to", "action", "code", "sends", "creates", "changes
 const USE_ORDER = ["description", "sends", "technology", "transport", "provenance"];
 
 /** The keys in the order a person reads them, then the rest as given. */
+/**
+ * An element's fields in the shapes the schema wants, from the shorter ones
+ * agents write: `stores: [Order]` or `{ Order: "Every order" }` for
+ * `{ Order: { entity: Order, description } }`, and `uses: [a, b]` for a map.
+ */
+function shapeElement(
+  spec: Record<string, unknown>,
+  current: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const out = { ...spec };
+  const stores = out.stores;
+  if (Array.isArray(stores) || typeof stores === "string") {
+    out.stores = Object.fromEntries(
+      (Array.isArray(stores) ? stores : [stores])
+        .filter((x): x is string => typeof x === "string")
+        .map((x) => [x, { entity: x }]),
+    );
+  } else if (isPlainObject(stores)) {
+    out.stores = Object.fromEntries(
+      Object.entries(stores).map(([k, v]) => [
+        k,
+        typeof v === "string"
+          ? current[k] === undefined
+            ? { entity: k, description: v }
+            : { description: v }
+          : isPlainObject(v) && v.entity === undefined && current[k] === undefined
+            ? { entity: k, ...v }
+            : v,
+      ]),
+    );
+  }
+  const uses = out.uses;
+  if (Array.isArray(uses) || typeof uses === "string") {
+    out.uses = Object.fromEntries(
+      (Array.isArray(uses) ? uses : [uses])
+        .filter((x): x is string => typeof x === "string")
+        .map((x) => [x, null]),
+    );
+  }
+  return out;
+}
+
 function order(value: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of keys) if (value[k] !== undefined && value[k] !== null) out[k] = value[k];

@@ -103,9 +103,9 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     op: z.enum(["add", "set", "remove", "rename", "use", "step"]),
     id: z.string().optional().describe("What add, set, remove, or rename acts on"),
     type: z
-      .enum(["element", "actor", "journey", "data", "environment"])
+      .enum(["element", "actor", "journey", "data", "environment", "node"])
       .optional()
-      .describe("Required by add; elsewhere only when an ID names two things"),
+      .describe("Only when an ID names two things, or add can't tell"),
     spec: z
       .union([z.string(), z.record(z.string(), z.unknown())])
       .optional()
