@@ -112,8 +112,11 @@ export function deriveCodeChange(input: {
     baseFiles,
     head.files,
   );
+  // A path, or a directory an import resolved to (a workspace package, such as packages/billing).
   const proposedOf = (path: string) =>
-    proposed.find((e) => path === e.code || inDir(path, dirOfCode(e.code)));
+    proposed.find(
+      (e) => path === e.code || path === dirOfCode(e.code) || inDir(path, dirOfCode(e.code)),
+    );
   const located = new Map<string, string | undefined>();
   const owner = (path: string): string | undefined => {
     if (!located.has(path)) {
@@ -409,10 +412,31 @@ function ownerAround(
       while (common && model.elements.get(common)?.spec.kind === "code") {
         common = model.elements.get(common)?.parentId;
       }
+      // An element whose code sits in a directory below this one is a neighbour of
+      // the new code, not around it: packages/billing goes beside packages/shared.
+      while (common && d && rootOf(common, owners) !== d && inDir(rootOf(common, owners), d)) {
+        common = model.elements.get(common)?.parentId;
+      }
       return common ? model.elements.get(common) : undefined;
     }
     if (!d) return undefined;
   }
+}
+
+/** The deepest directory holding every file an element, or what's inside it, maps. */
+function rootOf(id: string, owners: ReadonlyMap<string, string>): string {
+  let root: string[] | undefined;
+  for (const [f, owner] of owners) {
+    if (owner !== id && !inside(owner, id)) continue;
+    const dir = dirOf(f).split("/");
+    if (!root) root = dir;
+    else {
+      let n = 0;
+      while (n < root.length && root[n] === dir[n]) n++;
+      root = root.slice(0, n);
+    }
+  }
+  return root?.join("/") ?? "";
 }
 
 function commonAncestor(ids: string[]): string | undefined {
