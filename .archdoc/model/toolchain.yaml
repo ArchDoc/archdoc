@@ -101,7 +101,7 @@ elements:
                 description: Prints what archdoc check --seals says
           checker:
             kind: component
-            description: Validates journeys, and compares the model with the code and its rules (undeclared dependencies, rule violations, stale paths including deployment code, orphans, and components outside containers or code outside components). Also says whether a new model is done (archdoc check --done), listing levels over the limits, small containers with components and big ones without, unmapped code, init's descriptions, test and verification code modeled as elements, unconnected elements, actors, journeys, steps without an action or code, a missing system, entry points no journey starts at, steps that cross a boundary without saying what they carry, datastores and queues without data, data entries without a description, what no environment places when the repository has deployment files, and the warnings the code can answer (setting aside the owners, seals, other repos, and team rules only a person settles). Build tooling (devDependencies, tool config files) is not a dependency between elements.
+            description: Validates journeys, and compares the model with the code and its rules (undeclared dependencies, rule violations, stale paths including deployment code, orphans, and components outside containers or code outside components). Lets a container without components hold code elements directly. Also says whether a new model is done (archdoc check --done), listing levels over the limits, small containers with components and big ones without, unmapped code, init's descriptions, test and verification code modeled as elements, unconnected elements, actors, journeys, steps without an action or code, a missing system and parts outside it, parts not named the way their code is, code elements and steps that point at a whole file instead of a function or lines, components with no code element at the functions that do their work, entry points no journey starts at, steps that cross a boundary without saying what they carry, datastores and queues without data, data entries without a description, what no environment places when the repository has deployment files, and the warnings the code can answer (setting aside the owners, seals, other repos, and team rules only a person settles). Build tooling (devDependencies, tool config files) is not a dependency between elements.
             code: [{ path: packages/core/src/check/** }]
             uses:
               seals:
@@ -182,7 +182,7 @@ elements:
                 description: Resolves hops and journeys in other repos
           editor:
             kind: component
-            description: "Changes model files by ID (add, set, remove, rename, use, step) and rewrites the references a rename or move breaks. Pure: takes the files' text and returns the changed text, rewriting only the lines each change touches, so comments and everything else keep their text."
+            description: "Changes model files by ID (add, set, remove, rename, use, step) and rewrites the references a rename or move breaks; a container, datastore, or queue added with no parent goes inside the model's one system. Pure: takes the files' text and returns the changed text, rewriting only the lines each change touches, so comments and everything else keep their text."
             code: packages/core/src/edit/**
             uses:
               loader:

@@ -183,6 +183,48 @@ describe("editModel", () => {
     expect(errors(r.model)).toEqual([]);
   });
 
+  it("adds a container, datastore, or queue with no parent inside the one system, and an external beside it", () => {
+    const r = edit([
+      {
+        op: "add",
+        type: "element",
+        id: "billing",
+        spec: { description: "Bills.", code: "billing/**" },
+      },
+      {
+        op: "add",
+        type: "element",
+        id: "cache",
+        spec: { kind: "datastore", description: "Caches." },
+      },
+      {
+        op: "add",
+        type: "element",
+        id: "stripe",
+        spec: { kind: "external", description: "Takes payments." },
+      },
+    ]);
+    expect(r.done[0]).toBe(
+      "Added container shop.billing in .archdoc/archdoc.yaml (inside the system shop, where its parts go) (kind container: say kind to change it).",
+    );
+    expect(r.model.elements.get("shop.cache")?.spec.kind).toBe("datastore");
+    expect(r.model.elements.get("stripe")?.spec.kind).toBe("external");
+    expect(errors(r.model)).toEqual([]);
+  });
+
+  it("adds an element whose code is a symbol or lines as code", () => {
+    const r = edit({
+      op: "add",
+      type: "element",
+      id: "web.checkout",
+      spec: { description: "Places the order.", code: "web/src/checkout.ts#placeOrder" },
+    });
+    expect(r.model.elements.get("shop.web.checkout")?.spec.kind).toBe("code");
+    expect(r.model.elements.get("shop.web.checkout")?.code).toEqual([
+      { path: "web/src/checkout.ts", symbol: "placeOrder" },
+    ]);
+  });
+
   it("adds, updates, and removes uses, written as short as they resolve", () => {
     const added = edit({ op: "use", from: "orders.store", to: "shop.web", spec: "Calls back" });
     expect(added.done).toEqual(["Added the use shop.orders.store -> shop.web (as web)."]);

@@ -667,10 +667,17 @@ export function contractName(p: ProvideSpec): string {
   return "api" in p ? p.api : "topic" in p ? p.topic : p.event;
 }
 
+/** A code path written with its snippet, as journey steps write it: path#symbol, path:40, or path:40-88. */
+const PATH_SNIPPET = /^([^#*?{]+?)(?:#([^/#:]+)|:(\d+(?:-\d+)?))$/;
+
 export function normalizeCode(code: CodeSpec | undefined): CodeRef[] {
   if (code === undefined) return [];
   return [code].flat().map((c): CodeRef => {
-    if (typeof c === "string") return { path: c };
+    if (typeof c === "string") {
+      const m = PATH_SNIPPET.exec(c);
+      if (!m?.[1]) return { path: c };
+      return m[2] ? { path: m[1], symbol: m[2] } : { path: m[1], lines: m[3] as string };
+    }
     const { lines, ...rest } = c;
     return lines === undefined ? rest : { ...rest, lines: String(lines) };
   });

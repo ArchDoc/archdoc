@@ -379,7 +379,7 @@ export interface DiscoveryScore {
   connected: number;
   /** Elements with a description of their own, of the same. */
   described: number;
-  /** 1 when the model has a system (kind: system), the box the C4 context draws; else 0. */
+  /** The share of containers, datastores, and queues inside a system element (kind: system), the box the C4 context draws; 0 without one. */
   system: number;
   /** Steps across a boundary (another container, a datastore, a queue, an external) that say what they carry, of those steps (1 with none). */
   stepData: number;
@@ -401,6 +401,12 @@ export interface DiscoveryScore {
   deploymentMapped?: number | undefined;
   /** Data entries that aren't numbered copies of another, of all of them (1 with none). */
   dataDistinct: number;
+  /** The share of containers and components named the way their code is (or, when it goes by several names, with a name:). */
+  codeNames: number;
+  /** The share of code elements and journey steps' code that point at a function, class, or lines, not a whole file. */
+  codePrecision: number;
+  /** The share of components and lean containers with a code element at a function, class, or lines. */
+  keyCode: number;
   overall: number;
   /** What `archdoc check --done` would still list. */
   gaps: number;
@@ -471,7 +477,8 @@ export function scoreDiscovery(
     mapped: frac(s.sourceFiles - s.unmappedFiles, s.sourceFiles),
     connected: frac(s.elements - s.orphans.length, s.elements),
     described: frac(s.described, s.elements),
-    system: s.system ? 1 : 0,
+    // The system counts when the parts are inside it: one box beside its parts draws nothing.
+    system: s.system ? frac(s.insideSystem, s.ownParts) : 0,
     stepData: frac(s.dataStepsDescribed, s.dataSteps),
     storeData: frac(s.storesDescribed, s.stores),
     dataFields: frac(s.dataDefined, s.dataEntries),
@@ -479,6 +486,9 @@ export function scoreDiscovery(
     usesShape: frac(s.uses - s.usesMisshapen, s.uses),
     codeShape: frac(s.elements - s.elementsMisshapen, s.elements),
     dataDistinct: frac(s.dataEntries - s.dataDuplicates, s.dataEntries),
+    codeNames: frac(s.namedFromCode, s.nameable),
+    codePrecision: frac(s.preciseCodeRefs, s.codeRefs),
+    keyCode: frac(s.keyedParts, s.leafParts),
   };
   const deployed = s.deploymentFiles ? frac(s.deployed, s.deployable) : undefined;
   const entryPoints = s.entryPoints ? s.entryPointsCovered / s.entryPoints : undefined;

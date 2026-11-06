@@ -448,10 +448,18 @@ class Editor {
         const dot = own.lastIndexOf(".");
         const key = dot === -1 ? own : own.slice(dot + 1);
         checkKey(key);
-        const parent = dot === -1 ? undefined : this.elementId(own.slice(0, dot));
+        let parent = dot === -1 ? undefined : this.elementId(own.slice(0, dot));
+        // The system's own parts go inside it: only externals and other systems sit beside it.
+        const into =
+          parent === undefined && !OUTSIDE_SYSTEM.has(String(value.kind ?? "container"))
+            ? this.onlySystem()
+            : undefined;
+        if (into) parent = into;
         const full = parent ? `${parent}.${key}` : key;
         if (this.index.elements.has(full))
           throw new EditError(`${full} already exists. Use set to change it.`);
+        // Code at a symbol or lines is a code element, whatever level it's added at.
+        if (value.kind === undefined && parent && pointsIntoFile(value.code)) value.kind = "code";
         if (value.kind === undefined)
           value.kind = childKind(parent ? this.kindOf(parent) : undefined);
         const site = parent ? this.index.elements.get(parent) : this.sectionFile("elements");
@@ -461,7 +469,7 @@ class Editor {
           key,
           tidy(file.after.createNode(order(value, ELEMENT_ORDER))),
         );
-        return `Added ${value.kind} ${full} in ${where(file, [...path, key])}${spec.kind === undefined ? ` (kind ${value.kind}: say kind to change it)` : ""}.`;
+        return `Added ${value.kind} ${full} in ${where(file, [...path, key])}${into ? ` (inside the system ${into}, where its parts go)` : ""}${spec.kind === undefined ? ` (kind ${value.kind}: say kind to change it)` : ""}.`;
       }
       case "actor":
       case "data": {
@@ -541,6 +549,14 @@ class Editor {
           `Can't add a ${type as string}. Add an element, actor, journey, data entry, or environment.`,
         );
     }
+  }
+
+  /** The model's one top-level system, if it has exactly one. */
+  private onlySystem(): string | undefined {
+    const systems = [...this.index.elements.keys()].filter(
+      (id) => !id.includes(".") && this.kindOf(id) === "system",
+    );
+    return systems.length === 1 ? systems[0] : undefined;
   }
 
   private kindOf(id: string): string | undefined {
@@ -1168,6 +1184,22 @@ function preferShallow(candidates: string[]): string | undefined {
   const top = candidates.filter((c) => depth(c) === min);
   return top.length === 1 ? top[0] : undefined;
 }
+
+/** Whether a code: points into a file (path#symbol, path:40-88, or { symbol } or { lines }). */
+function pointsIntoFile(code: unknown): boolean {
+  const refs = Array.isArray(code) ? code : code === undefined ? [] : [code];
+  return (
+    refs.length > 0 &&
+    refs.every((c) =>
+      typeof c === "string"
+        ? /#[^/#]+$|:\d+(-\d+)?$/.test(c)
+        : !!c && typeof c === "object" && ("symbol" in c || "lines" in c),
+    )
+  );
+}
+
+/** Kinds that sit beside a system rather than inside it. */
+const OUTSIDE_SYSTEM = new Set(["system", "external"]);
 
 function childKind(parent: string | undefined): string {
   switch (parent) {
