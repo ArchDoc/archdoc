@@ -1,5 +1,16 @@
 # @archdoc/cli
 
+## 0.7.1
+
+### Patch Changes
+
+- Updated dependencies [90059fe]
+  - @archdoc/core@0.7.1
+  - @archdoc/spec@0.7.1
+  - @archdoc/analyzers@0.7.1
+  - @archdoc/federation@0.7.1
+  - @archdoc/mcp@0.7.1
+
 ## 0.7.0
 
 ### Minor Changes

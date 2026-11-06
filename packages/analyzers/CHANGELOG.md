@@ -1,5 +1,12 @@
 # @archdoc/analyzers
 
+## 0.7.1
+
+### Patch Changes
+
+- Updated dependencies [90059fe]
+  - @archdoc/core@0.7.1
+
 ## 0.7.0
 
 ### Minor Changes
