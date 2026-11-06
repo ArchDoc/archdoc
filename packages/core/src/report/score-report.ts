@@ -65,6 +65,14 @@ export function formatDiscoveryScore(d: DiscoveryScore, verbose = false): string
     ...(d.entryPoints === undefined
       ? []
       : [`  ${"Entry points".padEnd(14)} ${pct(d.entryPoints)} reached by a journey`]),
+    `  ${"Uses shape".padEnd(14)} ${pct(d.usesShape)} of uses point the right way, at one level`,
+    `  ${"Code shape".padEnd(14)} ${pct(d.codeShape)} of elements' code is in their parent's, theirs alone, not one file or generated`,
+    ...(d.deploymentMapped === undefined
+      ? []
+      : [
+          `  ${"Deploy mapped".padEnd(14)} ${pct(d.deploymentMapped)} of deployment files an environment or element maps`,
+        ]),
+    `  ${"Data distinct".padEnd(14)} ${pct(d.dataDistinct)} of data entries aren't numbered copies`,
   ];
   if (verbose && d.journeys.missed.length) {
     out.push(`  missed journeys: ${d.journeys.missed.join(", ")}`);

@@ -393,6 +393,14 @@ export interface DiscoveryScore {
   deployed?: number | undefined;
   /** Entry points a journey reaches, of those known; undefined when they aren't known. */
   entryPoints?: number | undefined;
+  /** Uses that point the right way, cross out of their element's family, and aren't listed again at another level, of all uses between elements (1 with none). */
+  usesShape: number;
+  /** Elements whose code sits in their parent's, is theirs alone, and is more than one file and not generated, of the model's elements. */
+  codeShape: number;
+  /** Deployment files an environment or element maps, of those in the repository; undefined when it has none or the model has no environments. */
+  deploymentMapped?: number | undefined;
+  /** Data entries that aren't numbered copies of another, of all of them (1 with none). */
+  dataDistinct: number;
   overall: number;
   /** What `archdoc check --done` would still list. */
   gaps: number;
@@ -468,20 +476,29 @@ export function scoreDiscovery(
     storeData: frac(s.storesDescribed, s.stores),
     dataFields: frac(s.dataDefined, s.dataEntries),
     journeyFlow: frac(s.flowStepsConnected, s.flowSteps),
+    usesShape: frac(s.uses - s.usesMisshapen, s.uses),
+    codeShape: frac(s.elements - s.elementsMisshapen, s.elements),
+    dataDistinct: frac(s.dataEntries - s.dataDuplicates, s.dataEntries),
   };
   const deployed = s.deploymentFiles ? frac(s.deployed, s.deployable) : undefined;
   const entryPoints = s.entryPoints ? s.entryPointsCovered / s.entryPoints : undefined;
+  const deploymentMapped =
+    s.deploymentFiles && found.environments.size
+      ? s.deploymentFilesMapped / s.deploymentFiles
+      : undefined;
   const all = [
     ...(expected ? [journeys.recall] : []),
     ...Object.values(parts),
     ...(deployed === undefined ? [] : [deployed]),
     ...(entryPoints === undefined ? [] : [entryPoints]),
+    ...(deploymentMapped === undefined ? [] : [deploymentMapped]),
   ];
   return {
     journeys,
     ...parts,
     deployed,
     entryPoints,
+    deploymentMapped,
     overall: all.reduce((x, y) => x + y, 0) / all.length,
     gaps: a.gaps.length,
   };

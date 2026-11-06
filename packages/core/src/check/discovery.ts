@@ -1,5 +1,5 @@
 import { filesUnder, locate, resolveCodeMap } from "../codemap/codemap.js";
-import { compileGlob } from "../codemap/glob.js";
+import { compileGlob, literalPrefix } from "../codemap/glob.js";
 import { stepMessage } from "../data/flows.js";
 import type { ElementNode, JourneyStep, Model } from "../model.js";
 import { stepCodePath } from "../query/code-index.js";
@@ -82,7 +82,7 @@ const ENTRY_COVERAGE = 0.8;
 
 /** One thing a model still lacks before it's done. */
 export interface DiscoveryGap {
-  /** done/level-too-wide, done/thin-container, done/flat-container, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/data-undescribed, done/data-fields, done/agent-actor, done/step-elsewhere, done/coarse-step, done/store-data, done/no-environments, done/undeployed. */
+  /** done/backwards-use, done/use-in-family, done/use-two-levels, done/code-outside-parent, done/overlapping-code, done/one-file-component, done/generated-code, done/unmapped-deployment, done/outside-system, done/duplicate-data, done/level-too-wide, done/thin-container, done/flat-container, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/data-undescribed, done/data-fields, done/agent-actor, done/step-elsewhere, done/coarse-step, done/store-data, done/no-environments, done/undeployed. */
   code: string;
   message: string;
   element?: string | undefined;
@@ -138,13 +138,27 @@ export interface DiscoveryAssessment {
     /** Entry points known, and how many a journey starts from or passes through; 0 of 0 when they aren't known. */
     entryPoints: number;
     entryPointsCovered: number;
+    /** Uses between elements, and how many point the wrong way, stay inside one element's family, or repeat a more specific use. */
+    uses: number;
+    usesMisshapen: number;
+    /** Containers, components, datastores, queues, and externals whose code is shaped wrong: outside their parent's, claimed by a sibling too, one file, or generated. */
+    elementsMisshapen: number;
+    /** Deployment files some element or environment maps. */
+    deploymentFilesMapped: number;
+    /** Data entries that copy another one (the same name with a number after it). */
+    dataDuplicates: number;
   };
 }
 
 const ARCHITECTURE = new Set(["container", "component", "datastore", "queue", "external"]);
 /** Code that's never architecture: vendored, generated, or built. */
 const NOT_ARCHITECTURE =
-  /(^|\/)(node_modules|vendor|third_party|dist|build|out|target|generated|gen|\.[^/]+)\/|\.(pb|pb\.gw|gen|generated)\.[a-z]+$|_pb2(_grpc)?\.py$/;
+  /(^|\/)(node_modules|vendor|third_party|dist|build|out|target|generated|gen|genproto|__generated__|\.[^/]+)\/|\.(pb|pb\.gw|gen|generated)\.[a-z]+$|_pb2(_grpc)?\.py$/;
+/** Two siblings claim the same code when they share at least this many files, and this share of the smaller one's. */
+const OVERLAP = { files: 3, share: 0.5 } as const;
+/** A data entry that copies another: its name with a number after it (CartItem2 beside CartItem). */
+const NUMBERED = /^(.*?\D)\d+$/;
+
 /** The share of source files a model may leave unmapped before it's not done. */
 const UNMAPPED_LIMIT = 0.2;
 /** Where a flow ends: what it stores, publishes, or calls outside the system. */
@@ -525,6 +539,221 @@ export function assessDiscovery(
     });
   }
 
+  // 6. Shape: what a reader trips over even when everything is there. Uses that
+  // point the wrong way or say a thing twice, code that sits outside its parent
+  // or is claimed twice, elements too small or generated to be parts, deployment
+  // files left out, and data entries that copy each other.
+  const kindOf = (id: string) => model.elements.get(id)?.spec.kind;
+  const inFamily = (a: string, b: string) => a.startsWith(`${b}.`) || b.startsWith(`${a}.`);
+  const elementUses = model.relationships.flatMap((r) =>
+    r.from.type === "element" &&
+    r.to.type === "element" &&
+    model.elements.has(r.from.id) &&
+    model.elements.has(r.to.id)
+      ? [{ from: r.from.id, to: r.to.id }]
+      : [],
+  );
+  const misshapenUses = new Set<(typeof elementUses)[number]>();
+  const backwards = elementUses.filter((r) => {
+    const from = kindOf(r.from);
+    const to = kindOf(r.to) ?? "";
+    return (from === "datastore" || from === "queue") && !INFRA.has(to);
+  });
+  if (backwards.length) {
+    for (const r of backwards) misshapenUses.add(r);
+    const shown = backwards.slice(0, 8).map((r) => `${r.from} → ${r.to}`);
+    gaps.push({
+      code: "done/backwards-use",
+      message: `${shown.join(", ")}${backwards.length > 8 ? `, and ${backwards.length - 8} more` : ""}: a datastore or queue uses ${backwards.length === 1 ? "an element" : "elements"} that read or consume it. Point each the other way: the consumer uses the queue or datastore (with sends: for the messages it reads), and remove the use from the queue or datastore.`,
+    });
+  }
+  const family = elementUses.filter((r) => inFamily(r.from, r.to));
+  if (family.length) {
+    for (const r of family) misshapenUses.add(r);
+    const shown = family.slice(0, 8).map((r) => `${r.from} → ${r.to}`);
+    gaps.push({
+      code: "done/use-in-family",
+      message: `${shown.join(", ")}${family.length > 8 ? `, and ${family.length - 8} more` : ""}: ${family.length === 1 ? "an element uses its own parent or child" : "elements use their own parents or children"}. Nesting already says a parent holds its children; remove these uses, and put each call between the children that make it.`,
+    });
+  }
+  const targets = new Map<string, Set<string>>();
+  for (const r of elementUses) {
+    targets.set(r.from, (targets.get(r.from) ?? new Set()).add(r.to));
+  }
+  const twice = elementUses.filter(
+    (r) =>
+      !inFamily(r.from, r.to) &&
+      [...(targets.get(r.from) ?? [])].some((t) => t.startsWith(`${r.to}.`)),
+  );
+  if (twice.length) {
+    for (const r of twice) misshapenUses.add(r);
+    const shown = twice.slice(0, 8).map((r) => `${r.from} → ${r.to}`);
+    gaps.push({
+      code: "done/use-two-levels",
+      message: `${shown.join(", ")}${twice.length > 8 ? `, and ${twice.length - 8} more` : ""}: the same call is also listed to a part inside ${twice.length === 1 ? "that element" : "those elements"}. Keep only the use on the part the code calls, so each call is drawn once.`,
+    });
+  }
+
+  const globsOf = (e: ElementNode) =>
+    e.code.map((c) => compileGlob(c.path.endsWith("/") ? `${c.path}**` : c.path));
+  const sourceSet = files.filter((f) => SOURCE.test(f) && !isVerificationCode(f));
+  const claimed = (e: ElementNode) => {
+    const res = globsOf(e);
+    return res.length ? sourceSet.filter((f) => res.some((re) => re.test(f))) : [];
+  };
+  const claims = new Map<string, string[]>();
+  const claimsOf = (e: ElementNode) => {
+    let c = claims.get(e.id);
+    if (!c) {
+      c = claimed(e);
+      claims.set(e.id, c);
+    }
+    return c;
+  };
+  const misshapen = new Set<string>();
+  const outside: string[] = [];
+  for (const e of elements) {
+    if (e.spec.kind === "system" || !e.code.length || !e.parentId) continue;
+    const p = model.elements.get(e.parentId);
+    if (!p || p.spec.kind === "system" || !p.code.length) continue;
+    const parentGlobs = globsOf(p);
+    const own = claimsOf(e).filter((f) => !NOT_ARCHITECTURE.test(f));
+    const out = own.filter((f) => !parentGlobs.some((re) => re.test(f)));
+    if (out.length) {
+      outside.push(`${e.id} (${out.length} of ${own.length} files, such as ${out[0]})`);
+      misshapen.add(e.id);
+    }
+  }
+  if (outside.length) {
+    gaps.push({
+      code: "done/code-outside-parent",
+      message: `Code that isn't in its parent's code: ${outside.slice(0, 8).join("; ")}${outside.length > 8 ? `, and ${outside.length - 8} more` : ""}. A parent's code: covers its children's, so a newcomer who opens the parent finds them: widen the parent's code: to take in each child's directory, or move the child under the element whose code it is.`,
+    });
+  }
+
+  const overlaps: string[] = [];
+  const siblings = new Map<string, ElementNode[]>();
+  for (const e of elements) {
+    if (e.spec.kind === "code" || e.spec.kind === "system" || !e.code.length) continue;
+    const at = e.parentId ?? "";
+    siblings.set(at, [...(siblings.get(at) ?? []), e]);
+  }
+  for (const list of siblings.values()) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i] as ElementNode;
+        const b = list[j] as ElementNode;
+        const fa = claimsOf(a);
+        const fb = new Set(claimsOf(b));
+        const shared = fa.filter((f) => fb.has(f)).length;
+        if (shared >= OVERLAP.files && shared >= OVERLAP.share * Math.min(fa.length, fb.size)) {
+          overlaps.push(`${a.id} and ${b.id} (${shared} files)`);
+          misshapen.add(a.id);
+          misshapen.add(b.id);
+        }
+      }
+    }
+  }
+  if (overlaps.length) {
+    gaps.push({
+      code: "done/overlapping-code",
+      message: `Siblings whose code: claims the same files: ${overlaps.slice(0, 8).join("; ")}${overlaps.length > 8 ? `, and ${overlaps.length - 8} more` : ""}. Give each its own directories, so every file has one place in the model; a code: of ** that takes in the whole repository is the usual cause.`,
+    });
+  }
+
+  const tiny: string[] = [];
+  const generated: string[] = [];
+  for (const e of elements) {
+    if (e.spec.kind !== "component" && e.spec.kind !== "container") continue;
+    const all = filesUnder(model, map, e.id).filter(
+      (f) => SOURCE.test(f) && !isVerificationCode(f),
+    );
+    if (all.length && all.filter((f) => NOT_ARCHITECTURE.test(f)).length / all.length >= 0.9) {
+      generated.push(e.id);
+      misshapen.add(e.id);
+      continue;
+    }
+    if (e.spec.kind !== "component" || !e.parentId) continue;
+    const peers = (model.elements.get(e.parentId)?.childIds ?? []).filter(
+      (c) => kindOf(c) === "component",
+    );
+    // In a big container a one-file component is a helper; in a small one it may be all there is.
+    if (
+      peers.length >= 3 &&
+      sourcesOf(e.id).length === 1 &&
+      sourcesOf(e.parentId).length >= COMPONENT_SIZE.split
+    ) {
+      tiny.push(e.id);
+      misshapen.add(e.id);
+    }
+  }
+  if (generated.length) {
+    gaps.push({
+      code: "done/generated-code",
+      message: `${generated.join(", ")} ${generated.length === 1 ? "is" : "are"} generated code (protobuf or gRPC stubs, codegen output). Generated code isn't a part a newcomer works in: fold it into the element that uses it, or point at the schema it's generated from (a proto file, say) as data.`,
+    });
+  }
+  if (tiny.length) {
+    gaps.push({
+      code: "done/one-file-component",
+      message: `${tiny.slice(0, 12).join(", ")}${tiny.length > 12 ? `, and ${tiny.length - 12} more` : ""} ${tiny.length === 1 ? "is a component of one source file" : "are components of one source file each"}. A helper file isn't a responsibility of its own: fold each into the component that uses it, or into its container's code:, unless it's a part a newcomer has to find by name.`,
+    });
+  }
+
+  // An element's code counts only when it names a place: a code: of ** claims everything.
+  const elementGlobs = elements.flatMap((e) =>
+    e.code
+      .filter((c) => literalPrefix(c.path))
+      .map((c) => compileGlob(c.path.endsWith("/") ? `${c.path}**` : c.path)),
+  );
+  // A deployment file is mapped when something points at it, or at a file beside or below it
+  // (an environment that names a CDK app's entry point maps its cdk.json too).
+  const pointedAt = files.filter(
+    (f) => infra.some((re) => re.test(f)) || elementGlobs.some((re) => re.test(f)),
+  );
+  const unmappedDeployment = model.environments.size
+    ? deploymentFiles.filter((f) => {
+        const dir = f.includes("/") ? `${f.slice(0, f.lastIndexOf("/"))}/` : "";
+        return !pointedAt.some((m) => m === f || (dir ? m.startsWith(dir) : false));
+      })
+    : [];
+  if (unmappedDeployment.length) {
+    const dirs = [
+      ...new Set(unmappedDeployment.map((f) => f.split("/").slice(0, -1).join("/") || f)),
+    ];
+    gaps.push({
+      code: "done/unmapped-deployment",
+      message: `${unmappedDeployment.length} of ${deploymentFiles.length} deployment files belong to no environment or element, such as in ${dirs.slice(0, 6).join(", ")}. Point the environment they define at them (code: on the environment or its nodes), so a reader can see what deploys each part.`,
+    });
+  }
+
+  const systems = elements.filter((e) => e.spec.kind === "system").map((e) => e.id);
+  const outsideSystem = systems.length
+    ? arch
+        .filter((e) => e.spec.kind === "datastore" || e.spec.kind === "queue")
+        .filter((e) => !systems.some((s) => e.id.startsWith(`${s}.`)))
+        .map((e) => e.id)
+    : [];
+  if (outsideSystem.length) {
+    for (const id of outsideSystem) misshapen.add(id);
+    gaps.push({
+      code: "done/outside-system",
+      message: `${outsideSystem.join(", ")} ${outsideSystem.length === 1 ? "is" : "are"} the system's own ${outsideSystem.length === 1 ? "datastore or queue" : "datastores and queues"} but ${outsideSystem.length === 1 ? "sits" : "sit"} outside the system element. Move ${outsideSystem.length === 1 ? "it" : "them"} inside it (archdoc_edit rename), and keep only externals outside.`,
+    });
+  }
+
+  const dataIds = new Set(model.data.keys());
+  const duplicates = [...dataIds].filter((id) => {
+    const m = NUMBERED.exec(id);
+    return m?.[1] !== undefined && dataIds.has(m[1]);
+  });
+  if (duplicates.length) {
+    gaps.push({
+      code: "done/duplicate-data",
+      message: `${duplicates.slice(0, 12).join(", ")}${duplicates.length > 12 ? `, and ${duplicates.length - 12} more` : ""} ${duplicates.length === 1 ? "copies a data entry" : "copy data entries"} under a numbered name. If it's the same message or record copied (a service's copy of a shared proto, say), keep one entry from the schema it's defined in, point every step and use at it, and remove the copies. If it's a different one that shares a name, rename it to say how it differs (RemoteWriteExemplar, not Exemplar2).`,
+    });
+  }
+
   const leaf = (id: string) =>
     !(model.elements.get(id)?.childIds ?? []).some(
       (c) => model.elements.get(c)?.spec.kind !== "code",
@@ -650,6 +879,11 @@ export function assessDiscovery(
       deployed: deployed.length,
       entryPoints: entries.length,
       entryPointsCovered: entries.length - uncovered.length,
+      uses: elementUses.length,
+      usesMisshapen: misshapenUses.size,
+      elementsMisshapen: arch.filter((e) => misshapen.has(e.id)).length,
+      deploymentFilesMapped: deploymentFiles.length - unmappedDeployment.length,
+      dataDuplicates: duplicates.length,
     },
   };
 }
@@ -717,17 +951,27 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
   );
   const order = [
     "done/test-code",
+    "done/generated-code",
     "done/level-too-wide",
+    "done/overlapping-code",
+    "done/code-outside-parent",
+    "done/one-file-component",
     "done/thin-container",
     "done/flat-container",
     "done/unmapped-code",
     "done/orphan",
     "done/no-system",
+    "done/outside-system",
+    "done/backwards-use",
+    "done/use-in-family",
+    "done/use-two-levels",
     "done/undescribed",
     "done/no-environments",
     "done/undeployed",
+    "done/unmapped-deployment",
     "done/store-data",
     "done/data-undescribed",
+    "done/duplicate-data",
     "done/data-fields",
     "done/no-actors",
     "done/agent-actor",
