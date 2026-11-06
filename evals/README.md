@@ -81,6 +81,18 @@ runs:
   Kubernetes, and the like).
 - **Entry points**: the share of the routes, consumers, schedules, commands, and
   pages `archdoc paths` finds that a journey step starts at.
+- **Uses shape**: the share of uses between elements that point the right way
+  (a consumer uses the queue, not the queue its consumer), leave their own
+  element's family (no parent using its own child), and aren't listed again to a
+  part of the same target.
+- **Code shape**: the share of elements whose code sits inside their parent's,
+  isn't claimed by a sibling too (a `code: **` claims everything), isn't one
+  helper file in a container of 30 or more, and isn't generated (protobuf stubs).
+- **Deploy mapped**: the share of deployment files (Kubernetes, Helm, Terraform,
+  compose, and the like) an environment or element points at, or at a file
+  beside them, when the model has environments.
+- **Data distinct**: the share of data entries that aren't a numbered copy of
+  another (`CartItem2` beside `CartItem`).
 - **Overall**: the mean of those that apply.
 
 ## Running them

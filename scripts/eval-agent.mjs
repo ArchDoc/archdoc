@@ -349,6 +349,10 @@ const discovered = (d) => ({
   journeyFlow: d.journeyFlow,
   deployed: d.deployed,
   entryPoints: d.entryPoints,
+  usesShape: d.usesShape,
+  codeShape: d.codeShape,
+  deploymentMapped: d.deploymentMapped,
+  dataDistinct: d.dataDistinct,
   gaps: d.gaps,
 });
 
@@ -471,6 +475,10 @@ const discoveryMetrics = [
   "journeyFlow",
   "deployed",
   "entryPoints",
+  "usesShape",
+  "codeShape",
+  "deploymentMapped",
+  "dataDistinct",
   "gaps",
 ];
 const dims = [
@@ -613,13 +621,17 @@ const lines = [
     journeyFlow: ["Journey flow", pct],
     deployed: ["Deployed", pct],
     entryPoints: ["Entry points", pct],
+    usesShape: ["Uses shape", pct],
+    codeShape: ["Code shape", pct],
+    deploymentMapped: ["Deploy mapped", pct],
+    dataDistinct: ["Data distinct", pct],
     gaps: ["Left to do", n],
   };
   lines.push(
     "",
     "## Discovery",
     "",
-    "How well the model was discovered beyond its structure (scoreDiscovery in @archdoc/core), init → agent. Journeys found is the share of the golden model's journeys one of the model's journeys follows (half their hops or more; – when it has none); journeys is how many the model has, and journey depth the share of them long enough to follow that reach the datastore, queue, or external their elements use. Step detail is the share of steps with an action and code that exists; step depth, of steps on the most specific element. Tests left out is the share of test and verification files not modeled as elements of their own. Mapped is the share of source files (not tests, vendored, or generated) some element covers. Connected and described are shares of the model's elements. System is whether the model has a system element for the C4 context. Step data is the share of steps that cross into another container, datastore, queue, or external that say what they carry; store data, the share of datastores that say what they store and queues something sends through. Data fields is the share of data entries with fields or a schema source; journey flow, the share of steps after a journey's first that start where the flow already is. Deployed is the share of deployable elements an environment places (– when the repository has no deployment files). Entry points is the share of routes, consumers, schedules, commands, and pages a journey step starts at. Left to do is how many lines archdoc check --done still lists.",
+    "How well the model was discovered beyond its structure (scoreDiscovery in @archdoc/core), init → agent. Journeys found is the share of the golden model's journeys one of the model's journeys follows (half their hops or more; – when it has none); journeys is how many the model has, and journey depth the share of them long enough to follow that reach the datastore, queue, or external their elements use. Step detail is the share of steps with an action and code that exists; step depth, of steps on the most specific element. Tests left out is the share of test and verification files not modeled as elements of their own. Mapped is the share of source files (not tests, vendored, or generated) some element covers. Connected and described are shares of the model's elements. System is whether the model has a system element for the C4 context. Step data is the share of steps that cross into another container, datastore, queue, or external that say what they carry; store data, the share of datastores that say what they store and queues something sends through. Data fields is the share of data entries with fields or a schema source; journey flow, the share of steps after a journey's first that start where the flow already is. Deployed is the share of deployable elements an environment places (– when the repository has no deployment files). Entry points is the share of routes, consumers, schedules, commands, and pages a journey step starts at. Uses shape is the share of uses that point the right way (not from a queue or datastore to its consumers), leave their own element's family, and aren't listed again to a part of their target; code shape, the share of elements whose code sits in their parent's, isn't claimed by a sibling too, and isn't one helper file in a big container or generated; deploy mapped, the share of deployment files an environment or element maps (– without environments); data distinct, the share of data entries that aren't numbered copies of another. Left to do is how many lines archdoc check --done still lists.",
     "",
     `| ${title(what)} | ${discoveryMetrics.map((m) => col[m][0]).join(" | ")} |`,
     `|---|${discoveryMetrics.map(() => "---").join("|")}|`,

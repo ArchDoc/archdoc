@@ -471,3 +471,117 @@ describe("scoreDiscovery", () => {
     expect(d.testExclusion).toBeLessThan(1);
   });
 });
+
+describe("shape", () => {
+  const shapeFiles = [
+    ...Array.from({ length: 30 }, (_, i) => `shop/handlers/h${i}.go`),
+    "shop/money/money.go",
+    "shop/rpc/client.go",
+    "shop/rpc/conn.go",
+    "shop/genproto/demo.pb.go",
+    "shop/genproto/demo_grpc.pb.go",
+    "carts/src/store.cs",
+    "carts/src/server.cs",
+    "carts/protos/Cart.proto",
+    "lib/a.ts",
+    "lib/b.ts",
+    "lib/c.ts",
+    "k8s/shop.yaml",
+    "k8s/carts.yaml",
+    "terraform/main.tf",
+  ];
+  const misshapen = model({
+    "archdoc.yaml": `
+      archdoc: "2.0"
+      namespace: boutique
+      elements:
+        boutique:
+          kind: system
+          description: The shop.
+          elements:
+            shop:
+              kind: container
+              description: The storefront.
+              code: shop/handlers/**
+              uses: { carts: Reads the cart, carts.store: Reads the cart, shop.rpc: Calls out }
+              elements:
+                handlers: { kind: component, description: Serves pages., code: shop/handlers/**, uses: { rpc: Calls services } }
+                money: { kind: component, description: Adds up prices., code: shop/money/** }
+                rpc: { kind: component, description: Calls the services., code: shop/rpc/** }
+                genproto: { kind: component, description: Generated stubs., code: shop/genproto/** }
+            carts:
+              kind: container
+              description: Keeps carts.
+              code: carts/**
+              elements:
+                store: { kind: component, description: Stores carts., code: carts/src/store.cs }
+            everything:
+              kind: container
+              description: Shared code.
+              code: "**"
+            queue:
+              kind: queue
+              description: Order events.
+              uses: { carts: Delivers events }
+        redis:
+          kind: datastore
+          description: Cart storage.
+      environments:
+        production:
+          nodes:
+            gke: { kind: cluster, code: [terraform/main.tf] }
+      data:
+        CartItem: { kind: message, description: An item., fields: { id: { type: string } } }
+        CartItem2: { kind: message, description: The same item., fields: { id: { type: string } } }
+    `,
+  });
+  const a = assessDiscovery(misshapen, shapeFiles);
+  const gap = (code: string) => a.gaps.find((g) => g.code === code)?.message ?? "";
+
+  it("flags uses that point the wrong way, stay in the family, or say a call twice", () => {
+    expect(gap("done/backwards-use")).toContain("boutique.queue → boutique.carts");
+    expect(gap("done/use-in-family")).toContain("boutique.shop → boutique.shop.rpc");
+    expect(gap("done/use-two-levels")).toContain("boutique.shop → boutique.carts");
+    expect([a.stats.usesMisshapen, a.stats.uses]).toEqual([3, 5]);
+  });
+
+  it("flags code outside its parent, claimed twice, one file in a big container, or generated", () => {
+    expect(gap("done/code-outside-parent")).toContain("boutique.shop.money");
+    expect(gap("done/overlapping-code")).toContain("boutique.everything");
+    expect(gap("done/one-file-component")).toContain("boutique.shop.money");
+    expect(gap("done/generated-code")).toContain("boutique.shop.genproto");
+    // A component of one file in a small container is all there is: carts.store isn't flagged.
+    expect(gap("done/one-file-component")).not.toContain("carts.store");
+  });
+
+  it("flags deployment files no environment maps, infrastructure outside the system, and copied data", () => {
+    expect(gap("done/unmapped-deployment")).toContain("2 of 3 deployment files");
+    expect(gap("done/unmapped-deployment")).toContain("k8s");
+    expect(gap("done/outside-system")).toContain("redis");
+    expect(gap("done/duplicate-data")).toContain("CartItem2");
+    expect(a.stats.dataDuplicates).toBe(1);
+  });
+
+  it("scores the shape", () => {
+    const d = scoreDiscovery(
+      misshapen,
+      misshapen,
+      shapeFiles,
+      scoreModel(misshapen, misshapen, shapeFiles),
+    );
+    expect(d.usesShape).toBeCloseTo(2 / 5);
+    expect(d.codeShape).toBeLessThan(1);
+    expect(d.deploymentMapped).toBeCloseTo(1 / 3);
+    expect(d.dataDistinct).toBeCloseTo(1 / 2);
+  });
+
+  it("finds nothing wrong with a well-shaped model", () => {
+    const clean = assessDiscovery(unfinished, files);
+    const shapeCodes = clean.gaps.filter((g) =>
+      /backwards|family|two-levels|outside|overlapping|one-file|generated|unmapped-deployment|duplicate/.test(
+        g.code,
+      ),
+    );
+    expect(shapeCodes).toEqual([]);
+  });
+});
