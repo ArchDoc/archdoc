@@ -21,9 +21,11 @@ export {
   formatDiscovery,
   isDeploymentFile,
   isVerificationCode,
+  KEY_CODE_LIMIT,
   LEVEL_LIMITS,
   needsPerson,
   openWarnings,
+  plainWords,
 } from "./check/discovery.js";
 export { validateJourneys } from "./check/journeys.js";
 export { evidenceOf, isDevTooling, type ObservedDependency } from "./check/observed.js";

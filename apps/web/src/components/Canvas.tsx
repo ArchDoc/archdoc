@@ -29,6 +29,7 @@ import {
 import { buildDiffGraph, type DiffGraph } from "../graph/diff.js";
 import {
   buildGraph,
+  drawnChildIds,
   type Graph,
   journeyEdges,
   type Level,
@@ -45,6 +46,7 @@ import {
   type UntangledLayout,
 } from "../graph/layout.js";
 import { directRoute } from "../graph/route.js";
+import { actorLabel } from "../model/stories.js";
 import { edgeTypes, type RoutedEdge } from "./edges.js";
 import { Legend, type LegendKind, toneOf } from "./Legend.js";
 import {
@@ -477,7 +479,7 @@ export function Canvas(props: CanvasProps) {
             entered: crossings.get(at) === n.id,
             stores: focus?.stores.has(n.id),
             onToggle:
-              element && element.childIds.length > 0
+              element && drawnChildIds(model, element.id).length > 0
                 ? () => props.onToggle(element.id)
                 : n.kind === "system"
                   ? () => props.level?.onLevel("containers")
@@ -1002,7 +1004,7 @@ export function describe(model: Model, key: string, grouping?: Grouping) {
     return {
       family: "actor" as const,
       shape: "pill" as Shape,
-      label: a?.spec.name ?? a?.id ?? key,
+      label: a ? actorLabel(model, a.id) : key,
       kind: a?.spec.kind ?? "actor",
       detail: a?.spec.segment,
       status: a?.spec.status,

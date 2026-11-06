@@ -4,7 +4,6 @@ import { basename, dirname, join, posix } from "node:path";
 import {
   buildModel,
   COMPONENT_SIZE,
-  type CodeIndex,
   type EntryPoint,
   isDeploymentFile,
   isDevTooling,
@@ -18,14 +17,13 @@ import { type AnalyzerContext, contextFor } from "./api.js";
 import { type IacFindings, readIac } from "./iac.js";
 import { findEntryPoints, formatEntrySummary, placeEntries } from "./paths.js";
 import { analyze } from "./run.js";
-import { indexCode } from "./symbols.js";
 
 /**
  * A starting model for a repository that has none, from what the repository
  * declares: containers for packages and modules from their manifests,
  * components for the directories (or, in a flat package, the files) inside
- * each, and code for the files and functions inside each component;
- * datastores and queues from compose files; uses, at every level, from the
+ * each (code elements, at the functions a newcomer opens first, are left
+ * for whoever reads the code); datastores and queues from compose files; uses, at every level, from the
  * dependencies the analyzers see; and data
  * and contracts from schema files. Deterministic: no LLM, no network. Every
  * fact is marked inferred, for a person (or an agent) to review. What can't
@@ -39,7 +37,7 @@ export interface InitResult {
     elements: number;
     /** Components inside the containers. */
     components: number;
-    /** Code (files, functions, classes) inside the components. */
+    /** Code elements inside the components: none, since picking the key functions takes reading the code. */
     code: number;
     /** Uses at every level: between containers, components, and code. */
     uses: number;
@@ -155,11 +153,8 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     }
   }
 
-  // Components inside each container, and code inside each component.
-  const index = await indexCode(ctx).catch(
-    (): CodeIndex => ({ files: [...ctx.files], sources: [] }),
-  );
-  const exportsOf = new Map(index.sources.map((s) => [s.path, s.exports]));
+  // Components inside each container. No code elements: which functions a newcomer opens first
+  // takes reading the code, and one per file is too fine to read top-down.
   for (const unit of units.filter((u) => u.kind === "container" && u.code.length)) {
     const sources = files.filter(
       (f) => isSource(f) && inside(unit.dir, f) && ownerOf(units, f) === unit,
@@ -167,7 +162,7 @@ export async function inferModel(root: string, name?: string): Promise<InitResul
     // A small container stays lean: its few files are read as one part.
     unit.components =
       sources.filter((f) => !ENTRY_FILE.test(f)).length >= COMPONENT_SIZE.lean
-        ? components(unit.dir, sources, exportsOf)
+        ? components(unit.dir, sources)
         : [];
   }
 
@@ -326,7 +321,7 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
       : r.problems.length
         ? "✗ Wrote nothing: the model init inferred doesn't validate."
         : `Dry run: wrote nothing. It would write ${list(r.files.map((f) => f.path))}. To model the system, run archdoc init again without --dry-run, then follow the steps below.`,
-    `  ${s.elements} container${s.elements === 1 ? "" : "s"}, ${s.components} component${s.components === 1 ? "" : "s"} in them, ${s.code} code element${s.code === 1 ? "" : "s"} in those`,
+    `  ${s.elements} container${s.elements === 1 ? "" : "s"}, ${s.components} component${s.components === 1 ? "" : "s"} in them`,
     `  ${s.uses} use${s.uses === 1 ? "" : "s"}, ${s.datastores} datastore${s.datastores === 1 ? "" : "s"} or queue${s.datastores === 1 ? "" : "s"}, ${s.contracts} contract${s.contracts === 1 ? "" : "s"}, ${s.data} data entr${s.data === 1 ? "y" : "ies"}`,
     `  ${s.coverage.claimed} of ${s.coverage.total} source files (${pct}%) belong to an element`,
   ];
@@ -372,12 +367,13 @@ export function formatInit(r: InitResult & { written: boolean; refused?: string 
       "",
       "Everything is marked inferred, and tests and other verification code are left out. Next, with the code open:",
       "  1. Reshape it to the parts the README and deployment files name: about 3 to 12 per level.",
-      "     Fold per-file code into its component, group variants, rename what's named after build files.",
+      "     Group variants, and rename what's named after build files.",
       "     Give a big container (many directories, dozens of files) components; keep a small one lean.",
       "  2. Add what imports don't show: datastores, queues, externals, and the uses between services",
       "     over HTTP, queues, and schedulers. Find how each unconnected element is reached.",
       "  3. Describe each element: what it does, not what it's called (archdoc show <id> --code).",
-      "     Keep the layers nested: a component inside a container, code inside a component.",
+      "     Give each component 1 to 5 code elements at the functions a newcomer opens first",
+      "     (path#symbol), never one per file: the explorer lists them in the component's details.",
       `  4. Add actors from the entry points, and trace ${flows.length >= 3 ? "a journey for each main flow above" : "the main flows"} through the`,
       "     code with archdoc_paths (not grep), a step per hop, each with an action, the code where it",
       "     happens, and the data it carries (sends:, creates:, changes:).",
@@ -660,8 +656,6 @@ const TEST_FILE = /([._-](test|spec)\.[a-z]+$)|((^|\/)test_[^/]+\.py$)|(\.d\.ts$
 /** Files that wire a package together rather than do one job: they stay with their container. */
 const ENTRY_FILE =
   /(^|\/)(index|main|mod|lib|bin|cli|server|app|__init__|__main__|conftest)\.[a-z]+$/;
-/** What a code element can point at: a function or a class. */
-const CALLABLE = new Set(["function", "class"]);
 
 function isSource(f: string): boolean {
   return SOURCE.test(f) && !SKIP_DIR.test(f) && !TEST_FILE.test(f);
@@ -671,15 +665,13 @@ function inside(dir: string, f: string): boolean {
   return !dir || f.startsWith(`${dir}/`);
 }
 
-type Exports = Map<string, { name: string; kind: string; line: number }[]>;
-
 /**
  * A container's components: the directories its code is split into (looking
- * through src/, lib/, internal/, and the like), and the files beside them. Each component's code follows: its files, or a file's functions and
- * classes. A container with one part has no components; files that wire it
- * together (index.ts, main.go, __init__.py) stay with the container.
+ * through src/, lib/, internal/, and the like), and the files beside them. A
+ * container with one part has no components; files that wire it together
+ * (index.ts, main.go, __init__.py) stay with the container.
  */
-function components(dir: string, sources: string[], exportsOf: Exports, depth = 0): Unit[] {
+function components(dir: string, sources: string[], depth = 0): Unit[] {
   const prefix = dir ? `${dir}/` : "";
   const dirs = new Map<string, string[]>();
   const loose: string[] = [];
@@ -702,59 +694,21 @@ function components(dir: string, sources: string[], exportsOf: Exports, depth = 
   // One package inside, such as backend/app: its parts are one level down.
   const [only] = dirs;
   if (dirs.size === 1 && !loose.length && only && depth < 3) {
-    return components(only[0], only[1], exportsOf, depth + 1);
+    return components(only[0], only[1], depth + 1);
   }
   const keys = new Set<string>();
   const key = (k: string) => uniqueIn(keys, k);
   const out: Unit[] = [
-    ...[...dirs].map(([at, inside]) => ({
-      ...part(key(sanitize(basename(at))), at, "component", [`${at}/**`], "a code directory"),
-      components: filesAsCode(at, inside, exportsOf),
-    })),
-    // A file beside the directories, or in a flat package: each is a part, and its functions
-    // and classes are its code.
-    ...loose.map((f) => ({
-      ...part(key(sanitize(stem(basename(f)))), f, "component", [f], "a source file"),
-      components: symbolsAsCode(f, exportsOf),
-    })),
+    ...[...dirs.keys()].map((at) =>
+      part(key(sanitize(basename(at))), at, "component", [`${at}/**`], "a code directory"),
+    ),
+    // A file beside the directories, or in a flat package: each is a part.
+    ...loose.map((f) =>
+      part(key(sanitize(stem(basename(f)))), f, "component", [f], "a source file"),
+    ),
   ];
   return out.length >= 2 ? out.sort((a, b) => a.dir.localeCompare(b.dir)) : [];
 }
-
-/** A component directory's code: a code element per file, at its one function or class when it has one. */
-function filesAsCode(dir: string, files: string[], exportsOf: Exports): Unit[] {
-  const keys = new Set<string>();
-  return files
-    .filter((f) => !ENTRY_FILE.test(f))
-    .sort()
-    .map((f) => {
-      const callable = (exportsOf.get(f) ?? []).filter((x) => CALLABLE.has(x.kind));
-      const symbol = callable.length === 1 ? callable[0]?.name : undefined;
-      const k = uniqueIn(keys, sanitize(stem(f.slice(dir.length + 1)).replaceAll("/", "-")));
-      return { ...part(k, f, "code", [f], "a source file"), symbol };
-    });
-}
-
-/** A file component's code: its exported functions and classes, when it has more than one. */
-function symbolsAsCode(file: string, exportsOf: Exports): Unit[] {
-  const callable = (exportsOf.get(file) ?? [])
-    .filter((x) => CALLABLE.has(x.kind) && x.name !== "default")
-    .sort((a, b) => a.line - b.line);
-  if (callable.length < 2) return [];
-  const keys = new Set<string>();
-  return callable.map((x) => ({
-    ...part(
-      uniqueIn(keys, ID.test(x.name) ? x.name : sanitize(x.name)),
-      file,
-      "code",
-      [file],
-      `${x.kind} ${x.name}`,
-    ),
-    symbol: x.name,
-  }));
-}
-
-const ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 function part(key: string, dir: string, kind: Unit["kind"], code: string[], source: string): Unit {
   return {

@@ -232,6 +232,36 @@ describe("assessDiscovery", () => {
     const g = assessDiscovery(wide, []).gaps.find((x) => x.code === "done/level-too-wide");
     expect(g?.message).toContain("The top of the model holds 14 elements");
   });
+
+  it("keeps code elements to the few a newcomer opens first", () => {
+    const code = (n: number) =>
+      Array.from(
+        { length: n },
+        (_, i) => `f${i}: { kind: code, description: File ${i}., code: "api/f${i}.ts#run${i}" }`,
+      ).join("\n              ");
+    const m = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: perfile
+        elements:
+          api:
+            kind: container
+            description: The API.
+            code: api/**
+            elements:
+              ${code(7)}
+          web:
+            kind: container
+            description: The web app.
+            code: web/**
+            elements:
+              ${code(5).replaceAll("api/", "web/")}
+      `,
+    });
+    const g = assessDiscovery(m, []).gaps.filter((x) => x.code === "done/level-too-wide");
+    expect(g.map((x) => x.element)).toEqual(["api"]);
+    expect(g[0]?.message).toContain("api holds 7 code elements; keep 1 to 5");
+  });
 });
 
 describe("components by size", () => {
@@ -332,6 +362,26 @@ describe("actors", () => {
     expect(g).toHaveLength(1);
     expect(g[0]?.message).toMatch(/^scheduler is kind: agent, which is for AI agents/);
     expect(g[0]?.message).toContain("make it kind: system");
+  });
+
+  it("asks for a plain name for actors whose ID is kebab-case", () => {
+    const m = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: d
+        actors:
+          dashboard-user: { kind: person, description: Reads the dashboard. }
+          platform_team: { kind: team, description: Runs the cluster. }
+          nightly-scheduler: { kind: system, name: Nightly Scheduler, description: Starts the report. }
+          customer: { kind: person, description: Buys things. }
+      `,
+    });
+    const g = assessDiscovery(m, []).gaps.filter((x) => x.code === "done/actor-name");
+    expect(g).toHaveLength(1);
+    expect(g[0]?.message).toContain("dashboard-user → name: Dashboard User");
+    expect(g[0]?.message).toContain("platform_team → name: Platform Team");
+    expect(g[0]?.message).not.toContain("nightly-scheduler");
+    expect(g[0]?.message).not.toContain("customer");
   });
 });
 

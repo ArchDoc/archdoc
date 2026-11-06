@@ -99,51 +99,11 @@ export function CodeSection({
   const [showAll, setShowAll] = useState(false);
   const element = model.elements.get(elementId);
   if (!element) return null;
-  const stale = new Set(
-    ctx.codemap.stale.filter((s) => s.element === elementId).map((s) => s.pattern),
-  );
   const shown = showAll ? mapped : mapped.slice(0, 12);
 
   return (
     <>
-      <ul className="code-list">
-        {element.code.map((c, i) => {
-          const t = linkTarget(c.path, ctx.files);
-          // A symbol's lines, as the server found its declaration; written lines as they are.
-          const place = ctx.snippets?.[snippetKey(c)];
-          const found = place && "start" in place ? place : undefined;
-          const lines = found ? `${found.start}-${found.end}` : c.lines;
-          return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: a path can be listed again for another snippet.
-            <li key={`${c.path}#${i}`}>
-              {stale.has(c.path) ? (
-                <span className="code-missing" title="Fix the path in the model, or add the code">
-                  No files match <code>{c.path}</code>
-                </span>
-              ) : (
-                <>
-                  <code title={c.symbol ? `The declaration of ${c.symbol}` : undefined}>
-                    {snippetLabel(c)}
-                  </code>
-                  {found ? (
-                    <span className="code-lines">
-                      lines {found.start}–{found.end}
-                    </span>
-                  ) : null}
-                  {place && "problem" in place ? (
-                    <span className="code-missing" title={`${c.path} ${place.problem}`}>
-                      Doesn't match the code
-                    </span>
-                  ) : (
-                    <PathLinks repo={ctx.repo} path={t.path} isFile={t.isFile} lines={lines} />
-                  )}
-                </>
-              )}
-              {c.description ? <p>{c.description}</p> : null}
-            </li>
-          );
-        })}
-      </ul>
+      <CodeRefs model={model} elementId={elementId} ctx={ctx} />
       {ctx.files.size > 0 && mapped.length > 0 ? (
         <details className="files" open={mapped.length > 0 && mapped.length <= 12}>
           <summary>
@@ -168,6 +128,97 @@ export function CodeSection({
         </details>
       ) : null}
     </>
+  );
+}
+
+/** An element's code: paths, with links to each (at a symbol's lines when the server found them). */
+export function CodeRefs({
+  model,
+  elementId,
+  ctx,
+}: {
+  model: Model;
+  elementId: string;
+  ctx: CodeContext;
+}) {
+  const element = model.elements.get(elementId);
+  if (!element?.code.length) return null;
+  const stale = new Set(
+    ctx.codemap.stale.filter((s) => s.element === elementId).map((s) => s.pattern),
+  );
+  return (
+    <ul className="code-list">
+      {element.code.map((c, i) => {
+        const t = linkTarget(c.path, ctx.files);
+        // A symbol's lines, as the server found its declaration; written lines as they are.
+        const place = ctx.snippets?.[snippetKey(c)];
+        const found = place && "start" in place ? place : undefined;
+        const lines = found ? `${found.start}-${found.end}` : c.lines;
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a path can be listed again for another snippet.
+          <li key={`${c.path}#${i}`}>
+            {stale.has(c.path) ? (
+              <span className="code-missing" title="Fix the path in the model, or add the code">
+                No files match <code>{c.path}</code>
+              </span>
+            ) : (
+              <>
+                <code title={c.symbol ? `The declaration of ${c.symbol}` : undefined}>
+                  {snippetLabel(c)}
+                </code>
+                {found ? (
+                  <span className="code-lines">
+                    lines {found.start}–{found.end}
+                  </span>
+                ) : null}
+                {place && "problem" in place ? (
+                  <span className="code-missing" title={`${c.path} ${place.problem}`}>
+                    Doesn't match the code
+                  </span>
+                ) : (
+                  <PathLinks repo={ctx.repo} path={t.path} isFile={t.isFile} lines={lines} />
+                )}
+              </>
+            )}
+            {c.description ? <p>{c.description}</p> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * The code elements inside an element (its key functions, classes, and
+ * lines), each with what it does and links to it. The map doesn't draw them.
+ */
+export function KeyCode({
+  model,
+  ids,
+  ctx,
+  onSelect,
+}: {
+  model: Model;
+  ids: readonly string[];
+  ctx: CodeContext;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <ul className="key-code">
+      {ids.map((id) => {
+        const el = model.elements.get(id);
+        if (!el) return null;
+        return (
+          <li key={id}>
+            <button type="button" className="link" onClick={() => onSelect(`element:${id}`)}>
+              {el.spec.name ?? el.key}
+            </button>
+            {el.spec.description ? <p className="muted">{el.spec.description}</p> : null}
+            <CodeRefs model={model} elementId={id} ctx={ctx} />
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
