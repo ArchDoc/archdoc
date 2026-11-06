@@ -38,6 +38,8 @@ export const INIT_DESCRIPTION =
 
 /** The limits a level of the model is held to, so it can be read top-down. */
 export const LEVEL_LIMITS = { top: 12, children: 10 } as const;
+/** The most code elements one part names: the functions a newcomer opens first. */
+export const KEY_CODE_LIMIT = 5;
 
 /**
  * When a container needs components. With fewer than `lean` source files it
@@ -83,7 +85,7 @@ const ENTRY_COVERAGE = 0.8;
 
 /** One thing a model still lacks before it's done. */
 export interface DiscoveryGap {
-  /** done/backwards-use, done/use-in-family, done/use-two-levels, done/code-outside-parent, done/overlapping-code, done/one-file-component, done/generated-code, done/unmapped-deployment, done/outside-system, done/code-name, done/whole-file-code, done/no-key-code, done/duplicate-data, done/level-too-wide, done/thin-container, done/flat-container, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/data-undescribed, done/data-fields, done/agent-actor, done/step-elsewhere, done/coarse-step, done/step-whole-file, done/store-data, done/no-environments, done/undeployed. */
+  /** done/backwards-use, done/use-in-family, done/use-two-levels, done/code-outside-parent, done/overlapping-code, done/one-file-component, done/generated-code, done/unmapped-deployment, done/outside-system, done/code-name, done/whole-file-code, done/no-key-code, done/duplicate-data, done/level-too-wide, done/thin-container, done/flat-container, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/data-undescribed, done/data-fields, done/agent-actor, done/actor-name, done/step-elsewhere, done/coarse-step, done/step-whole-file, done/store-data, done/no-environments, done/undeployed. */
   code: string;
   message: string;
   element?: string | undefined;
@@ -214,18 +216,16 @@ export function assessDiscovery(
       message: `${parent ? `${parent} holds` : "The top of the model holds"} ${list.length} elements; aim for ${parent ? `3 to ${limit}` : `3 to ${limit}`}. Group them by what they're for, fold one-file elements into their neighbors, and make language or provider variants one element.`,
     });
   }
-  const codeHeavy = elements.filter(
-    (e) =>
-      e.spec.kind === "component" &&
-      e.childIds.filter((c) => model.elements.get(c)?.spec.kind === "code").length >
-        LEVEL_LIMITS.children,
-  );
-  for (const e of codeHeavy) {
-    const n = e.childIds.length;
+  // Code elements are the few functions a newcomer opens first, not a file list: one per file
+  // is too fine to read, and the code: glob already maps every file.
+  for (const e of elements) {
+    if (e.spec.kind === "code") continue;
+    const n = e.childIds.filter((c) => model.elements.get(c)?.spec.kind === "code").length;
+    if (n <= KEY_CODE_LIMIT) continue;
     gaps.push({
       code: "done/level-too-wide",
       element: e.id,
-      message: `${e.id} holds ${n} code elements. Fold them into its code: glob, and keep only the entry points and core functions a newcomer has to find by name.`,
+      message: `${e.id} holds ${n} code elements; keep 1 to ${KEY_CODE_LIMIT}. Remove the rest (its code: glob already maps their files), and keep the entry points and core functions a newcomer opens first, each at its symbol, never one per file.`,
     });
   }
 
@@ -500,6 +500,19 @@ export function assessDiscovery(
     gaps.push({
       code: "done/agent-actor",
       message: `${ids.join(", ")} ${ids.length === 1 ? "is" : "are"} kind: agent, which is for AI agents (an LLM or assistant that acts on its own), and ${ids.length === 1 ? "its" : "their"} description doesn't say ${ids.length === 1 ? "it's" : "they're"} one. If ${ids.length === 1 ? "it's" : "they're"} software that calls in, such as another service, a scheduler or CronJob, a CI job, or a webhook sender, make ${ids.length === 1 ? "it" : "them"} kind: system. If ${ids.length === 1 ? "it is" : "they are"} an AI agent, say so in the description.`,
+    });
+  }
+
+  // People, teams, and the systems that call in read in plain words: kebab-case says "a name in
+  // the code or infrastructure", which an actor isn't.
+  const coined = [...model.actors.values()].filter(
+    (a) => !a.spec.name?.trim() && /[-_]/.test(a.id),
+  );
+  if (coined.length) {
+    const shown = coined.slice(0, 12).map((a) => `${a.id} → name: ${plainWords(a.id)}`);
+    gaps.push({
+      code: "done/actor-name",
+      message: `Give ${coined.length === 1 ? "this actor" : "these actors"} a name: in plain words, the way people say it: ${shown.join("; ")}${coined.length > 12 ? `, and ${coined.length - 12} more` : ""}. Kebab-case is for names in the code and infrastructure (services, packages, tables); a person, team, or system that calls in isn't one. Keep the ID.`,
     });
   }
 
@@ -1070,6 +1083,15 @@ function codeTerms(e: ElementNode): string[] {
   return out;
 }
 
+/** An ID in plain words: "dashboard-user" is "Dashboard User". */
+export function plainWords(id: string): string {
+  return id
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((w) => (w[0] ?? "").toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 /** A name reduced to compare: lowercase letters and digits, without a plural s. */
 function nameRoot(name: string): string {
   const s = name.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -1173,6 +1195,7 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
     "done/data-fields",
     "done/no-actors",
     "done/agent-actor",
+    "done/actor-name",
     "done/few-journeys",
     "done/actor-without-journey",
     "done/uncovered-entry-points",
@@ -1196,7 +1219,7 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
   if (!ok) {
     out.push(
       "",
-      "Fix only with what the code shows: never add a use or a step you haven't seen in the code to clear a line here. Work through every line and warning before you hand the model over (a warning that a schema or type is missing means finding it in the code and mapping its fields). If one can't be fixed from the code, say why when you hand it over.",
+      "Fix only with what the code shows: never add a use or a step you haven't seen in the code to clear a line here. However big the repository, keep going until the model is done: don't stop to summarize, hand over part of it, or ask whether to go on. Work through every line and warning before you hand the model over (a warning that a schema or type is missing means finding it in the code and mapping its fields). If one can't be fixed from the code, say why when you hand it over.",
     );
   }
   return out.join("\n");

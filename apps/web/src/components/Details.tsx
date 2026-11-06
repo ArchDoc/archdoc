@@ -11,9 +11,9 @@ import {
 } from "@archdoc/core/browser";
 import type { ReactNode } from "react";
 import type { Compare } from "../model/compare.js";
-import { targetLabel } from "../model/stories.js";
+import { actorLabel, targetLabel } from "../model/stories.js";
 import type { LandscapeInfo, RecheckFact } from "../model/useModel.js";
-import { type CodeContext, CodeSection } from "./code.js";
+import { type CodeContext, CodeSection, KeyCode } from "./code.js";
 import { DataDetails, FieldDetails } from "./DataPanels.js";
 import { DeployedSection } from "./Infrastructure.js";
 
@@ -57,6 +57,9 @@ function ElementDetails(props: DetailsProps & { id: string }) {
   if (!view) return <Missing />;
   const { element: el } = view;
   const open = props.expanded.has(el.id);
+  // Code elements aren't drawn on the map: they're listed here, under Key code.
+  const keyCode = view.children.filter((c) => c.spec.kind === "code");
+  const parts = view.children.filter((c) => c.spec.kind !== "code");
   return (
     <div className="details">
       <Breadcrumbs
@@ -78,9 +81,9 @@ function ElementDetails(props: DetailsProps & { id: string }) {
       {el.spec.documentation ? <p>{el.spec.documentation}</p> : null}
       <Actions>
         <FocusButton {...props} />
-        {el.childIds.length ? (
+        {parts.length ? (
           <button type="button" className="btn" onClick={() => props.onToggle(el.id)}>
-            {open ? "Collapse" : `Open (${el.childIds.length} inside)`}
+            {open ? "Collapse" : `Open (${parts.length} inside)`}
           </button>
         ) : null}
       </Actions>
@@ -90,7 +93,7 @@ function ElementDetails(props: DetailsProps & { id: string }) {
           <Links
             items={view.owners.map((o) => ({
               key: `actor:${o}`,
-              label: o,
+              label: props.model.actors.has(o) ? actorLabel(props.model, o) : o,
               missing: !props.model.actors.has(o),
             }))}
             onSelect={props.onSelect}
@@ -98,6 +101,16 @@ function ElementDetails(props: DetailsProps & { id: string }) {
         </Block>
       ) : null}
       <DeployedSection model={props.model} id={el.id} onSelect={props.onSelect} />
+      {keyCode.length ? (
+        <Block title="Key code">
+          <KeyCode
+            model={props.model}
+            ids={keyCode.map((c) => c.id)}
+            ctx={props.code}
+            onSelect={props.onSelect}
+          />
+        </Block>
+      ) : null}
       {el.code.length || el.childIds.length ? (
         <Block title="Code">
           {el.code.length === 0 ? (
@@ -113,10 +126,10 @@ function ElementDetails(props: DetailsProps & { id: string }) {
       ) : null}
       <RelList title="Uses" rels={view.uses} side="to" {...props} />
       <RelList title="Used by" rels={view.usedBy} side="from" {...props} />
-      {view.children.length ? (
+      {parts.length ? (
         <Block title="Inside">
           <Links
-            items={view.children.map((c) => ({
+            items={parts.map((c) => ({
               key: `element:${c.id}`,
               label: c.spec.name ?? c.key,
               hint: c.spec.kind,
@@ -137,7 +150,7 @@ function ActorDetails(props: DetailsProps & { id: string }) {
   return (
     <div className="details">
       <p className="eyebrow">Actor · {actor.spec.kind}</p>
-      <h1>{actor.spec.name ?? actor.id}</h1>
+      <h1>{actorLabel(props.model, actor.id)}</h1>
       <Chips
         items={[actor.spec.segment, statusLabel(actor.spec.status), ...(actor.spec.members ?? [])]}
       />
@@ -188,7 +201,7 @@ function DomainDetails(props: DetailsProps & { id: string }) {
           <Links
             items={domain.owners.map((o) => ({
               key: `actor:${o}`,
-              label: model.actors.get(o)?.spec.name ?? o,
+              label: model.actors.has(o) ? actorLabel(model, o) : o,
               hint: model.actors.get(o)?.spec.kind,
             }))}
             onSelect={props.onSelect}

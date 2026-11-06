@@ -64,6 +64,8 @@ export function buildDiffGraph(
   for (const id of removed) {
     const parent = base.elements.get(id)?.parentId;
     if (parent && removed.has(parent)) continue;
+    // Code isn't drawn: its part shows the change.
+    if (base.elements.get(id)?.spec.kind === "code") continue;
     if (
       parent &&
       (!head.elements.has(parent) ||

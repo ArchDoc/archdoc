@@ -43,11 +43,12 @@ import {
   type Level,
   levelExpansion,
   levelOf,
+  shownId,
   systemBox,
 } from "./graph/graph.js";
 import { type GroupBy, type Grouping, groupLandscape } from "./graph/groups.js";
 import { type Compare, compareCode } from "./model/compare.js";
-import { journeyLanes, journeysByImportance } from "./model/stories.js";
+import { actorLabel, journeyLanes, journeysByImportance } from "./model/stories.js";
 import { landingTab, type Section, sectionOf, sections } from "./model/tabs.js";
 import { firstCause, readTraces } from "./model/traces.js";
 import {
@@ -346,7 +347,7 @@ function Explorer({
       const places = entries.map((e) => dataPlaces(model, e));
       const stores = places.flatMap((p) => p.stores);
       for (const id of [...stores, ...places.flatMap((p) => p.ends)].flatMap((id) =>
-        ancestorsOf(model, id),
+        ancestorsOf(model, shownId(model, id)),
       ))
         out.expanded.add(id);
       for (const id of stores) out.tables.add(id);
@@ -449,7 +450,7 @@ function Explorer({
       }
       if (key.startsWith("element:")) {
         setBoxed(false);
-        const hidden = ancestorsOf(model, key.slice(8));
+        const hidden = ancestorsOf(model, shownId(model, key.slice(8)));
         setExpanded((prev) =>
           hidden.every((a) => prev.has(a)) ? prev : new Set([...prev, ...hidden]),
         );
@@ -460,7 +461,7 @@ function Explorer({
         setCenterOn(`group:domain:${key.slice(7)}`);
         return;
       }
-      setCenterOn(key);
+      setCenterOn(key.startsWith("element:") ? `element:${shownId(model, key.slice(8))}` : key);
     },
     [model, tab, onTab, openJourney],
   );
@@ -678,8 +679,7 @@ function Explorer({
           <div className="story-title">
             <h1>{journey.spec.goal || journey.spec.name || journey.id}</h1>
             <p className="muted">
-              {journey.spec.name ?? journey.id} ·{" "}
-              {model.actors.get(journey.spec.actor)?.spec.name ?? journey.spec.actor} ·{" "}
+              {journey.spec.name ?? journey.id} · {actorLabel(model, journey.spec.actor)} ·{" "}
               <span className={`importance importance-${journey.spec.importance ?? "normal"}`}>
                 {journey.spec.importance ?? "normal"}
               </span>
