@@ -1,5 +1,6 @@
 import { filesUnder, locate, resolveCodeMap } from "../codemap/codemap.js";
 import { compileGlob, literalPrefix } from "../codemap/glob.js";
+import { isSnippet as isSnippetRef } from "../codemap/snippet.js";
 import { stepMessage } from "../data/flows.js";
 import type { ElementNode, JourneyStep, Model } from "../model.js";
 import { stepCodePath } from "../query/code-index.js";
@@ -82,7 +83,7 @@ const ENTRY_COVERAGE = 0.8;
 
 /** One thing a model still lacks before it's done. */
 export interface DiscoveryGap {
-  /** done/backwards-use, done/use-in-family, done/use-two-levels, done/code-outside-parent, done/overlapping-code, done/one-file-component, done/generated-code, done/unmapped-deployment, done/outside-system, done/duplicate-data, done/level-too-wide, done/thin-container, done/flat-container, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/data-undescribed, done/data-fields, done/agent-actor, done/step-elsewhere, done/coarse-step, done/store-data, done/no-environments, done/undeployed. */
+  /** done/backwards-use, done/use-in-family, done/use-two-levels, done/code-outside-parent, done/overlapping-code, done/one-file-component, done/generated-code, done/unmapped-deployment, done/outside-system, done/code-name, done/whole-file-code, done/no-key-code, done/duplicate-data, done/level-too-wide, done/thin-container, done/flat-container, done/undescribed, done/test-code, done/unmapped-code, done/orphan, done/no-system, done/no-actors, done/actor-without-journey, done/few-journeys, done/uncovered-entry-points, done/short-journey, done/journey-stops-short, done/step-detail, done/step-data, done/data-undescribed, done/data-fields, done/agent-actor, done/step-elsewhere, done/coarse-step, done/step-whole-file, done/store-data, done/no-environments, done/undeployed. */
   code: string;
   message: string;
   element?: string | undefined;
@@ -147,6 +148,18 @@ export interface DiscoveryAssessment {
     deploymentFilesMapped: number;
     /** Data entries that copy another one (the same name with a number after it). */
     dataDuplicates: number;
+    /** Containers, components, datastores, and queues (not tests), and how many sit inside a system element. */
+    ownParts: number;
+    insideSystem: number;
+    /** Containers and components whose code names a directory, package, or file, and how many are named after it (or, when it goes by several names, have a name:). */
+    nameable: number;
+    namedFromCode: number;
+    /** Code elements and journey steps that point at a source file, and how many point into it: a symbol or lines. */
+    codeRefs: number;
+    preciseCodeRefs: number;
+    /** Components and lean containers with source files, and how many have a code element at a symbol or lines. */
+    leafParts: number;
+    keyedParts: number;
   };
 }
 
@@ -727,18 +740,98 @@ export function assessDiscovery(
     });
   }
 
+  // The system's own parts sit inside it, so the context view shows one box with who uses it
+  // and what it calls around it, and the container view opens it. Only externals sit outside.
   const systems = elements.filter((e) => e.spec.kind === "system").map((e) => e.id);
+  const inSystem = (id: string) => systems.some((s) => id.startsWith(`${s}.`));
+  const ownParts = arch.filter((e) => e.spec.kind !== "external" && !testElements.includes(e.id));
+  // Name the outermost: what's inside a misplaced container moves with it.
   const outsideSystem = systems.length
-    ? arch
-        .filter((e) => e.spec.kind === "datastore" || e.spec.kind === "queue")
-        .filter((e) => !systems.some((s) => e.id.startsWith(`${s}.`)))
+    ? ownParts
+        .filter((e) => !inSystem(e.id))
+        .filter((e) => !e.parentId || inSystem(e.parentId) || !model.elements.get(e.parentId))
         .map((e) => e.id)
     : [];
   if (outsideSystem.length) {
     for (const id of outsideSystem) misshapen.add(id);
+    const [only] = systems;
+    const into =
+      systems.length === 1
+        ? ` (archdoc_edit rename to ${only}.<id>, such as ${only}.${outsideSystem[0]})`
+        : " (archdoc_edit rename)";
     gaps.push({
       code: "done/outside-system",
-      message: `${outsideSystem.join(", ")} ${outsideSystem.length === 1 ? "is" : "are"} the system's own ${outsideSystem.length === 1 ? "datastore or queue" : "datastores and queues"} but ${outsideSystem.length === 1 ? "sits" : "sit"} outside the system element. Move ${outsideSystem.length === 1 ? "it" : "them"} inside it (archdoc_edit rename), and keep only externals outside.`,
+      message: `${outsideSystem.slice(0, 12).join(", ")}${outsideSystem.length > 12 ? `, and ${outsideSystem.length - 12} more` : ""} ${outsideSystem.length === 1 ? "is part of the system but sits" : "are part of the system but sit"} outside the system element, so the context view draws ${outsideSystem.length === 1 ? "it" : "them"} beside the system instead of inside it, and looks like the container view. Move ${outsideSystem.length === 1 ? "it" : "each"} inside it${into}, and keep only externals outside.`,
+    });
+  }
+  const insideSystem = systems.length ? ownParts.filter((e) => inSystem(e.id)).length : 0;
+
+  // Names from the code: a newcomer who reads auth in the model looks for auth/ in the code.
+  const misnamed: string[] = [];
+  const unnamed: string[] = [];
+  let nameable = 0;
+  for (const e of elements) {
+    if (e.spec.kind !== "container" && e.spec.kind !== "component") continue;
+    if (testElements.some((t) => e.id === t || e.id.startsWith(`${t}.`))) continue;
+    if (generated.includes(e.id)) continue;
+    const terms = codeTerms(e);
+    if (!terms.length) continue;
+    nameable++;
+    const said = [e.key, e.spec.name ?? ""];
+    if (terms.some((t) => said.some((s) => sameName(s, t)))) continue;
+    const roots = [...new Set(terms.map(nameRoot))];
+    if (roots.length === 1) misnamed.push(`${e.id} → ${terms[0]}`);
+    else if (!e.spec.name?.trim()) unnamed.push(`${e.id} (${terms.slice(0, 3).join(", ")})`);
+  }
+  if (misnamed.length) {
+    gaps.push({
+      code: "done/code-name",
+      message: `Name ${misnamed.length === 1 ? "this part" : "these parts"} the way the code does, so a newcomer finds the code by the name: ${misnamed.slice(0, 12).join("; ")}${misnamed.length > 12 ? `, and ${misnamed.length - 12} more` : ""}. Rename each to the directory, package, or module its code: names (archdoc_edit rename keeps every reference).`,
+    });
+  }
+  if (unnamed.length) {
+    gaps.push({
+      code: "done/code-name",
+      message: `${unnamed.slice(0, 12).join("; ")}${unnamed.length > 12 ? `, and ${unnamed.length - 12} more` : ""}: ${unnamed.length === 1 ? "its code goes" : "their code goes"} by several names and ${unnamed.length === 1 ? "its ID matches" : "their IDs match"} none of them. Name ${unnamed.length === 1 ? "it" : "each"} after the term the code uses most, or give ${unnamed.length === 1 ? "it" : "each"} a name: in plain words that says what it is, such as name: Local Migration Scripts.`,
+    });
+  }
+  const namedFromCode = nameable - misnamed.length - unnamed.length;
+
+  // Code an auditor can check: each part names the functions and classes that do its work,
+  // not only whole files, so a reader opens the lines the model is about.
+  const wholeFile: string[] = [];
+  let codeElements = 0;
+  for (const e of elements) {
+    if (e.spec.kind !== "code" || !e.code.length) continue;
+    codeElements++;
+    if (!e.code.some(isSnippetRef)) wholeFile.push(e.id);
+  }
+  if (wholeFile.length) {
+    gaps.push({
+      code: "done/whole-file-code",
+      message: `${wholeFile.slice(0, 12).join(", ")}${wholeFile.length > 12 ? `, and ${wholeFile.length - 12} more` : ""} ${wholeFile.length === 1 ? "is a code element that points" : "are code elements that point"} at a whole file. Point each at the function, class, or lines it's about (code: { path, symbol }, path#symbol, or path:40-88), so a reader can check it; remove one a newcomer doesn't need by name.`,
+    });
+  }
+  const keyless: string[] = [];
+  let leafParts = 0;
+  for (const e of elements) {
+    const lean =
+      e.spec.kind === "container" &&
+      !e.childIds.some((c) => model.elements.get(c)?.spec.kind === "component");
+    if (e.spec.kind !== "component" && !lean) continue;
+    if (testElements.some((t) => e.id === t || e.id.startsWith(`${t}.`))) continue;
+    if (generated.includes(e.id) || !sourcesOf(e.id).length) continue;
+    leafParts++;
+    const keyed = e.childIds.some((c) => {
+      const child = model.elements.get(c);
+      return child?.spec.kind === "code" && child.code.some(isSnippetRef);
+    });
+    if (!keyed) keyless.push(e.id);
+  }
+  if (keyless.length) {
+    gaps.push({
+      code: "done/no-key-code",
+      message: `${keyless.slice(0, 12).join(", ")}${keyless.length > 12 ? `, and ${keyless.length - 12} more` : ""} ${keyless.length === 1 ? "maps" : "map"} only whole files and directories. Add 1 to 5 code elements inside each for the functions or classes a newcomer opens first (its entry point, the core logic), each kind: code with code: { path, symbol } (or path#symbol), so a reader can audit the model against those lines.`,
     });
   }
 
@@ -759,6 +852,8 @@ export function assessDiscovery(
       (c) => model.elements.get(c)?.spec.kind !== "code",
     );
   let steps = 0;
+  let stepCode = 0;
+  let preciseStepCode = 0;
   let completeJourneys = 0;
   let detailedSteps = 0;
   let preciseSteps = 0;
@@ -797,6 +892,7 @@ export function assessDiscovery(
       });
     }
     const thin: number[] = [];
+    const whole: number[] = [];
     const coarse: number[] = [];
     const elsewhere: string[] = [];
     for (const s of j.steps) {
@@ -811,6 +907,12 @@ export function assessDiscovery(
       const needsCode = s.to?.type !== "actor" && coded;
       if (said && (located || (!code && !needsCode))) detailedSteps++;
       else thin.push(s.index + 1);
+      // A source file named whole: the function (#symbol) or lines (:40-88) say where in it.
+      if (code && located && fileSet.has(code) && SOURCE.test(code)) {
+        stepCode++;
+        if (STEP_SNIPPET.test(s.spec.code ?? "")) preciseStepCode++;
+        else whole.push(s.index + 1);
+      }
       // The step's code should be its own: in the element it's from or to, or inside one.
       const owner = code && located ? locate(model, code).element?.id : undefined;
       const endIds = [s.from, s.to].flatMap((t) => (t?.type === "element" ? [t.id] : []));
@@ -836,6 +938,13 @@ export function assessDiscovery(
         code: "done/step-elsewhere",
         journey: j.id,
         message: `Journey "${j.id}": ${elsewhere.join(", ")}, not in the elements the step names. Put each step on the elements whose code does the work, a hop for each, so the journey leads a newcomer through the code.`,
+      });
+    }
+    if (whole.length) {
+      gaps.push({
+        code: "done/step-whole-file",
+        journey: j.id,
+        message: `Journey "${j.id}", step${whole.length === 1 ? "" : "s"} ${whole.join(", ")}: code names a whole file. Add the function or method where the step happens (path#functionName), or its lines (path:40-88), so a reader lands on them.`,
       });
     }
     if (coarse.length) {
@@ -884,8 +993,95 @@ export function assessDiscovery(
       elementsMisshapen: arch.filter((e) => misshapen.has(e.id)).length,
       deploymentFilesMapped: deploymentFiles.length - unmappedDeployment.length,
       dataDuplicates: duplicates.length,
+      ownParts: ownParts.length,
+      insideSystem,
+      nameable,
+      namedFromCode,
+      codeRefs: codeElements + stepCode,
+      preciseCodeRefs: codeElements - wholeFile.length + preciseStepCode,
+      leafParts,
+      keyedParts: leafParts - keyless.length,
     },
   };
+}
+
+/** A step's code that points into a file: path#symbol or path:40(-88). */
+const STEP_SNIPPET = /#[^/#]+$|:\d+(-\d+)?$/;
+
+/**
+ * Directory names that say where code sits, not what it is: an element isn't
+ * named after src/ or internal/, but after the directory inside it.
+ */
+const GENERIC_DIR = new Set([
+  "src",
+  "source",
+  "sources",
+  "lib",
+  "libs",
+  "app",
+  "apps",
+  "internal",
+  "pkg",
+  "packages",
+  "package",
+  "services",
+  "cmd",
+  "main",
+  "java",
+  "kotlin",
+  "scala",
+  "python",
+  "go",
+  "com",
+  "org",
+  "net",
+  "io",
+  "modules",
+  "code",
+  "projects",
+]);
+
+/**
+ * The codebase's own names for what an element's code: points at: for each
+ * path, the last directory (or a file's name, and its directory) that isn't a
+ * generic one such as src/ or internal/.
+ */
+function codeTerms(e: ElementNode): string[] {
+  const out: string[] = [];
+  for (const c of e.code) {
+    // Deployment files and docs a container maps don't name it.
+    if (!SOURCE.test(c.path) && !/[*?]|\/$/.test(c.path) && /\.[A-Za-z0-9]+$/.test(c.path))
+      continue;
+    if (/(^|\/)(Dockerfile|Containerfile|Makefile|Procfile|Jenkinsfile)[^/]*$/.test(c.path))
+      continue;
+    const parts = c.path
+      .replace(/^\.\//, "")
+      .split("/")
+      .filter((p) => p && !/[*?{}[\]]/.test(p));
+    const file = /\.[A-Za-z0-9]+$/.test(parts.at(-1) ?? "") && !/[*?]/.test(c.path);
+    const named = parts
+      .map((p, i) => (file && i === parts.length - 1 ? p.replace(/\.[^.]+$/, "") : p))
+      .filter((p) => !GENERIC_DIR.has(p.toLowerCase()));
+    // A path that's only generic directories (internal/**) says nothing the name can match:
+    // the name may come from a manifest, so leave it to the reader.
+    if (!named.length) return [];
+    for (const t of named.slice(file ? -2 : -1)) if (!out.includes(t)) out.push(t);
+  }
+  return out;
+}
+
+/** A name reduced to compare: lowercase letters and digits, without a plural s. */
+function nameRoot(name: string): string {
+  const s = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return s.length > 3 && s.endsWith("s") ? s.slice(0, -1) : s;
+}
+
+/** Whether a name is the code's term: one contains the other, ignoring case, punctuation, and plurals. */
+function sameName(name: string, term: string): boolean {
+  const a = nameRoot(name);
+  const b = nameRoot(term);
+  if (a.length < 2 || b.length < 2) return a === b;
+  return a.includes(b) || (b.includes(a) && a.length >= 3);
 }
 
 /**
@@ -939,7 +1135,7 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
     .join(" and ");
   out.push(
     ok
-      ? "✓ The model is done: every level is small, every element is described and connected, no test code is modeled, the main flows are journeys that say what they carry, and the model says where it runs."
+      ? "✓ The model is done: every level is small and inside the system, every element is named as the code names it, described, and connected, its code points at the functions that do the work, no test code is modeled, the main flows are journeys that say what they carry, and the model says where it runs."
       : `✗ Not done yet: ${plural(a.gaps.length, "thing")} to finish${found ? `, and archdoc check has ${found} to fix` : ""}.`,
     "",
     `  ${s.described} of ${s.elements} elements described, ${s.orphans.length} unconnected, widest level ${s.widestLevel}`,
@@ -947,6 +1143,7 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
     `  ${s.testElements.length} test or verification element${s.testElements.length === 1 ? "" : "s"}; ${s.testFilesModeled} of ${s.testFiles} test files modeled`,
     `  ${s.actors} actor${s.actors === 1 ? "" : "s"}, ${s.journeys} journey${s.journeys === 1 ? "" : "s"}, ${s.detailedSteps} of ${s.steps} steps with an action and code`,
     `  ${s.dataStepsDescribed} of ${s.dataSteps} steps across a boundary say what they carry; ${s.storesDescribed} of ${s.stores} datastores and queues say what they hold; ${s.dataDefined} of ${s.dataEntries} data entries have fields`,
+    `  ${s.insideSystem} of ${s.ownParts} containers, datastores, and queues inside the system; ${s.namedFromCode} of ${s.nameable} parts named as the code names them; ${s.preciseCodeRefs} of ${s.codeRefs} code references point at a function or lines`,
     `  ${s.deployed} of ${s.deployable} containers, datastores, and queues say where they run (${s.deploymentFiles} deployment file${s.deploymentFiles === 1 ? "" : "s"})${s.entryPoints ? `; journeys reach ${s.entryPointsCovered} of ${s.entryPoints} entry points` : ""}`,
   );
   const order = [
@@ -962,6 +1159,7 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
     "done/orphan",
     "done/no-system",
     "done/outside-system",
+    "done/code-name",
     "done/backwards-use",
     "done/use-in-family",
     "done/use-two-levels",
@@ -984,6 +1182,9 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
     "done/step-data",
     "done/step-elsewhere",
     "done/coarse-step",
+    "done/whole-file-code",
+    "done/no-key-code",
+    "done/step-whole-file",
   ];
   const sorted = [...a.gaps].sort((x, y) => order.indexOf(x.code) - order.indexOf(y.code));
   if (sorted.length) out.push("");

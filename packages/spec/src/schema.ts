@@ -71,7 +71,11 @@ export const UsesSchema = z
   .describe("Outgoing relationships, keyed by the target's reference");
 
 export const CodeRefSchema = z.union([
-  z.string(),
+  z
+    .string()
+    .describe(
+      "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88",
+    ),
   z.strictObject({
     path: z.string().min(1).describe("A file, directory, or glob relative to the repo root"),
     description: z.string().optional(),

@@ -585,3 +585,113 @@ describe("shape", () => {
     expect(shapeCodes).toEqual([]);
   });
 });
+
+describe("the system, names from the code, and code a reader can audit", () => {
+  const codeFiles = [
+    "src/auth/login.ts",
+    "src/auth/session.ts",
+    "src/orders/place-order.ts",
+    "src/orders/repo.ts",
+    "scripts/migrate-local.ts",
+    "db/seed-local.ts",
+    "catalog/main.go",
+  ];
+  const m = model({
+    "archdoc.yaml": `
+      archdoc: "2.0"
+      namespace: shop
+      elements:
+        shop:
+          kind: system
+          elements:
+            api:
+              kind: container
+              description: The shop's API.
+              code: src/**
+              elements:
+                identity:
+                  kind: component
+                  description: Signs people in.
+                  code: src/auth/**
+                  elements:
+                    login: { kind: code, description: Checks a password., code: src/auth/login.ts }
+                orders:
+                  kind: component
+                  description: Places orders.
+                  code: src/orders/**
+                  elements:
+                    place: { kind: code, description: Places an order., code: "src/orders/place-order.ts#placeOrder" }
+                dev-data:
+                  kind: component
+                  description: Loads local data.
+                  code: [scripts/**, db/**]
+        catalog:
+          kind: container
+          description: Lists products.
+          code: catalog/**
+        stripe: { kind: external, description: Takes payments. }
+      journeys:
+        buy:
+          actor: shopper
+          goal: Buy
+          steps:
+            - { from: api.orders, to: api.identity, action: Checks the session, code: src/auth/session.ts }
+            - { from: api.identity, to: api.orders, action: Places the order, code: "src/orders/place-order.ts#placeOrder" }
+            - { from: api.orders, to: api.orders, action: Saves it, code: "src/orders/repo.ts:3-9" }
+    `,
+  });
+  const a = assessDiscovery(m, codeFiles);
+  const gap = (code: string) =>
+    a.gaps
+      .filter((g) => g.code === code)
+      .map((g) => g.message)
+      .join("\n");
+
+  it("asks for a container outside the system to move inside it", () => {
+    expect(gap("done/outside-system")).toContain("catalog");
+    expect(gap("done/outside-system")).toContain("shop.catalog");
+    expect(gap("done/outside-system")).not.toContain("stripe");
+    expect(a.stats.insideSystem).toBe(4);
+    expect(a.stats.ownParts).toBe(5);
+  });
+
+  it("asks for names the code uses, or a plain name when it uses several", () => {
+    expect(gap("done/code-name")).toContain("shop.api.identity → auth");
+    expect(gap("done/code-name")).toContain("shop.api.dev-data (scripts, db)");
+    expect(gap("done/code-name")).toContain("name: Local Migration Scripts");
+    expect(gap("done/code-name")).not.toContain("shop.api.orders");
+    const named = model({
+      "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: shop
+        elements:
+          dev-data: { kind: container, name: Local Migration Scripts, code: [scripts/**, db/**] }
+          internals: { kind: container, code: internal/** }
+      `,
+    });
+    expect(assessDiscovery(named, codeFiles).gaps.map((g) => g.code)).not.toContain(
+      "done/code-name",
+    );
+  });
+
+  it("asks for code elements and steps at a function or lines, not a whole file", () => {
+    expect(gap("done/whole-file-code")).toContain("shop.api.identity.login");
+    expect(gap("done/whole-file-code")).not.toContain("shop.api.orders.place");
+    // identity's only code element is a whole file; dev-data and catalog have none.
+    expect(gap("done/no-key-code")).toContain("shop.api.identity");
+    expect(gap("done/no-key-code")).toContain("shop.api.dev-data");
+    expect(gap("done/no-key-code")).toContain("catalog");
+    expect(gap("done/no-key-code")).not.toContain("shop.api.orders,");
+    expect(gap("done/step-whole-file")).toMatch(/step 1:/);
+    expect(a.stats.codeRefs).toBe(5);
+    expect(a.stats.preciseCodeRefs).toBe(3);
+  });
+
+  it("scores them", () => {
+    const d = scoreDiscovery(m, m, codeFiles, scoreModel(m, m, codeFiles));
+    expect(d.system).toBeCloseTo(4 / 5);
+    expect(d.codeNames).toBeCloseTo(2 / 4);
+    expect(d.codePrecision).toBeCloseTo(3 / 5);
+    expect(d.keyCode).toBeCloseTo(1 / 4);
+  });
+});

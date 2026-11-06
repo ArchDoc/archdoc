@@ -708,7 +708,8 @@
                   {
                     "anyOf": [
                       {
-                        "type": "string"
+                        "type": "string",
+                        "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                       },
                       {
                         "type": "object",
@@ -751,7 +752,8 @@
                     "items": {
                       "anyOf": [
                         {
-                          "type": "string"
+                          "type": "string",
+                          "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                         },
                         {
                           "type": "object",
@@ -914,7 +916,8 @@
                   {
                     "anyOf": [
                       {
-                        "type": "string"
+                        "type": "string",
+                        "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                       },
                       {
                         "type": "object",
@@ -957,7 +960,8 @@
                     "items": {
                       "anyOf": [
                         {
-                          "type": "string"
+                          "type": "string",
+                          "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                         },
                         {
                           "type": "object",
@@ -1628,7 +1632,8 @@
                   {
                     "anyOf": [
                       {
-                        "type": "string"
+                        "type": "string",
+                        "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                       },
                       {
                         "type": "object",
@@ -1671,7 +1676,8 @@
                     "items": {
                       "anyOf": [
                         {
-                          "type": "string"
+                          "type": "string",
+                          "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                         },
                         {
                           "type": "object",
@@ -1946,7 +1952,8 @@
                 {
                   "anyOf": [
                     {
-                      "type": "string"
+                      "type": "string",
+                      "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                     },
                     {
                       "type": "object",
@@ -1989,7 +1996,8 @@
                   "items": {
                     "anyOf": [
                       {
-                        "type": "string"
+                        "type": "string",
+                        "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                       },
                       {
                         "type": "object",
@@ -2128,7 +2136,8 @@
             {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                 },
                 {
                   "type": "object",
@@ -2171,7 +2180,8 @@
               "items": {
                 "anyOf": [
                   {
-                    "type": "string"
+                    "type": "string",
+                    "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                   },
                   {
                     "type": "object",
@@ -2600,7 +2610,8 @@
                     {
                       "anyOf": [
                         {
-                          "type": "string"
+                          "type": "string",
+                          "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                         },
                         {
                           "type": "object",
@@ -2643,7 +2654,8 @@
                       "items": {
                         "anyOf": [
                           {
-                            "type": "string"
+                            "type": "string",
+                            "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                           },
                           {
                             "type": "object",
@@ -2769,7 +2781,8 @@
                           {
                             "anyOf": [
                               {
-                                "type": "string"
+                                "type": "string",
+                                "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                               },
                               {
                                 "type": "object",
@@ -2812,7 +2825,8 @@
                             "items": {
                               "anyOf": [
                                 {
-                                  "type": "string"
+                                  "type": "string",
+                                  "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                                 },
                                 {
                                   "type": "object",
@@ -2984,7 +2998,8 @@
             {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                 },
                 {
                   "type": "object",
@@ -3027,7 +3042,8 @@
               "items": {
                 "anyOf": [
                   {
-                    "type": "string"
+                    "type": "string",
+                    "description": "A file, directory, or glob relative to the repo root; or a snippet of a file: path#symbol, path:40, or path:40-88"
                   },
                   {
                     "type": "object",

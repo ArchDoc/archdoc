@@ -4,6 +4,7 @@ import {
   check,
   findSnippet,
   formatCode,
+  normalizeCode,
   resolveSnippets,
   snippetKey,
 } from "../src/index.js";
@@ -119,5 +120,19 @@ elements:
         "14 | }",
       ].join("\n"),
     );
+  });
+});
+
+describe("code written with its snippet", () => {
+  it("reads path#symbol and path:40-88 the way journey steps write them", () => {
+    expect(normalizeCode("src/refunds.ts#Refunds.approve")).toEqual([
+      { path: "src/refunds.ts", symbol: "Refunds.approve" },
+    ]);
+    expect(normalizeCode(["src/refunds.ts:40-88", "src/a.ts:7", "src/**", "web/"])).toEqual([
+      { path: "src/refunds.ts", lines: "40-88" },
+      { path: "src/a.ts", lines: "7" },
+      { path: "src/**" },
+      { path: "web/" },
+    ]);
   });
 });

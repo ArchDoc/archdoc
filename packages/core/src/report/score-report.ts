@@ -52,7 +52,7 @@ export function formatDiscoveryScore(d: DiscoveryScore, verbose = false): string
     `  ${"Mapped".padEnd(14)} ${pct(d.mapped)} of source files belong to an element`,
     `  ${"Connected".padEnd(14)} ${pct(d.connected)} of elements`,
     `  ${"Described".padEnd(14)} ${pct(d.described)} of elements`,
-    `  ${"System".padEnd(14)} ${d.system ? "yes" : "no"}`,
+    `  ${"System".padEnd(14)} ${pct(d.system)} of containers, datastores, and queues inside a system`,
     `  ${"Step data".padEnd(14)} ${pct(d.stepData)} of steps across a boundary say what they carry`,
     `  ${"Store data".padEnd(14)} ${pct(d.storeData)} of datastores and queues say what they hold`,
     `  ${"Data fields".padEnd(14)} ${pct(d.dataFields)} of data entries have fields or a schema source`,
@@ -73,6 +73,9 @@ export function formatDiscoveryScore(d: DiscoveryScore, verbose = false): string
           `  ${"Deploy mapped".padEnd(14)} ${pct(d.deploymentMapped)} of deployment files an environment or element maps`,
         ]),
     `  ${"Data distinct".padEnd(14)} ${pct(d.dataDistinct)} of data entries aren't numbered copies`,
+    `  ${"Code names".padEnd(14)} ${pct(d.codeNames)} of containers and components named as their code is`,
+    `  ${"Code precision".padEnd(14)} ${pct(d.codePrecision)} of code elements and steps point at a function or lines`,
+    `  ${"Key code".padEnd(14)} ${pct(d.keyCode)} of components name the functions that do their work`,
   ];
   if (verbose && d.journeys.missed.length) {
     out.push(`  missed journeys: ${d.journeys.missed.join(", ")}`);
