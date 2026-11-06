@@ -1,6 +1,6 @@
 {
   "name": "@archdoc/cli",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "The archdoc command-line tool.",
   "license": "MIT",
   "type": "module",

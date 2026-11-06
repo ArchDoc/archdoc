@@ -1,5 +1,25 @@
 # @archdoc/core
 
+## 0.7.0
+
+### Minor Changes
+
+- cc5f29e: The explorer's branch diff now reads the change from code, not from the other branch's model. Branch 1 (the working tree by default) is compared with branch 2 (main by default): the files changed since their merge base are analyzed at both ends and read into branch 1's model as elements whose code changed, was added, or was removed, uses the code added or dropped, proposed elements for new code no element maps, and new entry points, each marked with whether the model already says it. New in core: `deriveCodeChange` and `projectCodeChange`; in analyzers: `codeChange`. `archdoc view --base` and `archdoc site --base` take a branch only; compare two model files with `archdoc diff`.
+- e038693: `archdoc check --done` flags a model's shape, not only what it's missing, so an agent fixes what a reader trips over before handing the model over: a queue or datastore that uses its own consumers, an element that uses its own parent or child, the same call listed to an element and to a part inside it, a child whose code isn't inside its parent's, siblings whose `code:` claims the same files (a `code: **`), a one-file helper component in a big container, generated code (protobuf and gRPC stubs) modeled as a part, deployment files no environment maps, datastores and queues outside the system, and numbered copies of data entries (`CartItem2`). `scoreDiscovery` scores them as four new parts: uses shape, code shape, deploy mapped, and data distinct. `genproto/` and `__generated__/` directories count as generated code.
+- 5f9749f: Agents find and change the model by ID, instead of reading `.archdoc/` and editing its YAML by hand. Two new MCP tools, each with a CLI command of the same name:
+  
+  - `archdoc_find` (`archdoc find`) lists parts of the model by words, by place (`under` an element), by the file they own (`path`, the owner first), by `type` and `kind`, or by what they still lack (`missing`: a description, code, uses, a deploy, fields, or a journey), each with its ID, code, uses, and where it's written. `outline: true` (`--outline`) shows the element tree with each element's code and uses.
+  - `archdoc_edit` (`archdoc edit`) takes a list of ops by ID and runs them in order: `add` (an element inside the parent its ID names, with the kind of the level below, an actor, a data entry, a journey in its own file, an environment, or a deployment node), `set` (a JSON merge patch), `remove` (an element with what's inside it and the uses of it), `rename` (renames or moves, and rewrites every reference: uses, journey steps, sends, stores, owners), `use`, and `step` (append, insert, merge, or remove a journey step). It writes only the lines each op touches, so comments and formatting stay; writes all ops or none, refusing an edit that would add errors to the model; and answers with what each op did, the findings it fixed, new warnings, and code paths that match no file. `by` marks what it adds `provenance: { source: suggested }`.
+  
+  The skill and AGENTS.md tell agents to model a repository with them, a step of work per call.
+  
+  `archdoc seal` points a journey step's fact at its file when the step's `code` names a function (`orders/src/checkout.ts#placeOrder`), as the skill asks; before, it matched no file.
+
+### Patch Changes
+
+- 0f86d2d: `archdoc edit` takes the shorter shapes agents write: `stores` as a list or `{ Order: "what it keeps" }`, `uses` as a list on a new element, a data entry without `kind` (entity), an `add` without `type`, and `data:Order`-style IDs. An edit refused for its shape now says the shapes the schema wants. The skill says to change the model only with `archdoc_edit` once it exists, and the agent eval counts find, edit, and hand edits of `.archdoc/`.
+- @archdoc/spec@0.7.0
+
 ## 0.6.3
 
 ### Patch Changes
