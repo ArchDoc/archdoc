@@ -458,6 +458,8 @@ class Editor {
         const full = parent ? `${parent}.${key}` : key;
         if (this.index.elements.has(full))
           throw new EditError(`${full} already exists. Use set to change it.`);
+        // Code at a symbol or lines is a code element, whatever level it's added at.
+        if (value.kind === undefined && parent && pointsIntoFile(value.code)) value.kind = "code";
         if (value.kind === undefined)
           value.kind = childKind(parent ? this.kindOf(parent) : undefined);
         const site = parent ? this.index.elements.get(parent) : this.sectionFile("elements");
@@ -1181,6 +1183,19 @@ function preferShallow(candidates: string[]): string | undefined {
   const min = Math.min(...candidates.map(depth));
   const top = candidates.filter((c) => depth(c) === min);
   return top.length === 1 ? top[0] : undefined;
+}
+
+/** Whether a code: points into a file (path#symbol, path:40-88, or { symbol } or { lines }). */
+function pointsIntoFile(code: unknown): boolean {
+  const refs = Array.isArray(code) ? code : code === undefined ? [] : [code];
+  return (
+    refs.length > 0 &&
+    refs.every((c) =>
+      typeof c === "string"
+        ? /#[^/#]+$|:\d+(-\d+)?$/.test(c)
+        : !!c && typeof c === "object" && ("symbol" in c || "lines" in c),
+    )
+  );
 }
 
 /** Kinds that sit beside a system rather than inside it. */

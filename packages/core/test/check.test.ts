@@ -191,4 +191,17 @@ describe("check", () => {
     // Code needs no relationships of its own; its component is judged with it.
     expect(found.filter((f) => f.startsWith("model/orphan-element"))).toEqual([]);
   });
+
+  it("lets a container with no components hold its code elements directly", () => {
+    const lean = model({
+      "archdoc.yaml": root(`
+        elements:
+          worker:
+            kind: container
+            elements:
+              triage: { kind: code, code: "worker/triage.py#triage" }
+      `),
+    });
+    expect(check(lean).findings.map((f) => f.code)).not.toContain("model/code-outside-component");
+  });
 });

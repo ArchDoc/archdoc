@@ -212,6 +212,19 @@ describe("editModel", () => {
     expect(errors(r.model)).toEqual([]);
   });
 
+  it("adds an element whose code is a symbol or lines as code", () => {
+    const r = edit({
+      op: "add",
+      type: "element",
+      id: "web.checkout",
+      spec: { description: "Places the order.", code: "web/src/checkout.ts#placeOrder" },
+    });
+    expect(r.model.elements.get("shop.web.checkout")?.spec.kind).toBe("code");
+    expect(r.model.elements.get("shop.web.checkout")?.code).toEqual([
+      { path: "web/src/checkout.ts", symbol: "placeOrder" },
+    ]);
+  });
+
   it("adds, updates, and removes uses, written as short as they resolve", () => {
     const added = edit({ op: "use", from: "orders.store", to: "shop.web", spec: "Calls back" });
     expect(added.done).toEqual(["Added the use shop.orders.store -> shop.web (as web)."]);

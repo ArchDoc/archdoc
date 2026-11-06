@@ -348,11 +348,20 @@ function misplaced(model: Model): Finding[] {
         location: e.location,
       });
     }
-    if (e.spec.kind === "code" && !within(e, "component")) {
+    // A lean container has no components: its code elements sit in it directly.
+    const lean = (() => {
+      for (let p = e.parentId; p; p = model.elements.get(p)?.parentId) {
+        const c = model.elements.get(p);
+        if (c?.spec.kind === "container")
+          return !c.childIds.some((k) => model.elements.get(k)?.spec.kind === "component");
+      }
+      return false;
+    })();
+    if (e.spec.kind === "code" && !within(e, "component") && !lean) {
       out.push({
         severity: "warning",
         code: "model/code-outside-component",
-        message: `${e.id} is code ${where}, not inside a component. Move it into the component it is part of, or add a component for it.`,
+        message: `${e.id} is code ${where}, not inside a component. Move it into the component it is part of (code sits directly in a container only when the container has no components).`,
         element: e.id,
         evidence: [],
         files: e.location ? [e.location.file] : [],

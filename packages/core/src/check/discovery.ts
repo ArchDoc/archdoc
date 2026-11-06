@@ -831,7 +831,7 @@ export function assessDiscovery(
   if (keyless.length) {
     gaps.push({
       code: "done/no-key-code",
-      message: `${keyless.slice(0, 12).join(", ")}${keyless.length > 12 ? `, and ${keyless.length - 12} more` : ""} ${keyless.length === 1 ? "maps" : "map"} only whole files and directories. Add 1 to 5 code elements inside each for the functions or classes a newcomer opens first (its entry point, the core logic), each kind: code with code: { path, symbol } (or path#symbol), so a reader can audit the model against those lines.`,
+      message: `${keyless.slice(0, 12).join(", ")}${keyless.length > 12 ? `, and ${keyless.length - 12} more` : ""} ${keyless.length === 1 ? "maps" : "map"} only whole files and directories. Add 1 to 5 code elements inside each for the functions or classes a newcomer opens first (its entry point, the core logic), each kind: code with code: { path, symbol } (or path#symbol), so a reader can audit the model against those lines. In a container without components they go directly in the container: don't add a component to hold them.`,
     });
   }
 
