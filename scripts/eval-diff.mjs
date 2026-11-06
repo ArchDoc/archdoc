@@ -16,8 +16,9 @@
 // It calls a model, so it costs money: with --changed it runs only when the
 // change since that ref touches DIFF_PATHS in scripts/eval-diff-lib.mjs (the
 // differ, the code map, the compare API, the Diff tab, the skills' lines about
-// the diff, and this eval), and otherwise exits 0 having spent nothing. CI
-// runs it that way (.github/workflows/eval-diff.yml). The free half, the Diff
+// the diff, and this eval), and otherwise exits 0 having spent nothing.
+// --check-only says whether it would run, and stops. It runs by hand, with
+// the claude CLI signed in, like eval-agent.mjs. The free half, the Diff
 // tab on the same scenarios, runs in pnpm test
 // (packages/analyzers/test/diff-evals.test.ts).
 //
@@ -101,9 +102,6 @@ const prompt = flag(
 
 if (changedSince) {
   const reasons = diffEvalReasons(changedSince);
-  // For CI: whether to install, build, and run, as a step output.
-  if (process.env.GITHUB_OUTPUT)
-    writeFileSync(process.env.GITHUB_OUTPUT, `run=${reasons.length > 0}\n`, { flag: "a" });
   if (!reasons.length) {
     console.log(`Skipped: nothing the branch diff depends on changed since ${changedSince}.`);
     process.exit(0);
@@ -399,5 +397,3 @@ if (failed.length) {
 }
 writeFileSync(join(out, "report.md"), `${lines.join("\n")}\n`);
 console.log(`\n${lines.join("\n")}\n\nWrote ${join(out, "report.md")} and results.json.`);
-if (process.env.GITHUB_STEP_SUMMARY)
-  writeFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`, { flag: "a" });

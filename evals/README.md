@@ -219,6 +219,7 @@ scenarios, and runs only when the change touches the branch diff:
 pnpm build
 pnpm eval:diff                        # every scenario, once
 pnpm eval:diff --changed origin/main  # only if the change since main touches the diff
+pnpm eval:diff --changed origin/main --check-only  # would it run, and why
 pnpm eval:diff move-payments --runs 3
 ```
 
@@ -239,9 +240,9 @@ ref touches what the branch diff depends on (`DIFF_PATHS` in
 compare API and the `view`, `site`, and `diff` commands, the Diff tab's
 model, the eval itself, and, in the skills, only changed lines about the diff
 (`--base`, `#diff`, diff, compare), since most skill edits are about modeling.
-Otherwise it spends nothing. CI runs it that way on pull requests
-(`.github/workflows/eval-diff.yml`) when the repository has an
-`ANTHROPIC_API_KEY` secret, with the report in the job summary.
+Otherwise it spends nothing. `--check-only` says whether it would run, and
+stops. Like the other agent evals, it runs by hand with the `claude` CLI signed
+in, not in CI.
 
 ## Adding a fixture
 
