@@ -38,8 +38,16 @@ export interface PrReportInput {
   maxJourneyDiagrams?: number;
   /** A page that shows this change in the explorer, linked from the comment. */
   explorerUrl?: string | undefined;
-  /** Bug traces the change adds, which the comment says it fixes. */
-  fixes?: { id: string; title?: string | undefined; anchor?: string | undefined }[] | undefined;
+  /** Triage records the change adds or edits: the comment says what it does for each bug. */
+  fixes?:
+    | {
+        id: string;
+        title?: string | undefined;
+        anchor?: string | undefined;
+        /** The record's status at the head. Without it, the change fixes the bug. */
+        status?: string | undefined;
+      }[]
+    | undefined;
   /** Facts the change sealed again after their code changed: someone says they checked the model. */
   resealed?: { key: string; by?: string | undefined }[] | undefined;
 }
@@ -761,8 +769,16 @@ export function renderPrComment(s: ChangeSummary, input: PrReportInput): string 
   }
 
   for (const f of s.fixes) {
+    const icon =
+      f.status === undefined || f.status === "fixed"
+        ? "🩹"
+        : f.status === "root-caused"
+          ? "🔎"
+          : f.status === "wont-fix" || f.status === "cannot-reproduce"
+            ? "🗂️"
+            : "🐞";
     md.push(
-      `🩹 Fixes the bug traced in \`${f.id}\`${f.title ? `: ${f.title}` : ""}${f.anchor ? ` (${f.anchor})` : ""}.`,
+      `${icon} ${triageVerb(f.status)} \`${f.id}\`${f.title ? `: ${f.title}` : ""}${f.anchor ? ` (${f.anchor})` : ""}.`,
       "",
     );
   }
@@ -987,4 +1003,13 @@ function decisionChanges(
     out.push({ id: c.id, element, change, journeys });
   }
   return out;
+}
+
+/** What a change does for a bug, by the status its Triage record has at the head. */
+export function triageVerb(status: string | undefined): string {
+  if (status === undefined || status === "fixed") return "Fixes the bug triaged in";
+  if (status === "root-caused") return "Finds the root cause of the bug triaged in";
+  if (status === "wont-fix" || status === "cannot-reproduce")
+    return `Closes (${status.replace("-", " ")}) the bug triaged in`;
+  return "Triages a bug in";
 }

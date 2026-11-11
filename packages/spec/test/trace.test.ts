@@ -1,17 +1,17 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { archdocJsonSchema, TraceFileSchema } from "../src/index.js";
+import { archdocJsonSchema, TraceFileSchema, TriageFileSchema } from "../src/index.js";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-describe("TraceFileSchema", () => {
-  it("accepts the traces in this repo and the demo org", () => {
+describe("TriageFileSchema", () => {
+  it("accepts the Triage records in this repo and the demo org", () => {
     for (const path of [
-      "../../../.archdoc/traces/report-false-data-changes.yaml",
-      "../../../examples/org/rides/.archdoc/traces/small-refund-waits-for-finance.yaml",
+      "../../../.archdoc/triage/report-false-data-changes.yaml",
+      "../../../examples/org/rides/.archdoc/triage/small-refund-waits-for-finance.yaml",
     ]) {
-      const result = TraceFileSchema.safeParse(parse(read(path)));
+      const result = TriageFileSchema.safeParse(parse(read(path)));
       expect(result.error?.issues ?? []).toEqual([]);
     }
   });
@@ -55,13 +55,38 @@ describe("TraceFileSchema", () => {
       "steps/0/evidence",
       "steps/0/role",
     ]);
+    // A record can be started before any step is known.
+    expect(TriageFileSchema.safeParse({ triage: "t", title: "x", symptom: "x" }).success).toBe(
+      true,
+    );
     expect(
-      TraceFileSchema.safeParse({ trace: "t", title: "x", symptom: "x", steps: [] }).success,
+      TriageFileSchema.safeParse({ triage: "t", title: "x", symptom: "x", status: "done" }).success,
     ).toBe(false);
   });
 
-  it("is in the JSON Schema, so editors check trace files too", () => {
+  it("takes the report, leads, root cause, and fix", () => {
+    const result = TriageFileSchema.safeParse({
+      triage: "t",
+      title: "x",
+      status: "fixed",
+      severity: "critical",
+      reported: { by: "support", at: "2026-11-10", link: "https://example.com/1" },
+      symptom: "x",
+      attachments: ["attachments/t.log"],
+      hypotheses: [
+        { claim: "a", verdict: "ruled-out", evidence: "read", note: "n", element: "api" },
+        { claim: "b", code: "src/a.ts:3" },
+      ],
+      steps: [{ from: "a", to: "b", role: "cause" }],
+      "root-cause": { summary: "why", step: 1 },
+      fix: { summary: "how", link: "https://example.com/2", test: "src/a.test.ts" },
+    });
+    expect(result.error?.issues ?? []).toEqual([]);
+  });
+
+  it("is in the JSON Schema, so editors check Triage records and old traces too", () => {
     const schema = archdocJsonSchema() as { anyOf: { required?: string[] }[] };
+    expect(schema.anyOf.some((s) => s.required?.includes("triage"))).toBe(true);
     expect(schema.anyOf.some((s) => s.required?.includes("trace"))).toBe(true);
   });
 });

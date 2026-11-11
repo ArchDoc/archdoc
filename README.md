@@ -111,7 +111,7 @@ pnpm archdoc context packages/cli/src/commands   # where these files belong, and
 pnpm archdoc context --error error.log      # which journey step an error showed up in, and a trace to start
 pnpm archdoc show toolchain.cli             # one thing by ID: element, actor, journey, data, trace, fact
 pnpm archdoc show report-false-data-changes # a bug, hop by hop, with its evidence
-pnpm archdoc check                          # what's wrong or stale: drift, rules, traces, sealed facts
+pnpm archdoc check                          # what's wrong or stale: drift, rules, Triage records, sealed facts
 pnpm archdoc check --base main              # what your branch does: the PR comment's verdict, and its fixes
 pnpm archdoc check --base main --format github   # findings as annotations on the diff in CI
 pnpm archdoc check --seals                  # which model facts' code changed since they were sealed
@@ -272,11 +272,17 @@ elements:
 
 The explorer's Infrastructure tab draws one environment at a time: its nodes as boxes inside boxes, each container on the node it runs on, the uses between them lifted from their components and labelled with how they travel, and what they talk to outside the environment (actors, externals, and elements that run elsewhere) around it. The sidebar picks the environment, lists its nodes as a tree, and names the containers that don't say they run there. `archdoc show production.aws.eks` lists a node's infrastructure and what runs on it, and `archdoc show api` says where an element runs (a component runs where its container does). `validate` fails on a `deploy` that names no environment or node, and once a model has environments, warns about a container that doesn't say where it's deployed. `check` warns about deployment code that matches no file, and with seals, a change to a node's or a deployment's code flags it for a re-check. [examples/deployment.yaml](./examples/deployment.yaml) shows a shop on a CDN, a cluster, and managed services, with staging and local alongside.
 
-## Explain a bug
+## Triage a bug
 
-A journey is the design; a **trace** is what one failing request actually did. When someone hands you (or your agent) an error, `archdoc context --error` reads its stack frames, paths, and the names it mentions, maps them to elements, and ranks the journey steps it most likely showed up in, with a trace to start from. Follow the code from there and write `.archdoc/traces/<id>.yaml`: the journey step it opens up (`expands: review-ai-change#5`), each hop the request took in journey step syntax, which one is the `cause`, how each claim is known (`evidence: reproduced | read | inferred`), the values `observed` and `expected`, any call that's `missing`, and the `fix`. Traces are never part of the model.
+A journey walks through how the system works; a **Triage record** walks through how one bug happened, down to its root cause. Hand your agent a bug (an issue, a log, a stack trace, wrong output) and it runs `archdoc triage start` (or the `archdoc_triage` MCP tool): that reads the error's stack frames, paths, and the names it mentions, maps them to elements, ranks the journey steps it most likely showed up in, and writes `.archdoc/triage/<id>.yaml` for the agent to fill in as it follows the code:
 
-`archdoc check` checks every trace against the model and the code: elements and the journey step exist, `code:` references (`path:line`) still match, and hops the model doesn't declare, which is drift found while debugging. `archdoc trace list` lists them, and `archdoc show <id>` prints one. [`.archdoc/traces/report-false-data-changes.yaml`](./.archdoc/traces/report-false-data-changes.yaml) is a real one, and the demo org has one for a refund bug. Agents use `archdoc_context` with `error`, then `archdoc_check`.
+- the report: `title`, `symptom` as given, `reported: { by, at, link }`, `severity`, and how to `reproduce` it;
+- where it showed up: the journey step it opens up (`expands: review-ai-change#5`);
+- the leads it followed, `hypotheses`, each `confirmed` or `ruled-out` with how that's known;
+- the bug's journey: each hop the failing request took in journey step syntax, which one is the `cause`, how each claim is known (`evidence: reproduced | read | inferred`), the values `observed` and `expected`, and any call that's `missing`;
+- the `root-cause`, the `fix` (with its PR and test), and a `status`: `open`, `investigating`, `root-caused`, `fixed`, `wont-fix`, or `cannot-reproduce`.
+
+Records are never part of the model. `archdoc check` checks every record against the model and the code: elements and the journey step exist, `code:` references (`path:line`) still match, hops the model doesn't declare (drift found while debugging), and what the status needs (a cause and a root cause once it's root-caused, a fix once it's fixed). `archdoc triage list` lists them, open ones first; `archdoc show <id>` prints one; `archdoc context` names the open ones on what a task touches; and the PR comment says which bug a change fixes. [`.archdoc/triage/report-false-data-changes.yaml`](./.archdoc/triage/report-false-data-changes.yaml) is a real one, and the demo org has one for a refund bug. Traces from before 0.8 (`.archdoc/traces/`) still load as records; `archdoc triage migrate` moves them.
 
 The explorer has a Traces tab when the model has traces. It shows the log you gave the agent and how to reproduce it beside the diagnosis (the journey step it opens up, whether it was reproduced, and how many hops the model doesn't declare), then the run as lanes beneath the step as modeled: the cause in red, where it spreads in amber, the step that matches the log, hops the model doesn't declare and calls that are missing dashed, and, in green, where the same job is done right. Pick a hop to see its code, what was observed and expected, and how it's known.
 

@@ -8,6 +8,10 @@ import {
   pathsAnswer,
   sealAnswer,
   showAnswer,
+  type TriageListInput,
+  triageCheckAnswer,
+  triageListAnswer,
+  triageStartAnswer,
   type Where,
 } from "@archdoc/analyzers";
 import { type EditOp, FIND_GAPS } from "@archdoc/core";
@@ -26,7 +30,8 @@ export const INSTRUCTIONS = `This repository's architecture is modeled in .archd
 
 - archdoc_context: start every task here, with the task in words, the files you'll change, or an error. It says which files and functions to open, what else does the same job, the journeys, data, rules, tests, owners, and who uses it. Name the affected journeys in your plan; ask before changing a critical one.
 - archdoc_paths: where flows start (routes, consumers, jobs, commands) and the calls each makes. Trace a flow with it, not grep.
-- archdoc_show: one thing by ID (element, actor, journey, data entry, Entry.field, trace, or a fact like element:<id>).
+- archdoc_show: one thing by ID (element, actor, journey, data entry, Entry.field, Triage record, or a fact like element:<id>).
+- archdoc_triage: start here when handed a bug.
 - archdoc_find, archdoc_edit: find parts of the model and change them by ID, many ops a call, instead of reading and editing its YAML. Pass by: agent:<name>.
 - archdoc_check: after you edit, with base "main". It lists what your change broke or made stale, each with its fix, and facts whose code changed.
 - archdoc_seal: once you've checked each changed fact against its code, seal it. Never seal a fact you haven't read.`;
@@ -62,7 +67,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "One thing in the model",
       description:
-        "Everything about one ID: an element (code: true adds its snippets' text), actor, journey, data entry, Entry.field (its lineage), trace, or a fact archdoc_check names (element:<id>, step:<journey>#<n>).",
+        "Everything about one ID: an element (code: true adds its snippets' text), actor, journey, data entry, Entry.field (its lineage), Triage record, or a fact archdoc_check names (element:<id>, step:<journey>#<n>).",
       inputSchema: {
         id: z
           .string()
@@ -186,7 +191,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "What's wrong or stale",
       description:
-        'After you edit: model problems, imports the model doesn\'t declare, broken rules and journeys, stale paths, traces, and facts whose sealed code changed, each with its fix. With base (such as "main"): only what your change caused, plus the verdict the PR comment will give, journeys, and who to ask. format "markdown" returns that comment, for a PR description. done: true, for a new model: what it still lacks before it is done.',
+        'After you edit: model problems, imports the model doesn\'t declare, broken rules and journeys, stale paths, Triage records, and facts whose sealed code changed, each with its fix. With base (such as "main"): only what your change caused, plus the verdict the PR comment will give, journeys, and who to ask. format "markdown" returns that comment, for a PR description. done: true, for a new model: what it still lacks before it is done.',
       inputSchema: {
         base: z.string().optional().describe("Branch or commit to compare with, such as main"),
         all: z.boolean().optional().describe("List every finding, not only the change's"),
@@ -222,6 +227,48 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
       },
     },
     (input) => respond(sealAnswer(where, { ...input, requireSum: true })),
+  );
+
+  server.registerTool(
+    "archdoc_triage",
+    {
+      title: "Triage a bug",
+      description:
+        "Handed a bug? Pass it as symptom: writes .archdoc/triage/<id>.yaml with the journey step it showed up in, leads, and steps from the stack. Fill it in as you follow the code: rule leads in or out, a step per hop with evidence, role: cause, root-cause, status. Only id: what a record lacks. list: the records.",
+      inputSchema: {
+        symptom: z.string().optional().describe("The bug as given: error, log, or issue text"),
+        title: z.string().optional().describe("The bug in one line"),
+        link: z.string().optional().describe("The issue URL"),
+        reportedBy: z.string().optional(),
+        id: z.string().optional(),
+        list: z.boolean().optional(),
+        status: z.string().optional().describe("With list, such as open-all or fixed"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (input) => {
+      if (input.list || (!input.symptom && !input.id))
+        return respond(
+          triageListAnswer(where, {
+            status: input.status as TriageListInput["status"],
+          }),
+        );
+      if (!input.symptom) return respond(triageCheckAnswer(where, input.id as string));
+      return respond(
+        triageStartAnswer(where, {
+          symptom: input.symptom,
+          title: input.title,
+          link: input.link,
+          by: input.reportedBy,
+          id: input.id,
+        }),
+      );
+    },
   );
 
   server.registerTool(

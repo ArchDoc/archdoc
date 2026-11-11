@@ -475,15 +475,31 @@ export function describeEvidence(e: ErrorEvidence): string {
   return `${where} (frame ${(e.depth ?? 0) + 1}${e.function ? `, in ${e.function}` : ""})`;
 }
 
+/** What a person said about a bug when they handed it over. */
+export interface TriageReport {
+  id?: string | undefined;
+  title?: string | undefined;
+  by?: string | undefined;
+  /** Such as 2026-11-10. */
+  at?: string | undefined;
+  link?: string | undefined;
+  severity?: "low" | "normal" | "high" | "critical" | undefined;
+}
+
 /**
- * A trace to start from, for the best anchor: the journey step, the symptom,
- * and a step for each call between elements the stack shows (outermost
- * first, with the line that makes the call). Every guess says TODO.
+ * A Triage record to start from, for the best anchor: the report, the journey
+ * step, the elements the error names as open leads, and a step for each call
+ * between elements the stack shows (outermost first, with the line that makes
+ * the call). Every guess says TODO.
  */
-export function traceSkeleton(result: AnchorResult, text: string): string {
+export function traceSkeleton(
+  result: AnchorResult,
+  text: string,
+  report: TriageReport = {},
+): string {
   const top = result.anchors[0];
-  const id = slug(text);
-  const q = (s: string) => stringify(s).trimEnd();
+  const id = report.id ?? triageId(report.title ?? text);
+  const q = (s: string) => stringify(s, { lineWidth: 0 }).trimEnd();
 
   // Calls between elements, outermost first: each frame's caller is the frame after it.
   const frames = result.evidence
@@ -506,12 +522,25 @@ export function traceSkeleton(result: AnchorResult, text: string): string {
     .map((l) => l.trimEnd())
     .filter((l, i, all) => l || (i > 0 && i < all.length - 1))
     .slice(0, 8);
+  const reported = (
+    [
+      ["by", report.by],
+      ["at", report.at],
+      ["link", report.link],
+    ] as const
+  ).filter(([, v]) => v);
   const out = [
-    "# Suggested by archdoc context --error. Follow the code, then fix every step: say",
-    "# what it does, give it evidence (reproduced, read, or inferred), and mark the",
-    `# cause. Save it as .archdoc/traces/${id}.yaml and run archdoc check.`,
-    `trace: ${id}`,
-    "title: TODO the bug in one line, as the user would say it",
+    "# Started from the error. Follow the code, and as you go: rule leads in or out,",
+    "# fix every step (what it does, evidence: reproduced, read, or inferred), and mark",
+    "# the cause. Then set root-cause and status: root-caused (and fix, once it's fixed).",
+    `# Saved as .archdoc/triage/${id}.yaml; run archdoc check.`,
+    `triage: ${id}`,
+    `title: ${report.title ? q(report.title) : "TODO the bug in one line, as the user would say it"}`,
+    "status: investigating",
+    ...(report.severity ? [`severity: ${report.severity}`] : []),
+    ...(reported.length
+      ? ["reported:", ...reported.map(([k, v]) => `  ${k}: ${q(v as string)}`)]
+      : []),
     "symptom: |",
     ...(symptom.length ? symptom : ["TODO"]).map((l) => `  ${l}`),
     "reproduce: TODO a command, a request, or a test that shows it",
@@ -523,7 +552,21 @@ export function traceSkeleton(result: AnchorResult, text: string): string {
   } else {
     out.push("actor: TODO whose request it was", "goal: TODO what they were doing");
   }
-  out.push("diagnosis: TODO why it happens", "steps:");
+  const leads = result.elements.slice(0, 3);
+  if (leads.length) {
+    out.push(
+      "hypotheses:   # TODO: rule each in or out (verdict: confirmed or ruled-out) with a note",
+    );
+    for (const e of leads) {
+      out.push(
+        `  - claim: ${q(`The cause is in ${e.element}`)}`,
+        `    element: ${q(e.element)}`,
+        "    verdict: open",
+        `    note: ${q(`The error names it: ${e.evidence.slice(0, 2).join("; ")}`)}`,
+      );
+    }
+  }
+  out.push("steps:");
   if (hops.length) {
     for (const [i, h] of hops.entries()) {
       out.push(
@@ -549,12 +592,15 @@ export function traceSkeleton(result: AnchorResult, text: string): string {
       "    evidence: inferred   # TODO: reproduced or read, once you've seen it",
     );
   }
-  out.push("fix: TODO what fixes it");
+  out.push(
+    "# root-cause: { summary: TODO why it happens, step: TODO the step it happens in }",
+    "# fix: { summary: TODO what fixes it, link: TODO the PR, test: TODO the test that shows it }",
+  );
   return `${out.join("\n")}\n`;
 }
 
-/** A trace ID from the first line of an error: lowercase words, joined by -. */
-function slug(text: string): string {
+/** A Triage record ID from a title or the first line of an error: lowercase words, joined by -. */
+export function triageId(text: string): string {
   const line = text.split(/\r?\n/).find((l) => /[A-Za-z]/.test(l) && !/^\s*at\s/.test(l)) ?? "";
   const words = (line.toLowerCase().match(/[a-z][a-z0-9]*/g) ?? [])
     .filter((w) => w.length > 1)

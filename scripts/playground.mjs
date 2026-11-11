@@ -195,13 +195,13 @@ Run \`pnpm playground\` in the ArchDoc repo again any time for a fresh copy.
 
 Go back with \`git checkout main\`.
 
-## Explain a bug
+## Triage a bug
 
     cd rides
-    archdoc trace list                               # bugs traced in .archdoc/traces/
+    archdoc triage list                              # bugs triaged in .archdoc/triage/
     archdoc show small-refund-waits-for-finance
     archdoc check
-    archdoc view --open                              # the trace on the journey step it opens up
+    archdoc view --open                              # the bug's journey, on the journey step it opens up
 
 ## Edit and watch
 

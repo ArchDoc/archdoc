@@ -22,6 +22,7 @@ import {
   repoInfo,
   resolveGitRef,
   resolveSnippets,
+  TRIAGE_DIRS,
 } from "@archdoc/core";
 import { landscapePayload, loadLandscape } from "./landscape.js";
 import { isModelPath } from "./model-path.js";
@@ -345,7 +346,7 @@ async function payloadOf(
       lockError: federation.lockError,
       bundles: [...federation.bundles].map(([key, b]) => ({ key, ...b })),
     },
-    // Bug traces beside the model, for the explorer's trace view. Never part of the model.
+    // Triage records beside the model, for the explorer's Triage tab. Never part of the model.
     traces: await readTraces(snap),
     // What data entries' schema sources say (types, values, foreign keys), as check reads them.
     schemas: (await importSchemas(contextOf(snap), model)).filter((s) => !s.error),
@@ -353,12 +354,15 @@ async function payloadOf(
   };
 }
 
-/** The trace files in the model directory's traces/, as the snapshot has them. */
+/** The Triage records in the model directory's triage/ (and traces/, before 0.8), as the snapshot has them. */
 async function readTraces(snap: Snapshot): Promise<{ path: string; text: string }[]> {
-  const dir = relative(snap.baseDir, join(snap.source, "traces")).replace(/\\/g, "/");
-  if (dir.startsWith("..")) return [];
+  const dirs = TRIAGE_DIRS.map((d) =>
+    relative(snap.baseDir, join(snap.source, d)).replace(/\\/g, "/"),
+  ).filter((d) => !d.startsWith(".."));
   const out: { path: string; text: string }[] = [];
-  for (const path of snap.files.filter((f) => f.startsWith(`${dir}/`) && /\.ya?ml$/.test(f))) {
+  for (const path of snap.files.filter(
+    (f) => dirs.some((d) => f.startsWith(`${d}/`)) && /\.ya?ml$/.test(f),
+  )) {
     const text = await snap.read(path);
     if (text !== undefined) out.push({ path, text });
   }

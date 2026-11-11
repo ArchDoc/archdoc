@@ -944,7 +944,7 @@ class Editor {
       site.file.removed = true;
     }
     this.renamed.set(from, to);
-    return `Renamed journey ${from} to ${to}${n ? `, and ${n} reference${n === 1 ? "" : "s"} to it` : ""}. Traces that expand it still name ${from}.`;
+    return `Renamed journey ${from} to ${to}${n ? `, and ${n} reference${n === 1 ? "" : "s"} to it` : ""}. Triage records that expand it still name ${from}.`;
   }
 
   /** Rewrites journey step endpoints; returns how many changed. */

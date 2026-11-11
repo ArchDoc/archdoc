@@ -1,7 +1,7 @@
 import type { ModelDiff } from "../diff/diff.js";
 import type { MarkedFinding } from "./check-report.js";
 import { summary as diffSummary } from "./diff-report.js";
-import { type ChangeSummary, type Concern, stepRange } from "./pr-report.js";
+import { type ChangeSummary, type Concern, stepRange, triageVerb } from "./pr-report.js";
 
 export interface CheckAnswerOptions {
   /** With a base: the change summary the PR comment renders, and the model diff behind it. */
@@ -54,7 +54,7 @@ function formatChange(
   section("Blocks the merge", s.blocking, ICON.error);
   section("To check", s.attention, ICON.warning);
   for (const f of s.fixes)
-    out.push("", `Fixes the bug traced in ${f.id}${f.title ? `: ${f.title}` : ""}.`);
+    out.push("", `${triageVerb(f.status)} ${f.id}${f.title ? `: ${f.title}` : ""}.`);
 
   const facts: string[] = [];
   if (s.journeys.length) {

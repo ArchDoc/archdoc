@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,12 +30,13 @@ const STACK = [
   "    at async report (file:///home/runner/work/archdoc/archdoc/packages/cli/dist/commands/report.js:42:7)",
 ].join("\n");
 
-describe("archdoc trace list and show", () => {
-  it("lists traces", async () => {
-    const r = await run(repo, "trace", "list");
-    expect(r.out).toContain(
-      "report-false-data-changes · The PR report says data changed when it didn't · expands review-ai-change#5 (.archdoc/traces/report-false-data-changes.yaml)",
-    );
+describe("archdoc triage list and show", () => {
+  it("lists Triage records, and still answers archdoc trace list", async () => {
+    const line =
+      "report-false-data-changes · fixed (high) · The PR report says data changed when it didn't · review-ai-change#5 (.archdoc/triage/report-false-data-changes.yaml)";
+    expect((await run(repo, "triage", "list")).out).toContain(line);
+    expect((await run(repo, "triage", "list", "--status", "open-all")).out).not.toContain(line);
+    expect((await run(repo, "trace", "list")).out).toContain(line);
   });
 
   it("shows a trace through archdoc show", async () => {
@@ -60,8 +61,8 @@ describe("archdoc context --error", () => {
     expect(r.out).toContain(
       "toolchain.core.loader · packages/core/src/load/git.ts:93 (frame 1, in readModelSourcesAtRef)",
     );
-    expect(r.out).toContain("trace: error-main-is-not-commit");
-    expect(r.out).toContain("# Suggested by archdoc context --error.");
+    expect(r.out).toContain("triage: error-main-is-not-commit");
+    expect(r.out).toContain("status: investigating");
     expect(r.out).toContain("    code: packages/cli/src/commands/report.ts:42");
   });
 
@@ -88,5 +89,78 @@ describe("archdoc context --error", () => {
     const r = await run(repo, "context", "--error", file, "--format", "json");
     expect(r.code).toBe(2);
     expect(r.err).toContain("--format json works with a task or paths");
+  });
+});
+
+describe("archdoc triage start and migrate", () => {
+  const shop = async () => {
+    const dir = await mkdtemp(join(scratch, "shop-"));
+    await mkdir(join(dir, ".archdoc"), { recursive: true });
+    await mkdir(join(dir, "src/api"), { recursive: true });
+    await writeFile(join(dir, "src/api/save.ts"), "export function save() {}\n");
+    await writeFile(
+      join(dir, ".archdoc/archdoc.yaml"),
+      [
+        'archdoc: "2.0"',
+        "namespace: shop",
+        "actors: { shopper: { kind: person } }",
+        "elements:",
+        "  api: { kind: container, code: [src/api/**], uses: { db: Saves orders } }",
+        "  db: { kind: datastore }",
+        "journeys:",
+        "  checkout:",
+        "    actor: shopper",
+        "    goal: Buy",
+        "    steps:",
+        "      - { from: shopper, to: api, action: Places the order }",
+        "      - { from: api, to: db, action: Saves the order }",
+        "",
+      ].join("\n"),
+    );
+    return dir;
+  };
+
+  it("starts a record from a bug report, and never writes over one", async () => {
+    const dir = await shop();
+    const bug = join(dir, "bug.txt");
+    await writeFile(bug, "Error: duplicate key\n    at save (src/api/save.ts:1:1)\n");
+    const args = ["triage", "start", bug, "-t", "Orders save twice", "--link", "https://x/1"];
+    const r = await run(dir, ...args, "--by", "support");
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(
+      "Started .archdoc/triage/orders-save-twice.yaml (status: investigating).",
+    );
+    const text = await readFile(join(dir, ".archdoc/triage/orders-save-twice.yaml"), "utf8");
+    expect(text).toContain("triage: orders-save-twice");
+    expect(text).toContain("  by: support");
+    expect(text).toContain("  link: https://x/1");
+    expect(text).toContain("  - claim: The cause is in api");
+    // A second report with the same title gets its own record.
+    expect((await run(dir, ...args)).out).toContain("orders-save-twice-2.yaml");
+    const listed = await run(dir, "triage", "list");
+    expect(listed.out.split("\n")).toHaveLength(2);
+    expect(listed.out).toContain("orders-save-twice · investigating · Orders save twice");
+    // What it wrote checks: only the TODOs it left are open.
+    const check = await run(dir, "check");
+    expect(check.out).not.toContain("schema/invalid");
+  });
+
+  it("moves traces from before 0.8, keeping comments", async () => {
+    const dir = await shop();
+    await mkdir(join(dir, ".archdoc/traces"));
+    await writeFile(
+      join(dir, ".archdoc/traces/old.yaml"),
+      "# kept\ntrace: old\ntitle: Old\nsymptom: s\nexpands: checkout#2 # api → db\ndiagnosis: |\n  Two lines\n  of why.\nsteps: [{ from: api, to: db, role: cause, evidence: read }]\n",
+    );
+    expect((await run(dir, "triage", "migrate", "--dry-run")).out).toContain("Would move 1:");
+    const r = await run(dir, "triage", "migrate");
+    expect(r.out).toContain(".archdoc/traces/old.yaml → .archdoc/triage/old.yaml");
+    expect(await readdir(join(dir, ".archdoc"))).not.toContain("traces");
+    const text = await readFile(join(dir, ".archdoc/triage/old.yaml"), "utf8");
+    expect(text).toBe(
+      "# kept\ntriage: old\ntitle: Old\nsymptom: s\nexpands: checkout#2 # api → db\nroot-cause:\n  summary: |\n    Two lines\n    of why.\nsteps: [ { from: api, to: db, role: cause, evidence: read } ]\n",
+    );
+    expect((await run(dir, "show", "old")).out).toContain("Root cause (step 1): Two lines");
+    expect((await run(dir, "triage", "migrate")).out).toBe("No traces to move.");
   });
 });

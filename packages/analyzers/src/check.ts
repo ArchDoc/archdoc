@@ -13,7 +13,7 @@ import {
   type ObservedDependency,
   resolveGitRef,
   sealedPaths,
-  TRACES_DIR,
+  TRIAGE_DIRS,
   traceCodeRefs,
 } from "@archdoc/core";
 import { contextOf, loadRevision, type Revision, type Snapshot } from "./revision.js";
@@ -168,12 +168,14 @@ function readWorkingFile(baseDir: string, path: string): string | undefined {
   }
 }
 
-/** The traces in .archdoc/traces/ at the snapshot, parsed. */
+/** The Triage records in .archdoc/triage/ (and traces/, before 0.8) at the snapshot, parsed. */
 async function readTraces(snap: Snapshot) {
-  const dir = `${relative(snap.baseDir, join(snap.fedDir, TRACES_DIR)).replace(/\\/g, "/")}/`;
+  const dirs = TRIAGE_DIRS.map(
+    (d) => `${relative(snap.baseDir, join(snap.fedDir, d)).replace(/\\/g, "/")}/`,
+  );
   const sources: { path: string; text: string }[] = [];
   for (const path of snap.files) {
-    if (!path.startsWith(dir) || !/\.ya?ml$/.test(path)) continue;
+    if (!dirs.some((dir) => path.startsWith(dir)) || !/\.ya?ml$/.test(path)) continue;
     const text = await snap.read(path);
     if (text !== undefined) sources.push({ path, text });
   }

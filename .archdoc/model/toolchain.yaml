@@ -107,7 +107,7 @@ elements:
               seals:
                 description: Reports facts whose code changed since they were sealed
               traces:
-                description: Checks the traces in .archdoc/traces/ with the model, so check reports stale ones
+                description: Checks the Triage records in .archdoc/triage/ with the model, so check reports stale ones and what each status still needs
               query:
                 description: Takes the code index seals fingerprint with
               data:
@@ -166,7 +166,7 @@ elements:
                 description: Reports in the shape of check's findings
           traces:
             kind: component
-            description: Bug traces, in .archdoc/traces/ and never part of the model. Parses them, checks them against the model and the code (elements, the journey step they expand, code references, and hops the model doesn't declare), and anchors an error's stack frames, paths, and names to elements and ranked journey steps.
+            description: "Triage records, in .archdoc/triage/ (and traces/ from before 0.8), never part of the model. Parses them, works out each record's status, checks them against the model and the code (elements, the journey step they expand, code references, hops the model doesn't declare, and what the status needs: a cause and root cause once root-caused, a fix once fixed), and anchors an error's stack frames, paths, and names to elements and ranked journey steps, with a record to start from."
             code:
               - { path: packages/core/src/trace/** }
               - { path: packages/core/src/trace/check.ts, symbol: checkTrace, description: Checks a trace and resolves it for drawing }
@@ -192,7 +192,7 @@ elements:
         kind: container
         deploy: [release.npm]
         technology: TypeScript (ts.preProcessFile), yaml
-        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. codeChange reads what a branch's code changed since it left another branch (analyzers and entry points at both ends of the merge base) into the branch's model, for the explorer's Diff. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, find, check, seal, paths), applies edits by ID and refuses one that adds errors to the model, and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers and their components, leaving code elements to whoever reads the code) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements.
+        description: Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. codeChange reads what a branch's code changed since it left another branch (analyzers and entry points at both ends of the merge base) into the branch's model, for the explorer's Diff. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, find, check, seal, paths, and triage, which starts, lists, checks, and migrates Triage records), applies edits by ID and refuses one that adds errors to the model, and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers and their components, leaving code elements to whoever reads the code) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements.
         code: [{ path: packages/analyzers/** }]
         uses:
           source-tree: Reads manifests, imports, and infra files
@@ -260,7 +260,7 @@ elements:
         kind: container
         deploy: [release.npm, workstation.agent]
         technology: Node.js, @modelcontextprotocol/sdk (stdio)
-        description: "MCP tools for agents, one per question: archdoc_context (where to start, from a task, paths, or an error), archdoc_show (one thing by ID), archdoc_find (parts of the model by words, place, file, or what they lack, or its outline), archdoc_edit (change the model by ID), archdoc_check (what's wrong or stale, and with a base, what the change does), archdoc_seal (record checked facts), archdoc_paths (where flows start and the calls each makes), and archdoc_init (start a model). Only edit, seal, and init write."
+        description: "MCP tools for agents, one per question: archdoc_context (where to start, from a task, paths, or an error, with known bugs on what it touches), archdoc_show (one thing by ID), archdoc_find (parts of the model by words, place, file, or what they lack, or its outline), archdoc_edit (change the model by ID), archdoc_check (what's wrong or stale, and with a base, what the change does), archdoc_seal (record checked facts), archdoc_paths (where flows start and the calls each makes), archdoc_triage (start a Triage record from a bug, check one, or list them), and archdoc_init (start a model). Only edit, seal, triage, and init write."
         code: [{ path: packages/mcp/** }]
         uses:
           core:
@@ -314,7 +314,7 @@ elements:
         kind: container
         deploy: [release.github, workstation.agent]
         technology: Claude Code plugin and marketplace, Markdown (skill, AGENTS.md), MCP configs
-        description: Teaches coding agents the workflows. A change starts with a context brief and ends with check and seal, with the model edited alongside the code. A bug starts with context on the error, and ends with a trace with evidence on every step. A repository without a model starts with init. Asked to show the model, the skill starts `archdoc view` in the background and gives the user its URL (a static `archdoc site` on a remote machine), and `/archdoc:view` does the same. Claude Code users install it as a plugin (the skills, and an MCP server pinned to the CLI released with it) from the marketplace at the repository root; other agents get an AGENTS.md snippet, MCP configs, and the skill to copy to `.agents/skills/`, where Codex looks for it.
+        description: Teaches coding agents the workflows. A change starts with a context brief and ends with check and seal, with the model edited alongside the code. A bug starts with archdoc_triage, which places the error and starts a Triage record, and ends with the record's root cause (and fix), with evidence on every step and every lead ruled in or out. A repository without a model starts with init. Asked to show the model, the skill starts `archdoc view` in the background and gives the user its URL (a static `archdoc site` on a remote machine), and `/archdoc:view` does the same. Claude Code users install it as a plugin (the skills, and an MCP server pinned to the CLI released with it) from the marketplace at the repository root; other agents get an AGENTS.md snippet, MCP configs, and the skill to copy to `.agents/skills/`, where Codex looks for it.
         code: [{ path: integrations/agent-skills/** }, { path: integrations/claude-plugin/** }, .claude-plugin/**, .claude/**, .agents/**, AGENTS.md, CLAUDE.md, .mcp.json]
         uses:
           mcp: Points agents at the MCP tools
@@ -341,7 +341,7 @@ elements:
           ".archdoc": { entity: ModelFile, key: path }
           archdoc.lock: { entity: Lock }
           vendor: { entity: Bundle, key: namespace }
-          traces: { entity: Trace, key: trace }
+          triage: { entity: TriageRecord, key: triage }
           archdoc.sum: { entity: Seal, key: fact }
 
       other-repos:

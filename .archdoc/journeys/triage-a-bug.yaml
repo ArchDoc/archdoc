@@ -1,0 +1,44 @@
+journey: triage-a-bug
+actor: coding-agent
+goal: Find a bug's root cause from a report, and walk through it step by step with evidence a person can check
+importance: high
+steps:
+  - from: coding-agent
+    to: agent-skills
+    action: Reads how to triage a bug
+    code: integrations/claude-plugin/skills/archdoc/SKILL.md
+  - from: coding-agent
+    to: mcp
+    action: Calls archdoc_triage with the bug as it was handed over
+    code: packages/mcp/src/server.ts
+    sends: ToolCall
+  - from: mcp
+    to: analyzers
+    action: Starts the record, with the error and what the person said about it
+    code: packages/analyzers/src/triage.ts#triageStartAnswer
+    sends: ToolCall
+  - from: analyzers
+    to: core
+    action: Maps the stack frames and paths to elements, ranks the journey steps, and drafts the record
+    code: packages/core/src/trace/anchor.ts#traceSkeleton
+    sends: ModelSources
+  - from: analyzers
+    to: model-files
+    action: Writes .archdoc/triage/<id>.yaml with status investigating
+    creates: TriageRecord
+  - from: mcp
+    to: coding-agent
+    action: Returns the journey steps, the leads, and where to start, which the agent follows into the code, filling in the record
+    sends: ToolResult
+  - from: coding-agent
+    to: mcp
+    action: Calls archdoc_check, which checks the record with the model
+    sends: ToolCall
+  - from: mcp
+    to: core
+    action: Checks the record's elements, journey step, code references, hops, and what its status needs
+    code: packages/core/src/trace/check.ts#checkTrace
+  - from: developer
+    to: cli
+    action: Reads the record with the fix (archdoc show <id>), and CI's archdoc check keeps it true
+    code: packages/cli/src/commands/check.ts

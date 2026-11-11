@@ -1,18 +1,21 @@
 import { z } from "zod";
 import { JourneyFileSchema, ModelFileSchema } from "./schema.js";
-import { TraceFileSchema } from "./trace.js";
+import { TraceFileSchema, TriageFileSchema } from "./trace.js";
 
 export const JSON_SCHEMA_ID = "https://archdoc.github.io/schema/archdoc.v2.schema.json";
 
 /**
- * The JSON Schema for v2 model files (and trace files, which live beside
+ * The JSON Schema for v2 model files (and Triage records, which live beside
  * them), for editors (yaml-language-server) and non-TypeScript tooling.
  * Generated from the Zod schema, so it never drifts.
  */
 export function archdocJsonSchema(): Record<string, unknown> {
-  const schema = z.toJSONSchema(z.union([ModelFileSchema, JourneyFileSchema, TraceFileSchema]), {
-    unrepresentable: "any",
-  });
+  const schema = z.toJSONSchema(
+    z.union([ModelFileSchema, JourneyFileSchema, TriageFileSchema, TraceFileSchema]),
+    {
+      unrepresentable: "any",
+    },
+  );
   return {
     $schema: schema.$schema,
     $id: JSON_SCHEMA_ID,

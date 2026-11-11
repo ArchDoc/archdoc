@@ -2,9 +2,9 @@ import { type Diagnostic, formatDiagnostic } from "../diagnostics.js";
 import type { AnchorResult } from "../trace/anchor.js";
 import type { TraceCheck, TraceStepView, TraceView } from "../trace/check.js";
 import type { TraceEnd } from "../trace/hops.js";
-import type { Trace } from "../trace/trace.js";
+import { type Trace, triageStatusOf } from "../trace/trace.js";
 
-// Traces as text, shared by `archdoc trace` and the MCP tools.
+// Triage records as text, shared by `archdoc triage`, `archdoc show`, and the MCP tools.
 
 const ICON = { error: "✗", warning: "!", info: "i" } as const;
 
@@ -25,7 +25,7 @@ export function formatTraceChecks(
   for (const d of problems) out.push(`${ICON[d.severity]} ${formatDiagnostic(d)}`);
   if (problems.length) out.push("");
   if (checks.length === 0 && problems.length === 0) {
-    return "No traces. Write one in .archdoc/traces/<id>.yaml when you explain or fix a bug (archdoc context --error helps you start).";
+    return "No Triage records. Start one with archdoc triage start (or the archdoc_triage tool) when you explain or fix a bug.";
   }
   for (const c of checks) {
     const v = c.view;
@@ -43,13 +43,13 @@ export function formatTraceChecks(
   const warnings = all.filter((f) => f.severity === "warning").length;
   out.push(
     "",
-    `${plural(checks.length, "trace")}: ${plural(errors, "error")}, ${plural(warnings, "warning")}.`,
+    `${plural(checks.length, "Triage record")}: ${plural(errors, "error")}, ${plural(warnings, "warning")}.`,
   );
   return out.join("\n");
 }
 
 function summaryLine(v: TraceView): string {
-  const parts: string[] = [];
+  const parts: string[] = [v.status];
   const a = v.anchor;
   if (a?.modeled) {
     parts.push(`expands ${a.written} (${endLabel(a.modeled.from)} → ${endLabel(a.modeled.to)})`);
@@ -65,9 +65,25 @@ function summaryLine(v: TraceView): string {
   return parts.join(" · ");
 }
 
-/** A trace to read: the symptom, the journey step it opens up, every hop with its evidence, and the fix. */
+const VERDICT = { open: "?", "ruled-out": "✗", confirmed: "✓" } as const;
+
+/**
+ * A Triage record to read: the report, the journey step it showed up in, the
+ * leads followed, every hop with its evidence, the root cause, and the fix.
+ */
 export function formatTrace(v: TraceView): string {
   const out = [`${v.id}: ${v.title}`];
+  out.push(
+    [
+      `Status: ${v.status}${v.statusWritten ? "" : " (from what the record holds)"}`,
+      v.severity ? `severity ${v.severity}` : undefined,
+      v.reported?.by ? `reported by ${v.reported.by}` : undefined,
+      v.reported?.at ? `on ${v.reported.at}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  );
+  if (v.reported?.link) out.push(`Report: ${v.reported.link}`);
   const a = v.anchor;
   if (a?.modeled) {
     out.push(
@@ -87,10 +103,29 @@ export function formatTrace(v: TraceView): string {
       .split("\n")
       .map((l) => `  ${l}`),
   );
+  if (v.attachments.length) out.push(`Attached: ${v.attachments.join(", ")}`);
   if (v.reproduce) out.push(`Reproduce: ${v.reproduce.trim()}`);
-  if (v.diagnosis) out.push(`Diagnosis: ${v.diagnosis.trim()}`);
-  out.push("", "What happened:");
-  for (const s of v.steps) out.push(...formatStep(s));
+  if (v.hypotheses.length) {
+    out.push("", "Leads:");
+    for (const h of v.hypotheses) {
+      const code = h.code.map((c) => c.label).join(", ");
+      out.push(
+        `  ${VERDICT[h.verdict]} ${h.verdict}: ${h.claim}${h.evidence ? `  [${h.evidence}]` : ""}${h.element ? ` · ${endLabel(h.element)}` : ""}${code ? ` · ${code}` : ""}`,
+      );
+      if (h.note) out.push(`     ${h.note.trim()}`);
+    }
+  }
+  if (v.steps.length) {
+    out.push("", "What happened:");
+    for (const s of v.steps) out.push(...formatStep(s));
+  } else {
+    out.push("", "No steps yet.");
+  }
+  if (v.diagnosis)
+    out.push(
+      "",
+      `Root cause${v.causes.length ? ` (step ${v.causes.join(", ")})` : ""}: ${v.diagnosis.trim()}`,
+    );
   if (v.worksIn) {
     const code = v.worksIn.code.map((c) => c.label).join(", ");
     out.push(
@@ -98,7 +133,11 @@ export function formatTrace(v: TraceView): string {
       `Works in: ${endLabel(v.worksIn.element)}${code ? ` (${code})` : ""}${v.worksIn.note ? `: ${v.worksIn.note.trim()}` : ""}`,
     );
   }
-  if (v.fix) out.push("", `Fix: ${v.fix.trim()}`);
+  if (v.fixDetail) {
+    out.push("", `Fix: ${v.fixDetail.summary.trim()}`);
+    if (v.fixDetail.link) out.push(`  ${v.fixDetail.link}`);
+    for (const t of v.fixDetail.test) out.push(`  test: ${t.label}`);
+  }
   return out.join("\n");
 }
 
@@ -151,16 +190,28 @@ function show(v: unknown): string {
   return typeof v === "string" ? v : JSON.stringify(v);
 }
 
-/** The traces in a repository, one line each. */
+/** The Triage records in a repository, one line each, open ones first. */
 export function formatTraceList(traces: readonly Trace[]): string {
-  if (traces.length === 0) return "No traces in .archdoc/traces/.";
-  return traces
+  if (traces.length === 0) return "No Triage records in .archdoc/triage/.";
+  const rank = (t: Trace) => STATUS_ORDER.indexOf(triageStatusOf(t.spec));
+  return [...traces]
+    .sort((a, b) => rank(a) - rank(b))
     .map(
       (t) =>
-        `${t.id} · ${t.spec.title}${t.spec.expands ? ` · expands ${t.spec.expands}` : ""} (${t.file})`,
+        `${t.id} · ${triageStatusOf(t.spec)}${t.spec.severity ? ` (${t.spec.severity})` : ""} · ${t.spec.title}${t.spec.expands ? ` · ${t.spec.expands}` : ""} (${t.file})`,
     )
     .join("\n");
 }
+
+/** Statuses in the order people work them: what needs looking at first. */
+export const STATUS_ORDER = [
+  "investigating",
+  "open",
+  "root-caused",
+  "fixed",
+  "wont-fix",
+  "cannot-reproduce",
+] as const;
 
 /** Where an error belongs: the ranked journey steps, the elements, and a trace to start from. */
 export function formatAnchors(r: AnchorResult, skeleton?: string, maxReasons = 3): string {
@@ -194,7 +245,7 @@ export function formatAnchors(r: AnchorResult, skeleton?: string, maxReasons = 3
   if (skeleton) {
     out.push(
       "",
-      "Follow the code from there, then write the trace. A start:",
+      "Follow the code from there, then write the Triage record. A start:",
       "",
       skeleton.trimEnd(),
     );
