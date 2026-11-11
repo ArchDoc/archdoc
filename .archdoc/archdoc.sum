@@ -1249,7 +1249,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-b48875fb871bc1a1
+    hash: fnv-1b1dcfc75ac065e7
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
@@ -1289,15 +1289,22 @@ seals:
         - sectionOf
         - sections
       apps/web/src/model/traces.ts:
+        - STATUS_GROUPS
         - Traces
         - anchorChip
         - endLabel
         - firstCause
+        - groupByStatus
         - hopText
         - observedExpected
         - readTraces
+        - startPrompt
+        - statusLabel
         - traceChips
+        - traceInteractions
+        - traceJourney
         - traceLanes
+        - traceRoles
       apps/web/src/model/useCompare.ts:
         - Compared
         - HashState
@@ -1323,7 +1330,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-7090bafcf34ac2e8
+    hash: fnv-3ed9ae4a786aa5d4
     files:
       apps/web/src/App.tsx:
         - App
@@ -1382,9 +1389,11 @@ seals:
         - StepPanel
         - StepPanelProps
       apps/web/src/components/Traces.tsx:
+        - NEW
         - TraceList
         - TraceStepPanel
         - TraceStory
+        - TriageStart
       apps/web/src/components/code.tsx:
         - CodeContext
         - CodeRefs

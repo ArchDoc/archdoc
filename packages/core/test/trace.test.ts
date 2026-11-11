@@ -303,7 +303,7 @@ describe("checkTrace", () => {
     expect(unsynced.findings.map((f) => [f.code, f.message])).toEqual([
       [
         "trace/unverified",
-        "payments isn't synced, so what the trace says about it (steps 1, 2, 3) can't be checked. Run archdoc sync.",
+        "payments isn't synced, so what the record says about it (steps 1, 2, 3) can't be checked. Run archdoc sync.",
       ],
     ]);
     expect(unsynced.view.steps.map((s) => s.hop.kind)).toEqual([

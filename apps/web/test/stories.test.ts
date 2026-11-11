@@ -140,7 +140,7 @@ describe("the address", () => {
       pair: { base: "main", head: "feature" },
     });
     expect(readHash("#plan")).toEqual({ tab: "plan" });
-    expect(readHash("#triage")).toEqual({ tab: "triage" });
+    expect(readHash("#triage")).toEqual({ tab: "triage", trace: undefined });
     expect(readHash("")).toEqual({});
   });
 

@@ -401,7 +401,7 @@ export function checkTrace(
     add(
       "info",
       "trace/unverified",
-      `${namespace} isn't synced, so what the trace says about it${list.length ? ` (step${list.length === 1 ? "" : "s"} ${list.join(", ")})` : ""} can't be checked. Run archdoc sync.`,
+      `${namespace} isn't synced, so what the record says about it${list.length ? ` (step${list.length === 1 ? "" : "s"} ${list.join(", ")})` : ""} can't be checked. Run archdoc sync.`,
       list.length ? `steps.${(list[0] as number) - 1}` : "trace",
     );
   }

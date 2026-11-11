@@ -135,14 +135,14 @@ export function defaultBase(refs: Refs | undefined): string | undefined {
 }
 
 /**
- * The explorer's tabs. Explore holds the model as it is (overview, journeys, traces, data,
+ * The explorer's tabs. Explore holds the model as it is (overview, journeys, data,
  * infrastructure); Build holds the work on it (plan, triage, and the diff, whose id stays
- * "changes" so old #changes links still open it).
+ * "changes" so old #changes links still open it). Triage took over the Traces tab in 0.8:
+ * old #traces links open it.
  */
 export type Tab =
   | "overview"
   | "journeys"
-  | "traces"
   | "data"
   | "infrastructure"
   | "plan"
@@ -157,7 +157,7 @@ export interface HashState {
   journey?: string | undefined;
   /** The selected entry or field on the Data tab, as data:<entry> or field:<entry.field>. */
   data?: string | undefined;
-  /** The open trace on the Traces tab. */
+  /** The open Triage record on the Triage tab, or "new" to start one. */
   trace?: string | undefined;
   /** The environment on the Infrastructure tab. */
   environment?: string | undefined;
@@ -179,7 +179,7 @@ export function readHash(hash = window.location.hash): HashState {
       return { tab: "changes", pair: base ? { base, head: head || undefined } : undefined };
     }
     if (name === "journeys") return { tab: "journeys", journey: value || undefined };
-    if (name === "traces") return { tab: "traces", trace: value || undefined };
+    if (name === "traces" || name === "triage") return { tab: "triage", trace: value || undefined };
     if (name === "infrastructure") {
       return { tab: "infrastructure", environment: value || undefined };
     }
@@ -191,7 +191,7 @@ export function readHash(hash = window.location.hash): HashState {
         : undefined;
       return { tab: "data", data };
     }
-    if (name === "plan" || name === "triage") return { tab: name };
+    if (name === "plan") return { tab: name };
     if (name === "overview") return { tab: "overview" };
   }
   return {};
@@ -202,12 +202,11 @@ export function hashOf(state: HashState): string {
   const pair = state.pair;
   switch (state.tab) {
     case "plan":
-    case "triage":
       return `#${state.tab}`;
+    case "triage":
+      return `#triage${state.trace ? `=${encodeURIComponent(state.trace)}` : ""}`;
     case "changes":
       return `#diff${pair ? `=${encodeURIComponent(pair.base)}${pair.head ? `...${encodeURIComponent(pair.head)}` : ""}` : ""}`;
-    case "traces":
-      return `#traces${state.trace ? `=${encodeURIComponent(state.trace)}` : ""}`;
     case "infrastructure":
       return `#infrastructure${state.environment ? `=${encodeURIComponent(state.environment)}` : ""}`;
     case "journeys":

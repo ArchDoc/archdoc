@@ -1,6 +1,7 @@
 import {
   checkTrace,
   type Diagnostic,
+  type JourneyNode,
   loadTraces,
   type Model,
   nodeKey,
@@ -9,8 +10,12 @@ import {
   type TraceStepView,
   type TraceView,
 } from "@archdoc/core/browser";
+import type { Interaction } from "../graph/data.js";
 import { type Lane, type LaneRow, type Lanes, repoName, repoOf, targetLabel } from "./stories.js";
 import type { LandscapeInfo } from "./useModel.js";
+
+type TriageStatus = TraceView["status"];
+type JourneySpec = JourneyNode["spec"];
 
 /** The traces beside a model, checked against it. */
 export interface Traces {
@@ -138,7 +143,7 @@ export function traceLanes(model: Model, view: TraceView, landscape?: LandscapeI
       kind: "band",
       key: "modeled",
       tone: "modeled",
-      text: `As modeled, step ${a.step}: ${endLabel(model, modeled.from)} → ${endLabel(model, modeled.to)}${modeled.action ? ` "${modeled.action}"` : ""}. The trace opens it up:`,
+      text: `As modeled, step ${a.step}: ${endLabel(model, modeled.from)} → ${endLabel(model, modeled.to)}${modeled.action ? ` "${modeled.action}"` : ""}. The bug opens it up:`,
       from: lane(modeled.from),
       to: lane(modeled.to),
     });
@@ -251,4 +256,86 @@ export function hopText(model: Model, s: Pick<TraceStepView, "hop" | "from" | "t
     default:
       return "One of its ends isn't in the model.";
   }
+}
+
+/**
+ * A Triage record's steps as a journey, so the map walks through the bug the
+ * way it walks through a journey. Steps whose ends the model doesn't know
+ * have no targets, and no arrow.
+ */
+export function traceJourney(view: TraceView): JourneyNode {
+  const spec = {
+    journey: `triage:${view.id}`,
+    actor: view.anchor?.actor ?? view.actor?.written ?? "",
+    goal: view.title,
+    // Code here is a trace's (path:line or a list); the map doesn't read a step's code.
+    steps: view.steps.map(({ spec: { code: _c, ...rest } }) => rest),
+  } as unknown as JourneySpec;
+  return {
+    id: `triage:${view.id}`,
+    spec,
+    steps: view.steps.map((s, index) => ({
+      index,
+      spec: (spec.steps as JourneySpec["steps"])[index] as JourneySpec["steps"][number],
+      from: s.from.target,
+      to: s.to.target,
+    })),
+  };
+}
+
+/** One arrow per step the model knows both ends of, numbered as the record numbers them. */
+export function traceInteractions(view: TraceView): Interaction[] {
+  return view.steps.flatMap((s, index) =>
+    s.from.target && s.to.target
+      ? [
+          {
+            step: index,
+            label: String(index + 1),
+            from: s.from.target,
+            to: s.to.target,
+            action: s.action,
+            writes: [],
+          },
+        ]
+      : [],
+  );
+}
+
+/** What each step did in the failing run, by 0-based step, for the map's colours. */
+export function traceRoles(view: TraceView): string[] {
+  return view.steps.map((s) => s.role);
+}
+
+/** The statuses in the order the list shows them, with how each reads. */
+export const STATUS_GROUPS: readonly { status: TriageStatus; label: string }[] = [
+  { status: "investigating", label: "Investigating" },
+  { status: "open", label: "Open" },
+  { status: "root-caused", label: "Root cause found" },
+  { status: "fixed", label: "Fixed" },
+  { status: "wont-fix", label: "Won't fix" },
+  { status: "cannot-reproduce", label: "Can't reproduce" },
+];
+
+/** A status in words. */
+export function statusLabel(status: TriageStatus): string {
+  return STATUS_GROUPS.find((g) => g.status === status)?.label ?? status;
+}
+
+/** Records grouped by status, in list order, leaving out empty groups. */
+export function groupByStatus(
+  checks: readonly TraceCheck[],
+): { status: TriageStatus; label: string; checks: TraceCheck[] }[] {
+  return STATUS_GROUPS.map((g) => ({
+    ...g,
+    checks: checks.filter((c) => c.view.status === g.status),
+  })).filter((g) => g.checks.length);
+}
+
+/** The prompt and command to hand a pasted bug to an agent. */
+export function startPrompt(text: string): { prompt: string; command: string } {
+  const bug = text.trim();
+  return {
+    prompt: `Triage this bug with ArchDoc (archdoc_triage): find its root cause and record it in .archdoc/triage/.\n\n${bug}`,
+    command: "archdoc triage start -   # then paste the bug, and end with Ctrl-D",
+  };
 }

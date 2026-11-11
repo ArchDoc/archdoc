@@ -273,7 +273,7 @@ elements:
         kind: container
         deploy: [workstation.browser]
         technology: React 19, Vite, @xyflow/react, elkjs
-        description: Explorer. Two top-level tabs, Explore and Build, each with tabs beneath it. Explore has Overview (journeys as cards, owners, a top-level map), Journeys (on the map by default, or as a sequence with lanes per participant, branches by outcome, one step at a time), Traces (a bug's path as lanes beneath the modeled step, checked in the browser), Data (entries, tables, lineage), Infrastructure (one environment at a time, its nodes as boxes inside boxes colored by what they are, what runs on each, and the uses between them), and Build has Plan and Triage (placeholders, coming soon) and Diff (the PR comment's verdict and what changed on the map). The map starts at the C4 context and opens a level at a time (containers, then components), left to right or top down; a box's kind is its shape and its color, with a key, and every use says what it's for on its line. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain.
+        description: Explorer. Two top-level tabs, Explore and Build, each with tabs beneath it. Explore has Overview (journeys as cards, owners, a top-level map), Journeys (on the map by default, or as a sequence with lanes per participant, branches by outcome, one step at a time), Data (entries, tables, lineage), and Infrastructure (one environment at a time, its nodes as boxes inside boxes colored by what they are, what runs on each, and the uses between them). Build has Plan (a placeholder, coming soon), Triage (Triage records by status; each one's report, leads, root cause, and fix, and the bug's journey on the map one step at a time with the cause in red, or as lanes beneath the modeled step, checked in the browser; and a start panel that places a pasted error and hands it to the agent), and Diff (the PR comment's verdict and what changed on the map). The map starts at the C4 context and opens a level at a time (containers, then components), left to right or top down; a box's kind is its shape and its color, with a key, and every use says what it's for on its line. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain.
         code: [{ path: apps/web/** }]
         uses:
           core:
@@ -282,7 +282,7 @@ elements:
         elements:
           model-loader:
             kind: component
-            description: Fetches the model files and rebuilds the model on every change event; reads it for the tabs (which tabs sit under Explore and Build, journey cards and lanes, the Diff of a branch's code change read into its model with branch 1 defaulting to the working tree and branch 2 to main, the address), with the facts whose sealed code changed; names actors in plain words when they have no name:.
+            description: Fetches the model files and rebuilds the model on every change event; reads it for the tabs (which tabs sit under Explore and Build, journey cards and lanes, the Diff of a branch's code change read into its model with branch 1 defaulting to the working tree and branch 2 to main, the address, with old #traces links opening the Triage tab), with the facts whose sealed code changed; reads Triage records and checks them in the browser, groups them by status, and turns one into a journey for the map; names actors in plain words when they have no name:.
             code: [{ path: apps/web/src/model/** }]
             uses:
               graph: Hands the model to the canvas
@@ -292,7 +292,7 @@ elements:
             code: [{ path: apps/web/src/graph/** }]
           ui:
             kind: component
-            description: Tabs (Explore and Build, and the tabs beneath each, with Build's Plan and Triage placeholders), the map (cards colored by kind, one box for its key, layout, and descriptions, the level control, and the minimap), journey lanes and the step panel, the Data tab's pages, the side lists, and the details panel with code links, where a component lists its code elements under Key code.
+            description: Tabs (Explore and Build, and the tabs beneath each, with Build's Plan placeholder), the map (cards colored by kind, one box for its key, layout, and descriptions, the level control, and the minimap, and a bug's steps colored by what they did), journey lanes and the step panel, the Triage tab's list, record, and start panel, the Data tab's pages, the side lists, and the details panel with code links, where a component lists its code elements under Key code.
             code: [{ path: apps/web/src/components/**, description: Components }, apps/web/src/App.tsx, { path: apps/web/src/styles.css, description: Styles and tokens }]
             uses:
               graph: Renders the laid-out graph

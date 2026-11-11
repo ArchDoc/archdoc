@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { landingTab, sectionOf, sections } from "../src/model/tabs.js";
 
-const everything = { traces: true, data: true, diff: { available: true } };
+const everything = { data: true, diff: { available: true } };
 
 describe("the explorer's tabs", () => {
   it("puts the model under Explore and the work on it under Build", () => {
@@ -10,17 +10,16 @@ describe("the explorer's tabs", () => {
     expect(explore?.tabs.map((t) => t.label)).toEqual([
       "Overview",
       "Journeys",
-      "Traces",
       "Data",
       "Infrastructure",
     ]);
     expect(build?.label).toBe("Build");
     expect(build?.tabs.map((t) => t.label)).toEqual(["Plan", "Triage", "Diff"]);
-    expect(build?.tabs.filter((t) => t.soon).map((t) => t.id)).toEqual(["plan", "triage"]);
+    expect(build?.tabs.filter((t) => t.soon).map((t) => t.id)).toEqual(["plan"]);
   });
 
-  it("leaves out Traces and Data when there are none", () => {
-    const [explore] = sections({ ...everything, traces: false, data: false });
+  it("leaves out Data when there is none", () => {
+    const [explore] = sections({ ...everything, data: false });
     expect(explore?.tabs.map((t) => t.id)).toEqual(["overview", "journeys", "infrastructure"]);
   });
 
@@ -32,7 +31,6 @@ describe("the explorer's tabs", () => {
 
   it("knows each tab's section", () => {
     expect(sectionOf("overview")).toBe("explore");
-    expect(sectionOf("traces")).toBe("explore");
     expect(sectionOf("changes")).toBe("build");
     expect(sectionOf("triage")).toBe("build");
   });
