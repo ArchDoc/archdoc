@@ -94,7 +94,7 @@ export async function triageStartAnswer(where: Where, input: TriageStartInput): 
     "",
     "Next:",
     "  1. Follow the code from the top journey step. As you go, rule each lead in or out (verdict, evidence, note), and add a step per hop the failing request took, with code and evidence.",
-    "  2. Mark the step where it goes wrong role: cause, and say why in root-cause: { summary }. Set status: root-caused.",
+    "  2. Mark the step where it goes wrong role: cause, with code: where it happens (path#function or path:line, on the most specific element), and say why in root-cause: { summary }. Set status: root-caused.",
     "  3. If you fix it, set status: fixed and fix: { summary, link, test }, and commit the record with the fix.",
     `  4. archdoc check checks the record; archdoc show ${id} shows it the way the explorer will.`,
   );

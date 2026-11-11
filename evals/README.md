@@ -244,6 +244,52 @@ Otherwise it spends nothing. `--check-only` says whether it would run, and
 stops. Like the other agent evals, it runs by hand with the `claude` CLI signed
 in, not in CI.
 
+## Triage
+
+`triage/` measures whether an agent, handed a bug report, finds the root cause
+and records it as a Triage record the way the skill asks. Each scenario in
+`triage/<name>/` seeds a bug in a fixture: `bug/` holds the files it rewrites,
+and the repository is the fixture, its golden model as `.archdoc/`, and the bug
+in one commit, so the history doesn't give it away. The report is written the
+way a person would, in words, with the misleading lead a person would follow:
+
+| Scenario | Fixture | The bug | Where it shows up |
+|---|---|---|---|
+| `shipped-email-missing` | `order-flows` | Fulfillment publishes the shipped event under the wrong routing key | The notifier, which logs nothing |
+| `postings-never-settle` | `go-service` | Settle gives each update a 5ms deadline | The store's query: context deadline exceeded |
+| `new-tickets-missing` | `polyglot` | Opening a ticket never saves it: a call that's missing | The worker, which updates no rows |
+
+`scenario.yaml` has the `symptom` the agent is handed, and `expected`: the
+elements the `cause` is in (and `coarse`, what they're part of), the file
+(`code`), the `journeys` the record may open up, and the leads that aren't the
+cause (`not-cause`). `gold.yaml` is the record a careful triage writes.
+
+**Free** (`pnpm test`, `packages/analyzers/test/triage-evals.test.ts`): each
+golden model loads, `gold.yaml` checks clean and scores full marks, a record
+that blames the misleading lead and says it reproduced the bug fails, and
+`archdoc triage start` places each report on a journey it shows up in.
+
+**Agent** calls a model, so it costs money, about $0.20 to $0.50 a run, and
+runs by hand with the `claude` CLI signed in:
+
+```sh
+pnpm build
+pnpm eval:triage                          # every scenario, once
+pnpm eval:triage shipped-email-missing --runs 3
+node scripts/eval-triage.mjs --rescore evals/results/triage-<time>  # score again, for free
+```
+
+It asks Claude Code, headless, with the skill, the MCP server, and the CLI
+from this checkout, to find the root cause and not fix it. It may read, write,
+and edit files, use the archdoc tools, and run `git status`, `diff`, and
+`log`, but can't run the code. `scoreRecord` in `scripts/eval-triage-lib.mjs`
+scores the record it writes: whether its cause step is on an element the cause
+is in (and as specific as the model goes) and points at the right file, opens
+up a right journey, rules out the misleading leads rather than blaming them,
+says nothing was reproduced, has hops the model declares, stopped at
+`root-caused` without changing code, and checks clean. Results go to
+`evals/results/triage-<time>/`, with each run's record, answer, and transcript.
+
 ## Adding a fixture
 
 1. Add `fixtures/<name>/repo/` with a few files per element and real imports

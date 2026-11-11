@@ -447,6 +447,20 @@ export function checkTrace(
       s.status ? "status" : "trace",
     );
   }
+  if (s.status && found) {
+    // The cause is where someone opens the code: the record should say where.
+    for (const n of causes) {
+      const x = steps[n - 1];
+      if (!x || x.code.length) continue;
+      add(
+        "warning",
+        "triage/cause-no-code",
+        "It's the cause, but doesn't say where in the code. Add code: path#function or path:line.",
+        `steps.${n - 1}`,
+        n,
+      );
+    }
+  }
   if (s.status && found && !diagnosis) {
     add(
       "warning",

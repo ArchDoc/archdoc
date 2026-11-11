@@ -1,0 +1,18 @@
+# The worker gives each settlement 5ms, so the update times out before
+# Postgres answers. The error comes out of the store's query, but the cause
+# is the deadline the postings component sets.
+fixture: go-service
+symptom: |
+  Since Thursday most postings stay unsettled. The ledger-worker logs this for
+  nearly every one:
+
+    settle 01HZX4K2M9: timeout: context deadline exceeded
+
+  Postgres looks healthy: p99 query time is 40ms and there are no lock waits.
+expected:
+  cause: [ledger.postings]
+  # What it's part of: right, though not as specific as the model goes.
+  coarse: [ledger]
+  code: internal/postings/settle.go
+  journeys: [settle-postings]
+  not-cause: [ledger.store, postgres]

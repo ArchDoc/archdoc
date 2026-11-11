@@ -1,0 +1,19 @@
+# Fulfillment publishes the shipped event under the wrong routing key, so the
+# notifier's queue, bound to order.shipped, never gets it. The symptom shows
+# in the notifier (no email, no errors), but the cause is upstream, across
+# the queue.
+fixture: order-flows
+symptom: |
+  Support ticket #4821: customers say they never get the "your order has shipped"
+  email any more. Parcels arrive and the tracking numbers are on the carrier's
+  site, so orders are shipping. The notifier's logs are empty since Monday's
+  deploy: no errors, nothing.
+expected:
+  # The cause step names one of these (or a part of one).
+  cause: [shop.fulfillment]
+  # The cause step's code, or the root cause, points at this file.
+  code: fulfillment/fulfillment/events.py
+  # The record opens up one of these journeys.
+  journeys: [ship-order]
+  # Leads it should rule out, not blame.
+  not-cause: [shop.notifier]

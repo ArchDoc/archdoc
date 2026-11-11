@@ -296,6 +296,25 @@ export function anchorError(model: Model, text: string, options: AnchorOptions =
       });
     }
   }
+  // An element by the last part of its ID, as a bug report in words names it
+  // ("the notifier", "ledger-worker"): when no other element ends the same way.
+  const tails = new Map<string, string | undefined>();
+  for (const { id, key, spec } of model.elements.values()) {
+    // The system is the whole product: its name says nothing about where.
+    if (spec.kind === "system") continue;
+    const tail = key.toLowerCase();
+    if (tail.length < 4) continue;
+    tails.set(tail, tails.has(tail) ? undefined : id);
+  }
+  // Only in the words around the frames and paths, and only elements nothing else points at.
+  const pointed = new Set(evidence.flatMap((e) => (e.element ? [e.element] : [])));
+  const prose = raws.reduce((t, r) => t.split(r.text).join(" "), text);
+  for (const token of prose.match(/[A-Za-z][\w-]*\w/g) ?? []) {
+    const id = tails.get(token.toLowerCase());
+    if (!id || named.has(id) || pointed.has(id)) continue;
+    named.add(id);
+    evidence.push({ kind: "identifier", text: token, names: "element", element: id });
+  }
   for (const f of functions) {
     const hit = words.get(f);
     if (hit?.names === "symbol" && !named.has(f)) {
@@ -309,7 +328,8 @@ export function anchorError(model: Model, text: string, options: AnchorOptions =
   const weigh = (e: ErrorEvidence): number => {
     if (e.kind === "frame") return (e.depth ?? 9) < 3 ? 6 : 3;
     if (e.kind === "path") return e.line !== undefined ? 5 : 3;
-    return e.names === "symbol" ? 6 : e.names === "element" || e.names === "logic" ? 4 : 0;
+    if (e.names === "element") return e.text.includes(".") ? 4 : 2;
+    return e.names === "symbol" ? 6 : e.names === "logic" ? 4 : 0;
   };
   for (const e of evidence) {
     if (!e.element) continue;

@@ -462,6 +462,31 @@ describe("anchorError", () => {
     expect(anchorError(shop(), text, { files })).toEqual(r);
   });
 
+  it("reads elements a bug report names in words, below frames and dotted IDs", () => {
+    const r = anchorError(
+      shop(),
+      "Since the Search update, the Mailer never sends a receipt after checkout. Orders look fine.",
+    );
+    // Search is the system, and two elements are called orders: neither says where.
+    expect(r.elements.map((e) => [e.element, e.score])).toEqual([
+      ["api.checkout", 2],
+      ["mailer", 2],
+    ]);
+    expect(r.elements[1]?.evidence).toEqual(["names element Mailer"]);
+    expect(r.anchors[0]).toMatchObject({ journey: "checkout", step: 2 });
+    // A dotted ID still counts for more, and a word inside a path isn't read twice.
+    const both = anchorError(
+      shop(),
+      "api.orders failed: see services/api/checkout/pay.ts:2, then the mailer",
+      { files },
+    );
+    expect(both.elements.map((e) => [e.element, e.score])).toEqual([
+      ["api.checkout", 5],
+      ["api.orders", 4],
+      ["mailer", 2],
+    ]);
+  });
+
   it("reads Python, Go, Rust, and plain path:line references", () => {
     const m = shop();
     const python = anchorError(

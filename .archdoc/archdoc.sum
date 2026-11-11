@@ -905,11 +905,11 @@ seals:
     by: agent:claude-code
   element:toolchain.core.traces#packages/core/src/trace/anchor.ts:anchorError:
     kind: content
-    hash: fnv-cb0529e4a82b2750
+    hash: fnv-e73064c74da1d615
     refs:
       packages/core/src/trace/anchor.ts (anchorError):
-        hash: fnv-d370adb1659a022d
-        lines: 111
+        hash: fnv-4b5ad1dd6108eb87
+        lines: 108
     by: agent:claude-code
   element:toolchain.core.traces#packages/core/src/trace/check.ts:checkTrace:
     kind: content

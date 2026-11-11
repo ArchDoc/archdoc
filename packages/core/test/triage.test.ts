@@ -60,7 +60,7 @@ describe("Triage records", () => {
         - { claim: The db retries, element: db, verdict: ruled-out, evidence: read, note: No retries configured }
         - { claim: The api saves twice, element: api.checkout, verdict: confirmed, evidence: reproduced }
       steps:
-        - { from: api, to: db, action: Saves, role: cause, evidence: reproduced }
+        - { from: api, to: db, action: Saves, role: cause, evidence: reproduced, code: services/api/checkout/pay.ts#payOrder }
       root-cause: { summary: The handler saves before and after payment. }
       fix: { summary: Save once, link: https://example.com/pull/2, test: services/api/checkout/pay.test.ts }
     `);
@@ -117,12 +117,18 @@ describe("Triage records", () => {
       check(
         "triage: t\ntitle: x\nsymptom: x\nstatus: fixed\nexpands: checkout#2\nsteps: [{ from: web, to: api, evidence: read }]\nroot-cause: { summary: y, step: 1 }",
       ),
-    ).toEqual(["triage/no-fix"]);
+    ).toEqual(["triage/no-fix", "triage/cause-no-code"]);
     expect(
       check(
         "triage: t\ntitle: x\nsymptom: x\nstatus: root-caused\nexpands: checkout#2\nsteps: [{ from: web, to: api, evidence: read }]\nroot-cause: { summary: y, step: 4 }",
       ),
     ).toEqual(["triage/unknown-step", "trace/no-cause"]);
+    // The cause says where in the code.
+    expect(
+      check(
+        "triage: t\ntitle: x\nsymptom: x\nstatus: root-caused\nexpands: checkout#2\nsteps: [{ from: web, to: api, role: cause, evidence: read, code: services/api/checkout/pay.ts }]\nroot-cause: { summary: y }",
+      ),
+    ).toEqual([]);
     expect(check("triage: t\ntitle: x\nsymptom: x\nstatus: wont-fix\nexpands: checkout#2")).toEqual(
       ["triage/no-reason"],
     );

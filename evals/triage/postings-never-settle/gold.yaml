@@ -1,0 +1,40 @@
+triage: postings-never-settle
+title: Postings stay unsettled with context deadline exceeded
+status: root-caused
+symptom: "settle 01HZX4K2M9: timeout: context deadline exceeded"
+expands: settle-postings#3
+hypotheses:
+  - claim: Postgres is too slow
+    element: postgres
+    verdict: ruled-out
+    evidence: inferred
+    note: p99 is 40ms, well within a sane deadline but not within 5ms.
+  - claim: The settle query is wrong or blocks
+    element: ledger.store
+    verdict: ruled-out
+    evidence: read
+    note: MarkSettled is one update by primary key; the error is the context's deadline, not the query's.
+  - claim: Settle gives the update too little time
+    element: ledger.postings
+    verdict: confirmed
+    evidence: read
+    note: settleTimeout is 5ms.
+root-cause:
+  step: 2
+  summary: Settle gives MarkSettled a 5ms deadline, shorter than a normal round trip to Postgres, so most updates are cancelled.
+steps:
+  - { from: ledger-worker, to: ledger.postings, action: Settles a posting.created, code: cmd/ledger-worker/main.go, evidence: read }
+  - from: ledger.postings
+    to: ledger.store
+    action: Marks it settled with a 5ms deadline
+    code: internal/postings/settle.go#Settle
+    role: cause
+    evidence: read
+    observed: { timeout: 5ms }
+    expected: { timeout: well over Postgres p99 (40ms) }
+  - from: ledger.store
+    to: postgres
+    action: Runs the update until the deadline cancels it
+    code: internal/store/store.go#MarkSettled
+    role: symptom
+    evidence: read

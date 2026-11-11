@@ -1,0 +1,29 @@
+triage: new-tickets-missing
+title: Filed tickets never show up
+status: root-caused
+symptom: "Tickets never show up; the worker logs: priority normal for 'Printer jammed': 0 rows updated"
+expands: open-ticket#3
+hypotheses:
+  - claim: The worker's update matches the wrong rows
+    element: worker
+    verdict: ruled-out
+    evidence: read
+    note: It updates by title correctly; there's no row to update.
+  - claim: Opening a ticket never saves it
+    element: backend.domain
+    verdict: confirmed
+    evidence: read
+root-cause:
+  step: 2
+  summary: tickets.Open publishes ticket.opened but never calls Save, so no row is written; the worker's update then matches nothing.
+steps:
+  - { from: backend.handlers, to: backend.domain, action: Opens the ticket, code: backend/http/handlers/tickets.go#Tickets, evidence: read }
+  - from: backend.domain
+    to: postgres
+    action: Should save the ticket
+    code: backend/tickets/open.go#Open
+    role: cause
+    evidence: read
+    missing: { from: backend.domain, to: postgres, call: Save }
+  - { from: backend.domain, to: backend.publisher, action: Announces it, code: backend/tickets/open.go#Open, evidence: read }
+  - { from: worker, to: postgres, action: Sets priority on no rows, code: worker/worker/triage.py#triage, role: symptom, evidence: read }

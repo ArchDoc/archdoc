@@ -166,7 +166,7 @@ elements:
                 description: Reports in the shape of check's findings
           traces:
             kind: component
-            description: "Triage records, in .archdoc/triage/ (and traces/ from before 0.8), never part of the model. Parses them, works out each record's status, checks them against the model and the code (elements, the journey step they expand, code references, hops the model doesn't declare, and what the status needs: a cause and root cause once root-caused, a fix once fixed), and anchors an error's stack frames, paths, and names to elements and ranked journey steps, with a record to start from."
+            description: "Triage records, in .archdoc/triage/ (and traces/ from before 0.8), never part of the model. Parses them, works out each record's status, checks them against the model and the code (elements, the journey step they expand, code references, hops the model doesn't declare, and what the status needs: a cause and root cause once root-caused, a fix once fixed), and places a bug report on elements and ranked journey steps by its stack frames, paths, and the names in it, elements a report in plain words names included, with a record to start from."
             code:
               - { path: packages/core/src/trace/** }
               - { path: packages/core/src/trace/check.ts, symbol: checkTrace, description: Checks a trace and resolves it for drawing }
