@@ -534,7 +534,7 @@ export function checkTrace(
     add(
       detail,
       "triage/step-no-data",
-      `${list(silent)} ${silent.length === 1 ? "doesn't" : "don't"} say what ${silent.length === 1 ? "it carries" : "they carry"}. Add sends: with the data entry the hop passes, by its name under data:${sent.length ? ` (the journey step it opens up sends ${sent.join(", ")})` : ""}, or creates: or changes: for a write, and observed:/expected: on its fields where the values go wrong, such as observed: { Order.status: pending }.`,
+      `${list(silent)} ${silent.length === 1 ? "doesn't" : "don't"} say what ${silent.length === 1 ? "it carries" : "they carry"}. Add sends: with the data entry the hop passes, by its name under data:${sent.length ? ` (the journey step it opens up sends ${sent.join(", ")})` : ""}, or creates: or changes: for a write, and observed:/expected: on its fields where the values go wrong, such as observed: { Order.status: pending }.${sent.length ? "" : ` If the model has no entry for what the code passes, it's missing from the design, not only the record: add it with archdoc edit ({ "op": "add", "type": "data", "id": "Posting", "spec": { "description": "…", "fields": { … } } }, fields from the type the code passes), then name it here.`}`,
       `steps.${(silent[0] as number) - 1}`,
     );
   }
