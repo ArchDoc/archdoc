@@ -2,7 +2,7 @@ import { ASKED_CONCERNS, DataRegistry, type Model } from "@archdoc/core/browser"
 import { forwardRef, type ReactNode, useMemo, useState } from "react";
 import { sensitivity } from "../graph/data.js";
 import { type ChangeItem, type Compare, UNDECLARED } from "../model/compare.js";
-import { journeysByImportance } from "../model/stories.js";
+import { actorLabel, journeysByImportance } from "../model/stories.js";
 import type { LandscapeInfo } from "../model/useModel.js";
 
 /* The left column of the Journeys, Data, and Changes tabs, and the search in the top bar. */
@@ -397,7 +397,7 @@ export function search(model: Model, query: string): Hit[] {
   }
   for (const a of model.actors.values()) {
     if (match(a.id, a.spec.name, a.spec.description)) {
-      hits.push({ key: `actor:${a.id}`, label: a.spec.name ?? a.id, hint: a.spec.kind });
+      hits.push({ key: `actor:${a.id}`, label: actorLabel(model, a.id), hint: a.spec.kind });
     }
   }
   for (const g of dataGroups(model)) {

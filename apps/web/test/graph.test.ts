@@ -1,6 +1,15 @@
+import { buildModel } from "@archdoc/core/browser";
 import { describe, expect, it } from "vitest";
 import { journeyInteractions } from "../src/graph/data.js";
-import { buildGraph, defaultExpanded, journeyEdges, journeyExpansion } from "../src/graph/graph.js";
+import {
+  buildGraph,
+  defaultExpanded,
+  drawnChildIds,
+  journeyEdges,
+  journeyExpansion,
+  shownId,
+} from "../src/graph/graph.js";
+import { actorLabel } from "../src/model/stories.js";
 import { ridesModel } from "./fixtures.js";
 
 const model = ridesModel();
@@ -99,5 +108,77 @@ describe("journeys", () => {
       source: "element:platform.api",
       target: "element:platform.db",
     });
+  });
+});
+
+describe("code elements", () => {
+  const coded = buildModel([
+    {
+      path: "archdoc.yaml",
+      text: `
+archdoc: "2.0"
+namespace: shop
+actors:
+  dashboard-user: { kind: person, uses: { api.orders: Places orders } }
+elements:
+  api:
+    kind: container
+    elements:
+      orders:
+        kind: component
+        uses: { db: Saves orders }
+        elements:
+          place: { kind: code, description: Places an order., code: "api/orders.ts#placeOrder" }
+          price: { kind: code, description: Prices the cart., code: "api/price.ts#price" }
+      users:
+        kind: component
+  db: { kind: datastore, uses: {} }
+journeys:
+  buy:
+    actor: dashboard-user
+    goal: Buy
+    steps:
+      - { from: dashboard-user, to: api.orders.place }
+      - { from: api.orders.place, to: db }
+`,
+    },
+  ]);
+
+  it("aren't drawn: their component is a closed box with nothing to open", () => {
+    const g = buildGraph(coded, { expanded: new Set(["api", "api.orders"]) });
+    expect(ids(g.nodes).filter((id) => id.startsWith("element:"))).toEqual([
+      "element:api",
+      "element:api.orders",
+      "element:api.users",
+      "element:db",
+    ]);
+    expect(g.nodes.find((n) => n.id === "element:api.orders")).toMatchObject({
+      isGroup: false,
+      hiddenChildren: 0,
+    });
+    expect(g.nodes.find((n) => n.id === "element:api")).toMatchObject({ isGroup: true });
+    expect(drawnChildIds(coded, "api.orders")).toEqual([]);
+    expect(drawnChildIds(coded, "api")).toEqual(["api.orders", "api.users"]);
+  });
+
+  it("stand for their component on the map, and a journey through them opens only up to it", () => {
+    const journey = coded.journeys.get("buy");
+    if (!journey) throw new Error("fixture");
+    expect(shownId(coded, "api.orders.place")).toBe("api.orders");
+    expect(journeyExpansion(coded, journey)).toEqual(["api"]);
+    const steps = journeyEdges(
+      coded,
+      { expanded: new Set(["api"]) },
+      journey.id,
+      journeyInteractions(coded, journey),
+    );
+    expect(steps.map((s) => `${s.source}->${s.target}`)).toEqual([
+      "actor:dashboard-user->element:api.orders",
+      "element:api.orders->element:db",
+    ]);
+  });
+
+  it("names actors in plain words when they have no name:", () => {
+    expect(actorLabel(coded, "dashboard-user")).toBe("Dashboard User");
   });
 });

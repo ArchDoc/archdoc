@@ -164,13 +164,39 @@ export interface JourneyEdge {
 /** Key of the visible node that stands for `target`: itself, or its nearest visible ancestor. */
 export function liftKey(model: Model, state: ViewState, target: Target): string {
   if (target.type !== "element") return nodeKey(target);
-  const chain = ancestorsOf(model, target.id);
-  if (state.system?.members.has(chain[0] ?? target.id)) return state.system.key;
+  const id = shownId(model, target.id);
+  const chain = ancestorsOf(model, id);
+  if (state.system?.members.has(chain[0] ?? id)) return state.system.key;
   // The first collapsed ancestor (from the top) hides everything below it.
-  for (const id of chain) {
-    if (!isOpen(state, id)) return `element:${id}`;
+  for (const a of chain) {
+    if (!isOpen(state, a)) return `element:${a}`;
   }
-  return `element:${target.id}`;
+  return `element:${id}`;
+}
+
+/**
+ * Whether an element is drawn as a box. Code elements (functions, classes,
+ * lines) aren't: they're listed under Key code in their component's details,
+ * with links to the code.
+ */
+export function isDrawn(model: Model, id: string): boolean {
+  const el = model.elements.get(id);
+  return !!el && el.spec.kind !== "code";
+}
+
+/** The element that stands for `id` on the map: itself, or for code, the part that holds it. */
+export function shownId(model: Model, id: string): string {
+  let at = id;
+  for (let el = model.elements.get(at); el?.spec.kind === "code" && el.parentId; ) {
+    at = el.parentId;
+    el = model.elements.get(at);
+  }
+  return at;
+}
+
+/** The children drawn inside an element's box: every child but its code. */
+export function drawnChildIds(model: Model, id: string): string[] {
+  return (model.elements.get(id)?.childIds ?? []).filter((c) => isDrawn(model, c));
 }
 
 /** IDs from the top-level element down to the parent of `id`. */
@@ -217,10 +243,13 @@ export function buildGraph(model: Model, state: ViewState): Graph {
 
   for (const el of model.elements.values()) {
     if (grouping?.dissolved.has(el.id)) continue;
+    // Code is listed in its part's details, not drawn.
+    if (!isDrawn(model, el.id)) continue;
     const ancestors = ancestorsOf(model, el.id);
     if (state.system?.members.has(ancestors[0] ?? el.id)) continue;
     if (!ancestors.every((a) => isOpen(state, a))) continue;
-    const open = state.expanded.has(el.id) && el.childIds.length > 0;
+    const inside = drawnChildIds(model, el.id).length;
+    const open = state.expanded.has(el.id) && inside > 0;
     const tables = state.tables?.has(el.id) && Object.keys(el.spec.stores ?? {}).length > 0;
     nodes.set(`element:${el.id}`, {
       id: `element:${el.id}`,
@@ -230,7 +259,7 @@ export function buildGraph(model: Model, state: ViewState): Graph {
       isGroup: open || !!tables,
       // A datastore showing rows lays its tables out on their own: fewer crossings between rows.
       layout: tables && state.rows?.stores.has(el.id) ? OWN_LAYOUT : undefined,
-      hiddenChildren: open ? 0 : el.childIds.length,
+      hiddenChildren: open ? 0 : inside,
       depth: el.depth,
     });
   }
@@ -638,7 +667,8 @@ export function journeyExpansion(model: Model, journey: JourneyNode): string[] {
   const out = new Set<string>();
   for (const step of journey.steps) {
     for (const t of [step.from, step.to]) {
-      if (t?.type === "element") for (const a of ancestorsOf(model, t.id)) out.add(a);
+      if (t?.type === "element")
+        for (const a of ancestorsOf(model, shownId(model, t.id))) out.add(a);
     }
   }
   return [...out];

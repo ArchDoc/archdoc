@@ -328,7 +328,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.checker:
     kind: structure
-    hash: fnv-1a5a63cc5753aad4
+    hash: fnv-863abbce08947f30
     files:
       packages/core/src/check/check.ts:
         - CheckOptions
@@ -345,6 +345,7 @@ seals:
         - DiscoveryOptions
         - EntryPoint
         - INIT_DESCRIPTION
+        - KEY_CODE_LIMIT
         - LEVEL_LIMITS
         - assessDiscovery
         - formatDiscovery
@@ -352,6 +353,7 @@ seals:
         - isVerificationCode
         - needsPerson
         - openWarnings
+        - plainWords
       packages/core/src/check/journeys.ts:
         - validateJourneys
       packages/core/src/check/observed.ts:
@@ -1086,7 +1088,7 @@ seals:
         - default
   element:toolchain.web.graph:
     kind: structure
-    hash: fnv-783ca62bd96b9f77
+    hash: fnv-8cdb8b438ed86069
     files:
       apps/web/src/graph/catalog.ts:
         - EntryMove
@@ -1142,7 +1144,9 @@ seals:
         - ancestorsOf
         - buildGraph
         - defaultExpanded
+        - drawnChildIds
         - hasSystem
+        - isDrawn
         - journeyEdges
         - journeyExpansion
         - levelExpansion
@@ -1154,6 +1158,7 @@ seals:
         - rowKey
         - rowTableSize
         - showValue
+        - shownId
         - systemBox
         - tableKey
       apps/web/src/graph/groups.ts:
@@ -1198,7 +1203,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-93d4b1dcac1d6cfc
+    hash: fnv-b48875fb871bc1a1
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
@@ -1218,6 +1223,7 @@ seals:
         - LaneRow
         - LaneStep
         - Lanes
+        - actorLabel
         - journeyCards
         - journeyFacts
         - journeyLanes
@@ -1271,7 +1277,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-a55686fd843da405
+    hash: fnv-7090bafcf34ac2e8
     files:
       apps/web/src/App.tsx:
         - App
@@ -1335,7 +1341,9 @@ seals:
         - TraceStory
       apps/web/src/components/code.tsx:
         - CodeContext
+        - CodeRefs
         - CodeSection
+        - KeyCode
         - PathLinks
         - StepCode
         - editorLink

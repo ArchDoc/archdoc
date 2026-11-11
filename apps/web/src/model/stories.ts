@@ -4,6 +4,7 @@ import {
   journeyBranches,
   type Model,
   nodeKey,
+  plainWords,
   type Relationship,
   type Target,
 } from "@archdoc/core/browser";
@@ -26,12 +27,22 @@ export function journeysByImportance(model: Model): JourneyNode[] {
     .map(({ j }) => j);
 }
 
+/**
+ * An actor's name for people to read: its name:, or its ID in plain words
+ * ("dashboard-user" reads "Dashboard User"). Kebab-case is for names in the
+ * code and infrastructure; people, teams, and the systems that call in aren't.
+ */
+export function actorLabel(model: Model, id: string): string {
+  const name = model.actors.get(id)?.spec.name?.trim();
+  return name || plainWords(id);
+}
+
 /** A readable name for a step's end: the actor's or element's name, or another repo's element's. */
 export function targetLabel(model: Model, t: Target): string {
   if (t.type !== "external") {
     return (
       (t.type === "actor"
-        ? model.actors.get(t.id)?.spec.name
+        ? actorLabel(model, t.id)
         : (model.elements.get(t.id)?.spec.name ?? model.elements.get(t.id)?.key)) ?? t.id
     );
   }
@@ -143,7 +154,7 @@ export function ownership(model: Model): { id: string; name: string; elements: n
     for (const o of e.spec.owners ?? []) counts.set(o, (counts.get(o) ?? 0) + 1);
   }
   return [...counts]
-    .map(([id, elements]) => ({ id, name: model.actors.get(id)?.spec.name ?? id, elements }))
+    .map(([id, elements]) => ({ id, name: actorLabel(model, id), elements }))
     .sort((a, b) => b.elements - a.elements || a.name.localeCompare(b.name));
 }
 

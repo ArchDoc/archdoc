@@ -236,7 +236,7 @@ describe("archdoc init on a Go service with compose and SQL migrations", () => {
     expect(out).toMatch(
       /^✓ Wrote \.archdoc\/archdoc\.yaml, \.archdoc\/environments\.yaml, and \.archdoc\/data\.yaml\./,
     );
-    expect(out).toContain("3 containers, 0 components in them, 0 code elements in those");
+    expect(out).toContain("3 containers, 0 components in them\n");
     expect(out).toContain("5 uses, 3 datastores or queues, 0 contracts, 1 data entry");
     expect(out).toContain("4. Add actors");
     expect(out).toContain("archdoc check --done");
@@ -275,12 +275,7 @@ describe("archdoc init on flat Go and Python layouts", () => {
     expect(kinds).toEqual({
       blog: "container",
       "blog.articles": "component",
-      "blog.articles.comments": "code",
-      "blog.articles.models": "code",
-      "blog.articles.routers": "code",
       "blog.common": "component",
-      "blog.common.db": "code",
-      "blog.common.errors": "code",
     });
     expect(uses(model)).toEqual(["blog.articles->blog.common"]);
   });
@@ -333,16 +328,7 @@ describe("archdoc init on flat Go and Python layouts", () => {
     await w("verification/smoke.py", "import httpx\n");
     await w("services/billing/billing_test.go", "package billing\n");
     const { model } = await inferred(root);
-    expect([...model.elements.keys()].sort()).toEqual([
-      "api",
-      "api.orders",
-      "api.orders.refund",
-      "api.orders.service",
-      "api.orders.totals",
-      "api.storage",
-      "api.storage.cache",
-      "api.storage.db",
-    ]);
+    expect([...model.elements.keys()].sort()).toEqual(["api", "api.orders", "api.storage"]);
     expect(uses(model)).toEqual(["api.orders->api.storage"]);
   });
 });
@@ -408,7 +394,7 @@ describe("archdoc init, layer by layer", () => {
   });
   afterAll(() => rm(dir, { recursive: true, force: true }));
 
-  it("nests components in containers and code in components, with uses at every level", async () => {
+  it("nests components in containers, with uses at every level, and leaves code elements to the reader", async () => {
     const r = await initModel(dir);
     expect(r.problems).toEqual([]);
     const model = await loadUnwrapped(dir);
@@ -417,37 +403,21 @@ describe("archdoc init, layer by layer", () => {
       web: "container",
       api: "container",
       "api.orders": "component",
-      "api.orders.place": "code",
-      "api.orders.price": "code",
       "api.users": "component",
-      "api.users.login": "code",
-      "api.users.logout": "code",
-      "api.users.session": "code",
       util: "container",
-      // A flat package: its files are the components, their functions and classes the code.
+      // A flat package: its files are the components. No code elements, one per file or
+      // function: which functions a newcomer opens first takes reading the code.
       "util.dates": "component",
       "util.ids": "component",
       "util.money": "component",
       "util.numbers": "component",
       "util.strings": "component",
-      "util.strings.pad": "code",
-      "util.strings.Slug": "code",
     });
-    // A file with one function points at it; one with several leaves them to its component.
-    expect(model.elements.get("api.orders.place")?.code).toEqual([
-      { path: "packages/api/src/orders/place.ts", symbol: "placeOrder" },
-    ]);
-    expect(model.elements.get("api.orders.price")?.code).toEqual([
-      { path: "packages/api/src/orders/price.ts" },
-    ]);
     const uses = model.relationships
       .map((x) => `${"id" in x.from ? x.from.id : ""}->${"id" in x.to ? x.to.id : ""}`)
       .sort();
     expect(uses).toEqual([
       "api.orders->api.users",
-      "api.orders.place->api.orders.price",
-      "api.users.login->api.users.session",
-      "api.users.logout->api.users.session",
       "util.dates->util.numbers",
       "util.dates->util.strings",
       "util.ids->util.strings",
@@ -456,7 +426,7 @@ describe("archdoc init, layer by layer", () => {
       "web->api",
     ]);
     // web has one file: a container that small stays lean, with no components.
-    expect(r.stats).toMatchObject({ elements: 3, components: 7, code: 7, uses: 10 });
+    expect(r.stats).toMatchObject({ elements: 3, components: 7, code: 0, uses: 7 });
 
     // check agrees: every import is declared, and every layer sits inside the one above it.
     const checked = await checkRepository({ cwd: dir });
@@ -485,6 +455,6 @@ describe("archdoc init, layer by layer", () => {
       "invoicing.models",
       "invoicing.services",
     ]);
-    expect(model.elements.get("invoicing.services.billing")?.spec.kind).toBe("code");
+    expect(model.elements.get("invoicing.services.billing")).toBeUndefined();
   });
 });

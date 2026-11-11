@@ -80,7 +80,7 @@ describe("journey cards", () => {
   });
 
   it("counts what each owner owns", () => {
-    expect(ownership(model)).toEqual([{ id: "shop-team", name: "shop-team", elements: 2 }]);
+    expect(ownership(model)).toEqual([{ id: "shop-team", name: "Shop Team", elements: 2 }]);
   });
 });
 
