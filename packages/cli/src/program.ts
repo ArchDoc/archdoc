@@ -17,6 +17,12 @@ import { schema } from "./commands/schema.js";
 import { seal } from "./commands/seal.js";
 import { site } from "./commands/site.js";
 import { traceList } from "./commands/trace.js";
+import {
+  type TriageStartOptions,
+  triageList,
+  triageMigrate,
+  triageStart,
+} from "./commands/triage.js";
 import { validate } from "./commands/validate.js";
 import { view } from "./commands/view.js";
 import { type Io, processIo } from "./io.js";
@@ -208,7 +214,7 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
   program
     .command("show")
     .description(
-      "One thing in the model: an element, actor, journey, data entry, Entry.field (its lineage), trace, or sealed fact",
+      "One thing in the model: an element, actor, journey, data entry, Entry.field (its lineage), Triage record, or sealed fact",
     )
     .argument("<id>", "such as payments.charges, Refund.amount_cents, or step:refund#2")
     .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
@@ -234,21 +240,59 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
       await runStdio({ model: opts.model, cwd: io.cwd, version });
     });
 
+  const triage = program
+    .command("triage")
+    .description(
+      "Triage records: a bug, the leads followed, and the path the failing request took to its root cause, attached to the journey step where it showed up (.archdoc/triage/)",
+    );
+  triage
+    .command("start")
+    .description(
+      "Start a record from a bug report: places the error, and writes .archdoc/triage/<id>.yaml to fill in",
+    )
+    .argument("[file]", "the error, log, stack trace, or issue text, from a file or - (stdin)")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("-t, --title <title>", "the bug in one line, as a user would say it")
+    .option("--id <id>", "the record's ID (default: from the title or the error)")
+    .option("--link <url>", "where it was reported: the issue, ticket, or thread")
+    .option("--by <who>", "who reported it: an actor ID, or a name")
+    .option("--severity <level>", "low, normal, high, or critical")
+    .option("--dry-run", "print the record without writing it")
+    .action((file: string | undefined, opts: TriageStartOptions) =>
+      run(triageStart(file, opts, io)),
+    );
+  triage
+    .command("list")
+    .description("List the records, open ones first")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option(
+      "-s, --status <status>",
+      "only this status (open, investigating, root-caused, fixed, wont-fix, cannot-reproduce), or open-all for every unclosed one",
+    )
+    .option("-e, --element <id>", "only records that name this element or its parts")
+    .action((opts: { model?: string; status?: string; element?: string }) =>
+      run(triageList(opts, io)),
+    );
+  triage
+    .command("migrate")
+    .description("Move traces from before 0.8 (.archdoc/traces/) to Triage records")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("--dry-run", "say what would move without moving it")
+    .action((opts: { model?: string; dryRun?: boolean }) => run(triageMigrate(opts, io)));
+
   const trace = program
     .command("trace")
-    .description(
-      "Traces: the path a failing request took, attached to the journey step where the error showed up (.archdoc/traces/)",
-    );
+    .description("Deprecated since 0.8: use archdoc triage. Kept until 0.9.");
   trace
     .command("list")
-    .description("List the traces in .archdoc/traces/")
+    .description("List the Triage records (archdoc triage list)")
     .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
     .option("--json", "print the result as JSON")
     .action((opts: { model?: string; json?: boolean }) => run(traceList(opts, io)));
   program
     .command("check")
     .description(
-      "What's wrong or stale: model problems, undeclared dependencies, rules, stale paths, traces, and sealed facts whose code changed. With --base, what the change does",
+      "What's wrong or stale: model problems, undeclared dependencies, rules, stale paths, Triage records, and sealed facts whose code changed. With --base, what the change does",
     )
     .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
     .option(

@@ -3,10 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   anchorChip,
   firstCause,
+  groupByStatus,
   observedExpected,
   readTraces,
+  startPrompt,
   traceChips,
+  traceInteractions,
+  traceJourney,
   traceLanes,
+  traceRoles,
 } from "../src/model/traces.js";
 import { hashOf, readHash } from "../src/model/useCompare.js";
 
@@ -136,8 +141,53 @@ describe("the trace view", () => {
 });
 
 describe("the address", () => {
-  it("opens a trace", () => {
-    expect(readHash("#traces=false-changes")).toEqual({ tab: "traces", trace: "false-changes" });
-    expect(hashOf({ tab: "traces", trace: "false-changes" })).toBe("#traces=false-changes");
+  it("opens a Triage record, and old #traces links still do", () => {
+    expect(readHash("#triage=false-changes")).toEqual({ tab: "triage", trace: "false-changes" });
+    expect(readHash("#traces=false-changes")).toEqual({ tab: "triage", trace: "false-changes" });
+    expect(hashOf({ tab: "triage", trace: "false-changes" })).toBe("#triage=false-changes");
+    expect(hashOf({ tab: "triage" })).toBe("#triage");
+  });
+});
+
+describe("a Triage record on the map", () => {
+  const record = (yaml: string) => {
+    const r = readTraces(model, [{ path: ".archdoc/triage/r.yaml", text: yaml }]);
+    const c = r.checks[0];
+    if (!c) throw new Error(JSON.stringify(r.problems));
+    return c;
+  };
+
+  it("walks through the bug as a journey, one arrow per step the model knows", () => {
+    const c = record(
+      "triage: r\ntitle: R\nsymptom: s\nsteps:\n  - { from: cli, to: core.loader, role: cause, code: cli/r.ts:4 }\n  - { from: cli, to: nowhere }\n  - { from: core, to: bot, role: symptom }\n",
+    );
+    const j = traceJourney(c.view);
+    expect(j.id).toBe("triage:r");
+    const id = (t: (typeof j.steps)[number]["from"]) => (t && "id" in t ? t.id : undefined);
+    expect(j.steps.map((s) => [id(s.from), id(s.to)])).toEqual([
+      ["cli", "core.loader"],
+      ["cli", undefined],
+      ["core", "bot"],
+    ]);
+    expect(traceInteractions(c.view).map((x) => [x.step, x.label])).toEqual([
+      [0, "1"],
+      [2, "3"],
+    ]);
+    expect(traceRoles(c.view)).toEqual(["cause", "ok", "symptom"]);
+  });
+
+  it("groups records by status, open work first", () => {
+    const { checks } = readTraces(model, [
+      { path: "a.yaml", text: "triage: a\ntitle: A\nsymptom: s\nstatus: fixed\nfix: f\n" },
+      { path: "b.yaml", text: "triage: b\ntitle: B\nsymptom: s\nstatus: investigating\n" },
+    ]);
+    expect(groupByStatus(checks).map((g) => [g.label, g.checks.map((c) => c.view.id)])).toEqual([
+      ["Investigating", ["b"]],
+      ["Fixed", ["a"]],
+    ]);
+  });
+
+  it("hands a pasted bug to the agent", () => {
+    expect(startPrompt("  Error: x\n").prompt).toMatch(/archdoc_triage[\s\S]*\n\nError: x$/);
   });
 });

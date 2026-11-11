@@ -1,6 +1,6 @@
 ---
 name: archdoc
-description: Use at the start of every coding task in a repository that has an .archdoc/ directory, before searching or reading code. Finds where the change belongs in the architecture model and what it affects (consumers, actors, journeys, owners, rules). Also use after editing, to check the change and keep the model true; when asked to explain or fix a bug, to place the error and write a trace; in a repository with no .archdoc/ yet, to start a model with archdoc init, including when asked to figure out, explain, map, or document the system's architecture; and when the user asks to see, show, view, or open the architecture or the model, to open the explorer in their browser.
+description: Use at the start of every coding task in a repository that has an .archdoc/ directory, before searching or reading code. Finds where the change belongs in the architecture model and what it affects (consumers, actors, journeys, owners, rules). Also use after editing, to check the change and keep the model true; when handed a bug, issue, error, or stack trace to explain or fix, to triage it to its root cause and record it; in a repository with no .archdoc/ yet, to start a model with archdoc init, including when asked to figure out, explain, map, or document the system's architecture; and when the user asks to see, show, view, or open the architecture or the model, to open the explorer in their browser.
 ---
 
 # Working in a repository with an ArchDoc model
@@ -31,7 +31,7 @@ The ArchDoc MCP server starts with the session through `npx`, which takes a few 
 
 1. **Find where to start.** Call `archdoc_context` with the task in a few words, the files you plan to change, or both, such as `pr report shows type undefined for data fields`. You get the files and functions to open first (with line numbers), other code that does the same job (a fix in one place usually needs them too), the data and rules involved, the narrowest journeys, the tests to run, owners, and who uses it, other repos included. Read those files before you grep. A path you're about to create works too: it says where the file belongs.
 2. **Say what it affects.** Name the affected journeys and actors when you share your plan. Ask the user first if a critical journey is involved, if the change would break a rule, or if it removes or renames something another repo uses.
-3. **Look things up as you go.** `archdoc_show` takes any ID: an element (`code: true` adds its snippets' text), an actor, a journey, a data entry, `Entry.field` (where its value comes from and goes), a trace, or a fact `archdoc_check` names.
+3. **Look things up as you go.** `archdoc_show` takes any ID: an element (`code: true` adds its snippets' text), an actor, a journey, a data entry, `Entry.field` (where its value comes from and goes), a Triage record, or a fact `archdoc_check` names.
 4. **Edit the code and the model together.** Stay inside the element boundaries you found. When the change adds a component or a dependency between elements on purpose, add it to the model with `archdoc_edit` and `by: agent:<your-name>`, which marks it as a suggestion a person accepts:
 
    ```json
@@ -64,19 +64,26 @@ A spec has the fields the YAML would: a journey is one `add` with its `actor`, `
 
 Pass `by: agent:<your-name>` so what you add is marked `provenance: { source: suggested }`, and `dryRun: true` to see what an edit would do. Edit a file by hand only for what the ops don't cover, such as rules, mappings, and logic.
 
-## A bug: context on the error, then a trace
+## A bug: triage it to its root cause
 
-1. **Place the error.** Call `archdoc_context` with `error` set to the error as the user gave it: a log line, a stack trace, or the wrong output (CLI: `archdoc context --error log.txt`, or `-` for stdin). You get the journey steps it most likely showed up in (best first, with why), the elements its stack frames and paths map to, and a trace to start from.
-2. **Follow the code** from the top step, and write the path the failing request actually took to `.archdoc/traces/<id>.yaml`:
+When you're handed a bug to explain or fix (an issue, a log line, a stack trace, wrong output), triage it: find the root cause and record the bug's journey, step by step, the way a journey records a flow. People read it in the explorer's Triage tab, on the map.
+
+1. **Start the record.** Call `archdoc_triage` with `symptom` set to the bug as the user gave it, and `title`, `link`, and `reportedBy` when you know them (CLI: `archdoc triage start bug.txt -t "..." --link ...`, or `-` for stdin). It places the error on the journey steps it most likely showed up in, writes `.archdoc/triage/<id>.yaml` with status `investigating`, the best journey step, the elements the error names as open leads, and steps from the stack, and tells you where to start.
+2. **Follow the code** from that step, and fill in the record as you go:
 
 ```yaml
-trace: refund-waits-for-finance
+triage: refund-waits-for-finance
 title: A $4 refund waits for finance instead of going through
+status: root-caused                # open, investigating, root-caused, fixed, wont-fix, cannot-reproduce
+severity: high                     # low, normal, high, critical
+reported: { by: rider, at: 2026-10-02, link: https://support.example.com/tickets/4812 }
 symptom: |
   refund ref-ch-81: status pending_approval (expected approved)
 reproduce: 'POST /refunds { "charge_id": "ch-81", "amount": 4.00 }'
 expands: request-refund#4          # the journey step where it showed up (1-based)
-diagnosis: The gateway converts the amount to cents a second time.
+hypotheses:                        # every lead you followed, ruled in or out
+  - { claim: refund-approval sends small refunds to finance, element: payments.charges.refunds, verdict: ruled-out, evidence: read, note: It auto-approves up to half the charge }
+  - { claim: The amount is converted to cents twice, element: api-gateway, verdict: confirmed, evidence: reproduced }
 steps:
   - { from: app, to: api-gateway, action: Sends the refund request, evidence: read }
   - from: api-gateway
@@ -87,12 +94,16 @@ steps:
     evidence: reproduced           # reproduced, read, or inferred (default)
     observed: { RefundRequest.amount_cents: 40000 }
     expected: { RefundRequest.amount_cents: 400 }
-fix: Pass amount_cents through unchanged.
+root-cause: { summary: The gateway converts the amount to cents a second time., step: 2 }
+fix: { summary: Pass amount_cents through unchanged., link: https://github.com/acme/rides/pull/88, test: services/gateway/src/refunds.test.ts }
 ```
 
-   Give every step evidence, and be honest about it: `reproduced` only for what you saw run, `read` for what you followed in the code, `inferred` for the rest. `missing: { to, call }` marks a call that should have happened and didn't, and `works-in: { element, code, note }` points at code that does the same job right. A trace is evidence of one run, not the design, so it's never part of the model.
-3. **Check it** with `archdoc_check`, which checks traces too: unknown elements and journeys, and stale code references. A hop the model doesn't declare is drift you found while debugging: say so, and add it to the model if the code is right. `archdoc_show` with the trace's ID shows it as the explorer will.
-4. **Commit the trace with the fix.** The PR comment then says which bug the change fixes.
+   Put each step on the most specific element the model has (the component, not the container it's in), with the `code` where it happens; the cause step needs it most, since that's where the reader opens the code. Give every step and every lead evidence, and be honest about it: `reproduced` only for what you saw run, `read` for what you followed in the code, `inferred` for the rest. Keep a lead you ruled out, with what showed it: the next person won't follow it again. `missing: { to, call }` marks a call that should have happened and didn't, and `works-in: { element, code, note }` points at code that does the same job right. A record is evidence of one bug, not the design, so it's never part of the model.
+3. **Set the status as you go.** `root-caused` once a step has `role: cause` and `root-cause` says why. If you were asked only to explain the bug, stop there and report. If you fix it, set `status: fixed` and `fix`, with the PR and the test that shows it. `wont-fix` and `cannot-reproduce` say why in `root-cause`.
+4. **Check it** with `archdoc_check`, which checks records too: unknown elements and journeys, stale code references, and what the status needs. A hop the model doesn't declare is drift you found while debugging: say so, and add it to the model if the code is right. `archdoc_triage` with only `id`, or `archdoc_show` with the ID, shows it as the explorer will.
+5. **Commit the record with the fix.** The PR comment then says which bug the change fixes, or whose root cause it found.
+
+`archdoc_context` on a task lists the open records on what it touches, as known bugs, and `archdoc_triage` with `list: true` lists them all. Traces from before 0.8 (`.archdoc/traces/`) still load; `archdoc triage migrate` moves them.
 
 ## No model yet: init, then make it true
 

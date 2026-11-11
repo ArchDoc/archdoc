@@ -1,10 +1,11 @@
+import type { TriageStatus } from "@archdoc/spec";
 import { normalizePath } from "../codemap/glob.js";
-import { parseExpands, type Trace } from "./trace.js";
+import { parseExpands, type Trace, triageStatusOf } from "./trace.js";
 
 /**
- * A trace a change adds or edits. It fits the PR comment's `fixes` input
- * (`{ id, title, anchor }`), which renders as "Fixes the bug traced in <id>:
- * <title> (<anchor>)".
+ * A Triage record a change adds or edits. It fits the PR comment's `fixes`
+ * input (`{ id, title, anchor, status }`), which says what the change does
+ * for the bug: fixes it, finds its root cause, closes it, or triages it.
  */
 export interface TraceInChange {
   id: string;
@@ -18,6 +19,8 @@ export interface TraceInChange {
   step?: number | undefined;
   /** 1-based steps with role cause. */
   causes: number[];
+  /** Where the bug stands at the head. */
+  status: TriageStatus;
 }
 
 /**
@@ -45,6 +48,7 @@ export function tracesInChange(
         file: normalizePath(t.file),
         ...(anchor ? { journey: anchor.journey, step: anchor.step } : {}),
         causes: t.spec.steps.flatMap((s, i) => (s.role === "cause" ? [i + 1] : [])),
+        status: triageStatusOf(t.spec),
       };
     })
     .sort((a, b) => a.id.localeCompare(b.id));

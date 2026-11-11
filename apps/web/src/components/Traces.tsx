@@ -1,12 +1,21 @@
 import type { Diagnostic, Model, TraceCheck, TraceCodeView } from "@archdoc/core/browser";
-import { formatDiagnostic } from "@archdoc/core/browser";
-import { useMemo } from "react";
-import { endLabel, hopText, observedExpected, traceChips, traceLanes } from "../model/traces.js";
+import { anchorError, formatDiagnostic, recordsOn } from "@archdoc/core/browser";
+import { useMemo, useState } from "react";
+import {
+  endLabel,
+  groupByStatus,
+  hopText,
+  observedExpected,
+  startPrompt,
+  statusLabel,
+  traceChips,
+  traceLanes,
+} from "../model/traces.js";
 import type { LandscapeInfo } from "../model/useModel.js";
 import { type CodeContext, linkTarget, PathLinks } from "./code.js";
 import { Lanes } from "./Lanes.js";
 
-/** The traces, worst first is the author's call: listed as written, with where each opens up. */
+/** The Triage records, grouped by status (what needs looking at first), with a way to start one. */
 export function TraceList(props: {
   checks: TraceCheck[];
   problems: Diagnostic[];
@@ -14,27 +23,54 @@ export function TraceList(props: {
   onTrace: (id: string) => void;
 }) {
   return (
-    <nav className="side-list" aria-label="Traces">
-      <h2 className="side-title">Traces</h2>
-      {props.checks.map((c) => (
-        <button
-          key={c.view.id}
-          type="button"
-          className={`side-item${props.traceId === c.view.id ? " is-active" : ""}`}
-          aria-current={props.traceId === c.view.id ? "true" : undefined}
-          onClick={() => props.onTrace(c.view.id)}
-        >
-          <span className="side-item-label">
-            {c.view.title}
-            <span className="side-item-sub">
-              {c.view.anchor ? `${c.view.anchor.journey} · step ${c.view.anchor.step}` : c.view.id}
-            </span>
+    <nav className="side-list" aria-label="Triage records">
+      <h2 className="side-title">Triage</h2>
+      <button
+        type="button"
+        className={`side-item triage-start-item${props.traceId === NEW ? " is-active" : ""}`}
+        aria-current={props.traceId === NEW ? "true" : undefined}
+        onClick={() => props.onTrace(NEW)}
+      >
+        <span className="side-item-label">
+          + Start a triage
+          <span className="side-item-sub">
+            Paste an error to place it, and hand it to your agent
           </span>
-        </button>
+        </span>
+      </button>
+      {groupByStatus(props.checks).map((g) => (
+        <div key={g.status} className="triage-group">
+          <h3 className={`triage-group-title status-${g.status}`}>
+            {g.label} <span className="muted">{g.checks.length}</span>
+          </h3>
+          {g.checks.map((c) => (
+            <button
+              key={c.view.id}
+              type="button"
+              className={`side-item${props.traceId === c.view.id ? " is-active" : ""}`}
+              aria-current={props.traceId === c.view.id ? "true" : undefined}
+              onClick={() => props.onTrace(c.view.id)}
+            >
+              <span className="side-item-label">
+                {c.view.title}
+                <span className="side-item-sub">
+                  {c.view.severity ? (
+                    <span className={`severity severity-${c.view.severity}`}>
+                      {c.view.severity}
+                    </span>
+                  ) : null}
+                  {c.view.anchor
+                    ? `${c.view.anchor.journey} · step ${c.view.anchor.step}`
+                    : c.view.id}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
       ))}
       {props.problems.length ? (
         <div className="trace-problems">
-          <p className="muted small">Files the explorer couldn't read as traces:</p>
+          <p className="muted small">Files the explorer couldn't read as Triage records:</p>
           <ul>
             {props.problems.map((d) => (
               <li key={formatDiagnostic(d)}>
@@ -48,9 +84,15 @@ export function TraceList(props: {
   );
 }
 
+/** The ID that opens the start panel instead of a record. */
+export const NEW = "new";
+
+const VERDICT = { open: "?", "ruled-out": "✗", confirmed: "✓" } as const;
+
 /**
- * A trace: the log the agent was given and the diagnosis, then the run as
- * lanes beneath the journey step it opens up, with the cause marked.
+ * A Triage record: the report and the root cause, the leads followed, then
+ * the bug's journey, on the map (the `map` given) or as lanes beneath the
+ * journey step it opens up, with the cause marked.
  */
 export function TraceStory(props: {
   model: Model;
@@ -58,14 +100,58 @@ export function TraceStory(props: {
   at: number;
   onAt: (at: number) => void;
   landscape?: LandscapeInfo | undefined;
+  /** The map, walking through the bug; without it, lanes. */
+  map?: React.ReactNode;
+  sequence: boolean;
+  onSequence: (sequence: boolean) => void;
 }) {
   const { model, check, landscape } = props;
   const v = check.view;
   const lanes = useMemo(() => traceLanes(model, v, landscape), [model, v, landscape]);
   return (
-    <section className="story trace-story" aria-label="Trace">
+    <section className="story trace-story" aria-label="Triage record">
       <header className="trace-head">
-        <h1>{v.title}</h1>
+        <div className="story-head">
+          <div className="story-title">
+            <h1>{v.title}</h1>
+            <p className="muted triage-meta">
+              <span className={`triage-status status-${v.status}`}>{statusLabel(v.status)}</span>
+              {v.severity ? (
+                <span className={`severity severity-${v.severity}`}>{v.severity}</span>
+              ) : null}
+              {v.reported?.by ? <span>reported by {v.reported.by}</span> : null}
+              {v.reported?.at ? <span>on {v.reported.at}</span> : null}
+              {v.reported?.link ? (
+                <a href={v.reported.link} target="_blank" rel="noreferrer">
+                  the report
+                </a>
+              ) : null}
+              <span>{v.id}</span>
+            </p>
+          </div>
+          {v.steps.length ? (
+            <fieldset className="segmented story-view" aria-label="Show the bug as">
+              <legend>Show as</legend>
+              {(
+                [
+                  [false, "Map", "Each step of the bug on the map of the system, one at a time"],
+                  [true, "Sequence", "Each step as a row, beneath the journey step it opens up"],
+                ] as const
+              ).map(([seq, label, title]) => (
+                <button
+                  key={label}
+                  type="button"
+                  className={props.sequence === seq ? "is-on" : undefined}
+                  aria-pressed={props.sequence === seq}
+                  title={title}
+                  onClick={() => props.onSequence(seq)}
+                >
+                  {label}
+                </button>
+              ))}
+            </fieldset>
+          ) : null}
+        </div>
         <div className="trace-head-grid">
           <div className="trace-log">
             <p className="trace-log-label">What you gave the agent</p>
@@ -76,6 +162,9 @@ export function TraceStory(props: {
                 <code>{v.reproduce}</code>
               </p>
             ) : null}
+            {v.attachments.length ? (
+              <p className="muted small">Attached: {v.attachments.join(", ")}</p>
+            ) : null}
           </div>
           <div className="trace-diagnosis">
             <div className="chips">
@@ -85,20 +174,229 @@ export function TraceStory(props: {
                 </span>
               ))}
             </div>
-            {v.diagnosis ? <p>{v.diagnosis}</p> : <p className="muted">No diagnosis yet.</p>}
-            {v.fix ? (
+            <p className="trace-log-label">
+              Root cause{v.causes.length ? ` · step ${v.causes.join(", ")}` : ""}
+            </p>
+            {v.diagnosis ? <p>{v.diagnosis}</p> : <p className="muted">Not found yet.</p>}
+            {v.fixDetail ? (
               <p className="trace-fix">
-                <strong>Fix:</strong> {v.fix}
+                <strong>Fix:</strong> {v.fixDetail.summary}
+                {v.fixDetail.link ? (
+                  <>
+                    {" "}
+                    <a href={v.fixDetail.link} target="_blank" rel="noreferrer">
+                      (the change)
+                    </a>
+                  </>
+                ) : null}
               </p>
             ) : null}
           </div>
         </div>
+        {v.hypotheses.length ? (
+          <ul className="triage-leads" aria-label="Leads followed">
+            {v.hypotheses.map((h) => (
+              <li
+                key={h.claim}
+                className={`triage-lead verdict-${h.verdict}`}
+                title={[h.note, h.evidence ? `Evidence: ${h.evidence}` : undefined]
+                  .filter(Boolean)
+                  .join(" · ")}
+              >
+                <span className="triage-lead-mark" aria-hidden="true">
+                  {VERDICT[h.verdict]}
+                </span>
+                <span>
+                  <span className="sr-only">{h.verdict}: </span>
+                  {h.claim}
+                  {h.element ? (
+                    <span className="muted"> · {endLabel(model, h.element)}</span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </header>
       <div className="story-body">
-        <Lanes data={lanes} at={props.at} onAt={props.onAt} />
+        {!v.steps.length ? (
+          <p className="empty-main">
+            No steps yet. The agent adds a step for each hop the failing request took as it follows
+            the code.
+          </p>
+        ) : !props.sequence && props.map ? (
+          props.map
+        ) : (
+          <Lanes data={lanes} at={props.at} onAt={props.onAt} />
+        )}
       </div>
     </section>
   );
+}
+
+/**
+ * Starting a triage: paste an error and see where it belongs (the journey
+ * steps it likely showed up in, the elements it names, and records already
+ * on them), with what to hand the agent. The explorer writes nothing.
+ */
+export function TriageStart(props: {
+  model: Model;
+  files: readonly string[];
+  checks: TraceCheck[];
+  onJourney: (id: string) => void;
+  onTrace: (id: string) => void;
+  onSelect: (key: string) => void;
+}) {
+  const [text, setText] = useState("");
+  const [copied, setCopied] = useState<string>();
+  const result = useMemo(
+    () =>
+      text.trim()
+        ? anchorError(props.model, text, props.files.length ? { files: props.files } : {})
+        : undefined,
+    [props.model, props.files, text],
+  );
+  const known = useMemo(() => {
+    if (!result) return [];
+    const ids = result.elements.map((e) => e.element);
+    const own = `${props.model.namespace}.`;
+    const local = ids.map((id) => (id.startsWith(own) ? id.slice(own.length) : id));
+    const steps = new Set(result.anchors.map((a) => `${a.journey}#${a.step}`));
+    const on = new Set(recordsOn(props.checks, local, { closed: true }).map((c) => c.view.id));
+    return props.checks.filter(
+      (c) => on.has(c.view.id) || (c.view.anchor && steps.has(c.view.anchor.written)),
+    );
+  }, [result, props.checks, props.model]);
+  const hand = startPrompt(text);
+  const copy = (what: string, value: string) => {
+    void navigator.clipboard?.writeText(value).then(() => setCopied(what));
+  };
+  return (
+    <section className="story triage-start" aria-label="Start a triage">
+      <header className="story-head">
+        <div className="story-title">
+          <h1>Start a triage</h1>
+          <p className="muted">
+            Paste the bug: an error, a stack trace, a log, or what went wrong. The explorer places
+            it on the system; your agent follows it to the root cause and writes the record.
+          </p>
+        </div>
+      </header>
+      <div className="triage-start-body">
+        <label className="triage-paste">
+          <span className="sr-only">The bug</span>
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCopied(undefined);
+            }}
+            placeholder={
+              "TypeError: Cannot read properties of undefined (reading 'id')\n    at saveOrder (services/api/orders/save.ts:42:7)"
+            }
+            rows={8}
+            spellCheck={false}
+          />
+        </label>
+        {result ? (
+          <div className="triage-placed">
+            <section className="block">
+              <h3>Where it likely showed up</h3>
+              {result.anchors.length ? (
+                <ol className="triage-anchors">
+                  {result.anchors.map((a) => (
+                    <li key={`${a.journey}#${a.step}`}>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => props.onJourney(a.journey)}
+                      >
+                        {a.journey} · step {a.step}
+                      </button>{" "}
+                      <span className={`importance importance-${a.importance}`}>
+                        {a.importance}
+                      </span>
+                      <span className="muted">
+                        {" "}
+                        {a.from} → {a.to}
+                        {a.action ? `: ${a.action}` : ""}
+                      </span>
+                      {a.reasons[0] ? <p className="muted small">{a.reasons[0]}</p> : null}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="muted">
+                  {result.elements.length
+                    ? "No journey step goes through what the error names."
+                    : "Nothing in it maps to the model yet: paste the stack trace, or name the files."}
+                </p>
+              )}
+            </section>
+            {result.elements.length ? (
+              <section className="block">
+                <h3>What it names</h3>
+                <ul className="triage-elements">
+                  {result.elements.map((e) => (
+                    <li key={e.element}>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => props.onSelect(`element:${localOf(props.model, e.element)}`)}
+                      >
+                        {e.element}
+                      </button>
+                      <span className="muted small"> · {e.evidence.slice(0, 2).join("; ")}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {known.length ? (
+              <section className="block">
+                <h3>Already triaged there</h3>
+                <ul className="triage-known">
+                  {known.map((c) => (
+                    <li key={c.view.id}>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => props.onTrace(c.view.id)}
+                      >
+                        {c.view.title}
+                      </button>
+                      <span className="muted small"> · {statusLabel(c.view.status)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            <section className="block">
+              <h3>Hand it to your agent</h3>
+              <pre className="triage-prompt">{hand.prompt}</pre>
+              <div className="triage-copy">
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => copy("prompt", hand.prompt)}
+                >
+                  {copied === "prompt" ? "Copied" : "Copy the prompt"}
+                </button>
+                <span className="muted small">
+                  or run <code>{hand.command}</code>
+                </span>
+              </div>
+            </section>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function localOf(model: Model, id: string): string {
+  const own = `${model.namespace}.`;
+  return id.startsWith(own) ? id.slice(own.length) : id;
 }
 
 /** The selected hop: what it does, its code, what was observed and expected, and how sure. */

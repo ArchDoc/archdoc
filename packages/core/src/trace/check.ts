@@ -1,4 +1,11 @@
-import type { Importance, TraceEvidence, TraceRole, TraceStepSpec } from "@archdoc/spec";
+import type {
+  Importance,
+  TraceEvidence,
+  TraceRole,
+  TraceStepSpec,
+  TriageSeverity,
+  TriageStatus,
+} from "@archdoc/spec";
 import { locate } from "../codemap/codemap.js";
 import { normalizePath } from "../codemap/glob.js";
 import { findSnippet } from "../codemap/snippet.js";
@@ -15,13 +22,17 @@ import {
   type TraceHop,
 } from "./hops.js";
 import {
+  CLOSED_STATUSES,
+  fixOf,
   parseExpands,
+  rootCauseOf,
   type Trace,
   type TraceCodeRef,
   traceCodeLabel,
   traceCodeRefs,
   traceEvidenceOf,
   traceRoleOf,
+  triageStatusOf,
 } from "./trace.js";
 
 /** A problem `checkTrace` found, with the 1-based step it's about. */
@@ -104,25 +115,62 @@ export interface TraceStepView {
   spec: TraceStepSpec;
 }
 
-/** A trace resolved against the model: what a UI draws and what `archdoc show <trace>` prints. */
+/** A lead the investigation followed, resolved. */
+export interface HypothesisView {
+  claim: string;
+  verdict: "open" | "ruled-out" | "confirmed";
+  evidence?: TraceEvidence | undefined;
+  note?: string | undefined;
+  element?: TraceEnd | undefined;
+  code: TraceCodeView[];
+}
+
+/** The fix, in one shape. */
+export interface FixView {
+  summary: string;
+  link?: string | undefined;
+  test: TraceCodeView[];
+}
+
+/**
+ * A Triage record resolved against the model: what a UI draws and what
+ * `archdoc show <id>` prints.
+ */
 export interface TraceView {
   id: string;
   file: string;
   title: string;
+  /** As written, or what the record holds when it doesn't say. */
+  status: TriageStatus;
+  /** True when the record says its status, false when it was worked out. */
+  statusWritten: boolean;
+  severity?: TriageSeverity | undefined;
+  reported?:
+    | { by?: string | undefined; at?: string | undefined; link?: string | undefined }
+    | undefined;
   symptom: string;
+  attachments: string[];
   reproduce?: string | undefined;
+  /** The root cause in words (root-cause.summary, or diagnosis). */
   diagnosis?: string | undefined;
+  /** The fix's summary, for one line. */
   fix?: string | undefined;
+  fixDetail?: FixView | undefined;
+  hypotheses: HypothesisView[];
+  /** Written the pre-0.8 way. */
+  legacy: boolean;
   /** For a trace no journey covers. */
   actor?: TraceEnd | undefined;
   goal?: string | undefined;
   anchor?: TraceAnchorView | undefined;
   steps: TraceStepView[];
   worksIn?: { element: TraceEnd; code: TraceCodeView[]; note?: string | undefined } | undefined;
-  /** 1-based steps with role cause. */
+  /** 1-based steps with role cause, and root-cause.step. */
   causes: number[];
   /** 1-based steps the model has no relationship for. */
   undeclared: number[];
+  /** This model's elements the record names: step ends, leads, and the code's owners. */
+  elements: string[];
 }
 
 export interface TraceCheck {
@@ -153,6 +201,10 @@ export function checkTrace(
 ): TraceCheck {
   const findings: TraceFinding[] = [];
   const s = trace.spec;
+  const status = triageStatusOf(s);
+  const closed = CLOSED_STATUSES.includes(status);
+  // A closed record's code was meant to change after it was written.
+  const staleSeverity: TraceFinding["severity"] = closed ? "info" : "warning";
   const add = (
     severity: TraceFinding["severity"],
     code: string,
@@ -208,7 +260,7 @@ export function checkTrace(
         const exists = options.files.some((f) => f === path || f.startsWith(`${path}/`));
         view.exists = exists;
         if (!exists) {
-          add("warning", "trace/stale-code", `${path} is not in the repository.`, at, step);
+          add(staleSeverity, "trace/stale-code", `${path} is not in the repository.`, at, step);
           return view;
         }
       }
@@ -218,7 +270,7 @@ export function checkTrace(
           const found = findSnippet({ path, lines: ref.lines, symbol: ref.symbol }, text);
           if ("problem" in found) {
             view.problem = found.problem;
-            add("warning", "trace/stale-code", `${path} ${found.problem}.`, at, step);
+            add(staleSeverity, "trace/stale-code", `${path} ${found.problem}.`, at, step);
           }
         }
       }
@@ -259,9 +311,9 @@ export function checkTrace(
   const actor = s.actor ? end(s.actor, "actor", undefined, "actor") : undefined;
   if (!s.expands && !s.actor) {
     add(
-      "warning",
+      status === "open" ? "info" : "warning",
       "trace/no-anchor",
-      "The trace isn't attached to anything. Add expands: <journey>#<step> for the step where the error showed up, or actor and goal when no journey covers it.",
+      "The record isn't attached to anything. Add expands: <journey>#<step> for the step where the error showed up, or actor and goal when no journey covers it.",
       "trace",
     );
   }
@@ -349,17 +401,107 @@ export function checkTrace(
     add(
       "info",
       "trace/unverified",
-      `${namespace} isn't synced, so what the trace says about it${list.length ? ` (step${list.length === 1 ? "" : "s"} ${list.join(", ")})` : ""} can't be checked. Run archdoc sync.`,
+      `${namespace} isn't synced, so what the record says about it${list.length ? ` (step${list.length === 1 ? "" : "s"} ${list.join(", ")})` : ""} can't be checked. Run archdoc sync.`,
       list.length ? `steps.${(list[0] as number) - 1}` : "trace",
     );
   }
 
+  const hypotheses: HypothesisView[] = (s.hypotheses ?? []).map((h, i) => ({
+    claim: h.claim,
+    verdict: h.verdict ?? "open",
+    evidence: h.evidence,
+    note: h.note,
+    element: h.element
+      ? end(h.element, `hypotheses.${i}.element`, undefined, "element")
+      : undefined,
+    code: code(traceCodeRefs(h.code), `hypotheses.${i}.code`),
+  }));
+
   const causes = steps.filter((x) => x.role === "cause").map((x) => x.step);
-  if (causes.length === 0) {
+  const rootStep = s["root-cause"]?.step;
+  if (rootStep !== undefined) {
+    if (rootStep > steps.length) {
+      add(
+        "error",
+        "triage/unknown-step",
+        `root-cause.step is ${rootStep}, but the record has ${steps.length} step${steps.length === 1 ? "" : "s"}. Steps count from 1.`,
+        "root-cause.step",
+      );
+    } else if (!causes.includes(rootStep)) {
+      causes.push(rootStep);
+      causes.sort((a, b) => a - b);
+    }
+  }
+  const diagnosis = rootCauseOf(s);
+  const fix = fixOf(s.fix);
+  // A record that says its status is held to it; one that doesn't (a trace
+  // from before 0.8) only needs a cause, as traces always did.
+  const found = s.status === undefined || status === "root-caused" || status === "fixed";
+  if (found && causes.length === 0) {
     add(
       "warning",
       "trace/no-cause",
-      "No step has role: cause. Mark the step where it goes wrong, or say in the diagnosis why it isn't known yet.",
+      s.status
+        ? `The record says ${status}, but no step has role: cause. Mark the step where it goes wrong, or set root-cause.step.`
+        : "No step has role: cause. Mark the step where it goes wrong, or set a status (investigating) while it isn't known yet.",
+      s.status ? "status" : "trace",
+    );
+  }
+  if (s.status && found) {
+    // The cause is where someone opens the code: the record should say where.
+    for (const n of causes) {
+      const x = steps[n - 1];
+      if (!x || x.code.length) continue;
+      add(
+        "warning",
+        "triage/cause-no-code",
+        "It's the cause, but doesn't say where in the code. Add code: path#function or path:line.",
+        `steps.${n - 1}`,
+        n,
+      );
+    }
+  }
+  if (s.status && found && !diagnosis) {
+    add(
+      "warning",
+      "triage/no-root-cause",
+      `The record says ${status}, but doesn't say why it happens. Add root-cause: { summary }.`,
+      "status",
+    );
+  }
+  if (s.status === "fixed" && !fix) {
+    add(
+      "warning",
+      "triage/no-fix",
+      "The record says fixed, but doesn't say how. Add fix: { summary, link, test }.",
+      "status",
+    );
+  }
+  if (s.status === "investigating" && steps.length === 0 && hypotheses.length === 0) {
+    add(
+      "warning",
+      "triage/empty",
+      "The record says investigating, but has no steps or hypotheses yet. Add the leads you're following, or the steps you've traced.",
+      "status",
+    );
+  }
+  if (
+    (status === "wont-fix" || status === "cannot-reproduce") &&
+    !diagnosis &&
+    !hypotheses.some((h) => h.note)
+  ) {
+    add(
+      "warning",
+      "triage/no-reason",
+      `The record says ${status}, but not why. Say so in root-cause: { summary }.`,
+      "status",
+    );
+  }
+  if (trace.legacy) {
+    add(
+      "info",
+      "triage/legacy-trace",
+      "This is a trace from before 0.8. Run archdoc triage migrate to move it to .archdoc/triage/ as a Triage record.",
       "trace",
     );
   }
@@ -381,10 +523,29 @@ export function checkTrace(
       id: trace.id,
       file: trace.file,
       title: s.title,
+      status,
+      statusWritten: s.status !== undefined,
+      severity: s.severity,
+      reported: s.reported
+        ? {
+            by: s.reported.by,
+            at:
+              s.reported.at instanceof Date
+                ? s.reported.at.toISOString().slice(0, 10)
+                : s.reported.at,
+            link: s.reported.link,
+          }
+        : undefined,
       symptom: s.symptom,
+      attachments: s.attachments ?? [],
       reproduce: s.reproduce,
-      diagnosis: s.diagnosis,
-      fix: s.fix,
+      diagnosis,
+      fix: fix?.summary,
+      fixDetail: fix
+        ? { summary: fix.summary, link: fix.link, test: code(traceCodeRefs(fix.test), "fix") }
+        : undefined,
+      hypotheses,
+      legacy: trace.legacy ?? false,
       actor,
       goal: s.goal,
       anchor,
@@ -392,6 +553,21 @@ export function checkTrace(
       worksIn,
       causes,
       undeclared: steps.filter((x) => x.hop.kind === "undeclared").map((x) => x.step),
+      elements: [
+        ...new Set(
+          [
+            ...steps.flatMap((x) => [x.from, x.to]),
+            ...hypotheses.flatMap((h) => (h.element ? [h.element] : [])),
+          ]
+            .filter((e) => e.status === "resolved" && e.type !== "actor" && e.id)
+            .map((e) => e.id as string)
+            .concat(
+              [...steps.flatMap((x) => x.code), ...hypotheses.flatMap((h) => h.code)].flatMap(
+                (c) => (c.element ? [c.element] : []),
+              ),
+            ),
+        ),
+      ].sort(),
     },
   };
 }
@@ -446,4 +622,21 @@ export function resolveAnchor(model: Model, expands: string): TraceAnchorView {
       code: modeled.spec.code,
     },
   };
+}
+
+/**
+ * The records that name any of `elements` (or their parts, or what they're
+ * part of), open ones only unless `closed` is set. For "known bugs here".
+ */
+export function recordsOn(
+  checks: readonly TraceCheck[],
+  elements: readonly string[],
+  options: { closed?: boolean | undefined } = {},
+): TraceCheck[] {
+  const closedStatuses: readonly string[] = CLOSED_STATUSES;
+  return checks.filter(
+    (c) =>
+      (options.closed || !closedStatuses.includes(c.view.status)) &&
+      c.view.elements.some((e) => elements.some((x) => related(e, x))),
+  );
 }

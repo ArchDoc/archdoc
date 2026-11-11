@@ -52,6 +52,7 @@ import {
 } from "./paths.js";
 import { resealedSince, sealReport } from "./seals.js";
 import { indexRepository } from "./symbols.js";
+import { knownBugs } from "./triage.js";
 
 /**
  * The answers ArchDoc gives a coding agent, one per question, shared by the
@@ -127,7 +128,14 @@ export function contextAnswer(where: Where, input: ContextInput): Promise<Answer
     }
     if (task || paths.length) {
       const index = await indexRepository(m.baseDir);
-      out.push(formatContext(context(m, task, { index, paths })));
+      const brief = context(m, task, { index, paths });
+      out.push(formatContext(brief));
+      const bugs = await knownBugs(
+        where,
+        m,
+        brief.elements.map((e) => e.id),
+      );
+      if (bugs) out.push(bugs);
     }
     return ok(out.join("\n\n"));
   });
@@ -172,7 +180,7 @@ export function showAnswer(where: Where, input: ShowInput): Promise<Answer> {
       const l = lineage(m, id);
       if (l) return ok(formatLineage(l));
     }
-    // Traces aren't part of the model, but they have IDs too.
+    // Triage records aren't part of the model, but they have IDs too.
     const { traces } = loadTraces(await readTraceSources(where.model ?? ".", { cwd: where.cwd }));
     const trace = traces.find((t) => t.id === id);
     if (trace) {

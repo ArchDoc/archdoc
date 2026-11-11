@@ -2,7 +2,7 @@
 // The explorer imports this entry point so it builds and queries the model
 // with the same engine as the CLI.
 
-export { TRACES_DIR } from "@archdoc/spec";
+export { TRACES_DIR, TRIAGE_DIR, TRIAGE_DIRS } from "@archdoc/spec";
 export {
   type CheckOptions,
   type CheckResult,
@@ -335,12 +335,17 @@ export {
   anchorError,
   describeEvidence,
   type ErrorEvidence,
+  type TriageReport,
   traceSkeleton,
+  triageId,
 } from "./trace/anchor.js";
 export { type TraceInChange, tracesInChange } from "./trace/change.js";
 export {
   type CheckTraceOptions,
   checkTrace,
+  type FixView,
+  type HypothesisView,
+  recordsOn,
   resolveAnchor,
   type TraceAnchorView,
   type TraceCheck,
@@ -357,15 +362,20 @@ export {
   type TraceHop,
 } from "./trace/hops.js";
 export {
+  CLOSED_STATUSES,
+  fixOf,
   loadTraces,
   type ParsedTraces,
   parseExpands,
   parseTrace,
+  rootCauseOf,
   type Trace,
   type TraceCodeRef,
   type TraceSpec,
+  type TriageSpec,
   traceCodeLabel,
   traceCodeRefs,
   traceEvidenceOf,
   traceRoleOf,
+  triageStatusOf,
 } from "./trace/trace.js";

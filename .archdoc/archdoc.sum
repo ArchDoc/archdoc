@@ -50,7 +50,7 @@ seals:
     by: agent:claude-code
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-ea3bf8ae6a1a7842
+    hash: fnv-63cc12df30ad8de3
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -183,6 +183,17 @@ seals:
         - indexCode
         - indexRepository
         - indexSource
+      packages/analyzers/src/triage.ts:
+        - TriageListInput
+        - TriageMigrateInput
+        - TriageStartInput
+        - knownBugs
+        - migrateTraceText
+        - modelDir
+        - triageCheckAnswer
+        - triageListAnswer
+        - triageMigrateAnswer
+        - triageStartAnswer
       packages/analyzers/src/ts-imports.ts:
         - resolveSpecifier
         - tsImports
@@ -213,7 +224,7 @@ seals:
       packages/cli/tsconfig.json: []
   element:toolchain.cli.commands:
     kind: structure
-    hash: fnv-7a7cf5198268e23b
+    hash: fnv-1fa9f700cb32c004
     files:
       packages/cli/src/commands/check.ts:
         - CheckOptions
@@ -271,6 +282,11 @@ seals:
       packages/cli/src/commands/trace.ts:
         - readStdin
         - traceList
+      packages/cli/src/commands/triage.ts:
+        - TriageStartOptions
+        - triageList
+        - triageMigrate
+        - triageStart
       packages/cli/src/commands/validate.ts:
         - ValidateOptions
         - validate
@@ -726,7 +742,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.report:
     kind: structure
-    hash: fnv-01c3d2b222a8beec
+    hash: fnv-2ff3c478e237f526
     files:
       packages/core/src/report/check-answer.ts:
         - CheckAnswerOptions
@@ -766,6 +782,7 @@ seals:
         - renderPrComment
         - stepRange
         - summarizeChange
+        - triageVerb
       packages/core/src/report/report.ts:
         - formatActor
         - formatData
@@ -786,6 +803,7 @@ seals:
       packages/core/src/report/seal-report.ts:
         - formatSealStatus
       packages/core/src/report/trace-report.ts:
+        - STATUS_ORDER
         - formatAnchors
         - formatTrace
         - formatTraceChecks
@@ -827,7 +845,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.traces:
     kind: structure
-    hash: fnv-a1cbd238dac5550e
+    hash: fnv-16ff521ee60ac39c
     files:
       packages/core/src/trace/anchor.ts:
         - AnchorCandidate
@@ -835,14 +853,18 @@ seals:
         - AnchorOptions
         - AnchorResult
         - ErrorEvidence
+        - TriageReport
         - anchorError
         - describeEvidence
         - traceSkeleton
+        - triageId
       packages/core/src/trace/change.ts:
         - TraceInChange
         - tracesInChange
       packages/core/src/trace/check.ts:
         - CheckTraceOptions
+        - FixView
+        - HypothesisView
         - TraceAnchorView
         - TraceCheck
         - TraceCodeView
@@ -850,6 +872,7 @@ seals:
         - TraceStepView
         - TraceView
         - checkTrace
+        - recordsOn
         - resolveAnchor
       packages/core/src/trace/hops.ts:
         - HopKind
@@ -863,24 +886,31 @@ seals:
         - related
         - resolveTraceEnd
       packages/core/src/trace/trace.ts:
+        - CLOSED_STATUSES
         - ParsedTraces
         - Trace
         - TraceCodeRef
         - TraceSpec
+        - TriageSpec
+        - fixOf
         - loadTraces
         - parseExpands
         - parseTrace
+        - rootCauseOf
         - traceCodeLabel
         - traceCodeRefs
         - traceEvidenceOf
         - traceRoleOf
+        - triageStatusOf
+    by: agent:claude-code
   element:toolchain.core.traces#packages/core/src/trace/anchor.ts:anchorError:
     kind: content
-    hash: fnv-cb0529e4a82b2750
+    hash: fnv-e73064c74da1d615
     refs:
       packages/core/src/trace/anchor.ts (anchorError):
-        hash: fnv-d370adb1659a022d
-        lines: 111
+        hash: fnv-4b5ad1dd6108eb87
+        lines: 108
+    by: agent:claude-code
   element:toolchain.core.traces#packages/core/src/trace/check.ts:checkTrace:
     kind: content
     hash: fnv-cbf544208ddc32aa
@@ -888,6 +918,7 @@ seals:
       packages/core/src/trace/check.ts (checkTrace):
         hash: fnv-8b5b995329777313
         lines: 5
+    by: agent:claude-code
   element:toolchain.federation:
     kind: structure
     hash: fnv-7138e44155bf4699
@@ -944,7 +975,7 @@ seals:
     files: {}
   element:toolchain.spec:
     kind: structure
-    hash: fnv-0d85084553271519
+    hash: fnv-fec7c4137b120523
     files:
       packages/spec/package.json: []
       packages/spec/schema/archdoc.v2.schema.json: []
@@ -971,9 +1002,17 @@ seals:
         - SumFile
         - SumFileSchema
       packages/spec/src/trace.ts:
+        - FixSchema
+        - FixSpec
+        - HypothesisSchema
+        - HypothesisSpec
         - MissingHopSchema
         - MissingHopSpec
+        - ReportedSchema
+        - RootCauseSchema
         - TRACES_DIR
+        - TRIAGE_DIR
+        - TRIAGE_DIRS
         - TraceCodeSchema
         - TraceCodeSpec
         - TraceEvidence
@@ -984,9 +1023,16 @@ seals:
         - TraceRoleSchema
         - TraceStepSchema
         - TraceStepSpec
+        - TriageFile
+        - TriageFileSchema
+        - TriageSeverity
+        - TriageSeveritySchema
+        - TriageStatus
+        - TriageStatusSchema
         - WorksInSchema
         - WorksInSpec
       packages/spec/tsconfig.json: []
+    by: agent:claude-code
   element:toolchain.spec.migrator:
     kind: structure
     hash: fnv-d2cc8b300bab293c
@@ -1203,7 +1249,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-b48875fb871bc1a1
+    hash: fnv-1b1dcfc75ac065e7
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
@@ -1243,15 +1289,22 @@ seals:
         - sectionOf
         - sections
       apps/web/src/model/traces.ts:
+        - STATUS_GROUPS
         - Traces
         - anchorChip
         - endLabel
         - firstCause
+        - groupByStatus
         - hopText
         - observedExpected
         - readTraces
+        - startPrompt
+        - statusLabel
         - traceChips
+        - traceInteractions
+        - traceJourney
         - traceLanes
+        - traceRoles
       apps/web/src/model/useCompare.ts:
         - Compared
         - HashState
@@ -1277,7 +1330,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-7090bafcf34ac2e8
+    hash: fnv-3ed9ae4a786aa5d4
     files:
       apps/web/src/App.tsx:
         - App
@@ -1336,9 +1389,11 @@ seals:
         - StepPanel
         - StepPanelProps
       apps/web/src/components/Traces.tsx:
+        - NEW
         - TraceList
         - TraceStepPanel
         - TraceStory
+        - TriageStart
       apps/web/src/components/code.tsx:
         - CodeContext
         - CodeRefs
@@ -1511,56 +1566,6 @@ seals:
         - VendoredBundle
         - federate
         - lookupImported
-  step:explain-a-bug#1:
-    kind: structure
-    hash: fnv-b5eb9a68eba1ed3e
-    files:
-      integrations/claude-plugin/skills/archdoc/SKILL.md: []
-    by: agent:claude-code
-  step:explain-a-bug#2:
-    kind: structure
-    hash: fnv-3c8e7a02bbae7918
-    files:
-      packages/mcp/src/server.ts:
-        - ArchdocServerOptions
-        - INSTRUCTIONS
-        - createArchdocServer
-  step:explain-a-bug#3:
-    kind: structure
-    hash: fnv-f03526d4ddf9fa0a
-    files:
-      packages/core/src/trace/anchor.ts:
-        - AnchorCandidate
-        - AnchorElement
-        - AnchorOptions
-        - AnchorResult
-        - ErrorEvidence
-        - anchorError
-        - describeEvidence
-        - traceSkeleton
-  step:explain-a-bug#6:
-    kind: structure
-    hash: fnv-dc9bdcedd8fd24cf
-    files:
-      packages/core/src/trace/check.ts:
-        - CheckTraceOptions
-        - TraceAnchorView
-        - TraceCheck
-        - TraceCodeView
-        - TraceFinding
-        - TraceStepView
-        - TraceView
-        - checkTrace
-        - resolveAnchor
-  step:explain-a-bug#7:
-    kind: structure
-    hash: fnv-694cdb80e094fb6c
-    files:
-      packages/cli/src/commands/check.ts:
-        - CheckOptions
-        - check
-        - runCheck
-    by: agent:claude-code
   step:explore-architecture#1:
     kind: structure
     hash: fnv-85bc4c589138b30c
@@ -1708,7 +1713,7 @@ seals:
     by: agent:claude-code
   step:review-ai-change#5:
     kind: structure
-    hash: fnv-d120842fc73f894b
+    hash: fnv-111e597236aaefec
     files:
       packages/core/src/report/pr-report.ts:
         - ASKED_CONCERNS
@@ -1724,6 +1729,7 @@ seals:
         - renderPrComment
         - stepRange
         - summarizeChange
+        - triageVerb
     by: agent:claude-code
   step:start-a-model#1:
     kind: structure
@@ -1787,4 +1793,78 @@ seals:
         - EditType
         - EditedFile
         - editModel
+    by: agent:claude-code
+  step:triage-a-bug#1:
+    kind: structure
+    hash: fnv-b5eb9a68eba1ed3e
+    files:
+      integrations/claude-plugin/skills/archdoc/SKILL.md: []
+    by: agent:claude-code
+  step:triage-a-bug#2:
+    kind: structure
+    hash: fnv-3c8e7a02bbae7918
+    files:
+      packages/mcp/src/server.ts:
+        - ArchdocServerOptions
+        - INSTRUCTIONS
+        - createArchdocServer
+    by: agent:claude-code
+  step:triage-a-bug#3:
+    kind: structure
+    hash: fnv-30b87a9a942fdc88
+    files:
+      packages/analyzers/src/triage.ts:
+        - TriageListInput
+        - TriageMigrateInput
+        - TriageStartInput
+        - knownBugs
+        - migrateTraceText
+        - modelDir
+        - triageCheckAnswer
+        - triageListAnswer
+        - triageMigrateAnswer
+        - triageStartAnswer
+    by: agent:claude-code
+  step:triage-a-bug#4:
+    kind: structure
+    hash: fnv-52ead62fbab479e1
+    files:
+      packages/core/src/trace/anchor.ts:
+        - AnchorCandidate
+        - AnchorElement
+        - AnchorOptions
+        - AnchorResult
+        - ErrorEvidence
+        - TriageReport
+        - anchorError
+        - describeEvidence
+        - traceSkeleton
+        - triageId
+    by: agent:claude-code
+  step:triage-a-bug#8:
+    kind: structure
+    hash: fnv-8744ab45c1def501
+    files:
+      packages/core/src/trace/check.ts:
+        - CheckTraceOptions
+        - FixView
+        - HypothesisView
+        - TraceAnchorView
+        - TraceCheck
+        - TraceCodeView
+        - TraceFinding
+        - TraceStepView
+        - TraceView
+        - checkTrace
+        - recordsOn
+        - resolveAnchor
+    by: agent:claude-code
+  step:triage-a-bug#9:
+    kind: structure
+    hash: fnv-694cdb80e094fb6c
+    files:
+      packages/cli/src/commands/check.ts:
+        - CheckOptions
+        - check
+        - runCheck
     by: agent:claude-code

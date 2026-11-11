@@ -1,13 +1,29 @@
 # An example for the playground: a plausible bug, followed through the example
 # model. There's no code in the demo repos, so no step says it was reproduced.
-trace: small-refund-waits-for-finance
+triage: small-refund-waits-for-finance
 title: A $4 refund on a $12 ride waits for finance instead of going through
+status: root-caused
+severity: high
+reported: { by: rider, at: 2026-10-02, link: https://example.com/support/tickets/4812 }
 symptom: |
   refund ref-ch-81 for trip-81: status pending_approval (expected approved)
   amount_cents=40000 charge.amount_cents=1200 reason=overcharge
-reproduce: 'POST /refunds { "charge_id": "ch-81", "amount": 4.00 }'   # a $4 refund on a $12 charge
-expands: request-refund#4        # api-gateway → payments.charges: asks for a refund
-diagnosis: The gateway converts the amount to cents a second time. The app already sends amount_cents, so a 400-cent refund reaches payments as 40000 and refund-approval sends it to finance.
+reproduce: 'POST /refunds { "charge_id": "ch-81", "amount": 4.00 }' # a $4 refund on a $12 charge
+expands: request-refund#4 # api-gateway → payments.charges: asks for a refund
+hypotheses:
+  - claim: refund-approval sends small refunds to finance
+    element: payments.charges.refunds
+    verdict: ruled-out
+    evidence: read
+    note: It auto-approves a refund up to half the charge, so 400 cents on a 1200-cent charge goes through. It only sends this one to finance because it sees 40000.
+  - claim: The amount is converted to cents twice on the way to payments
+    element: api-gateway
+    verdict: confirmed
+    evidence: inferred
+    note: The app sends amount_cents=400, and payments sees 40000, a factor of 100.
+root-cause:
+  step: 3
+  summary: The gateway converts the amount to cents a second time. The app already sends amount_cents, so a 400-cent refund reaches payments as 40000 and refund-approval sends it to finance.
 steps:
   - { from: rider, to: app, action: Reports a $4 overcharge on trip-81, evidence: inferred }
   - from: app
@@ -38,4 +54,5 @@ steps:
     creates: { payments.Refund: { status: pending_approval } }
     role: symptom
     evidence: inferred
-fix: Pass amount_cents through unchanged in the gateway; only the app converts dollars to cents.
+fix:
+  summary: Pass amount_cents through unchanged in the gateway; only the app converts dollars to cents.

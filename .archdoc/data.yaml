@@ -21,7 +21,7 @@ data:
     kind: message
     description: An MCP tool call from an agent.
     fields:
-      tool: { type: string, description: "archdoc_context, archdoc_show, archdoc_check, archdoc_seal, or archdoc_init" }
+      tool: { type: string, description: "archdoc_context, archdoc_show, archdoc_find, archdoc_edit, archdoc_check, archdoc_seal, archdoc_paths, archdoc_triage, or archdoc_init" }
       arguments: { type: json }
 
   ToolResult:
@@ -97,16 +97,22 @@ data:
       url: { type: string }
       ref: { type: string }
 
-  Trace:
+  TriageRecord:
     kind: entity
-    description: A bug trace in .archdoc/traces/, the path one failing request took, attached to the journey step it expands. Checked by archdoc check and shown by archdoc show; never part of the model.
+    description: "A Triage record in .archdoc/triage/: a bug as it was reported, the leads followed, and the path the failing request took to its root cause, attached to the journey step it expands, with the fix. Started by archdoc triage start and archdoc_triage, checked by archdoc check, shown by archdoc show and the explorer's Triage tab; never part of the model."
     fields:
-      trace: { type: string }
       title: { type: string }
       symptom: { type: string, description: "The log line, error, or wrong output" }
       expands: { type: string, description: "<journey>#<step>" }
       steps: { type: json, description: "Hops in journey step syntax, with role, evidence, observed, expected, and missing" }
-      fix: { type: string }
+      fix: { type: json, description: "A sentence, or summary, link, test" }
+      triage: { type: string }
+      status: { type: enum, values: [open, investigating, root-caused, fixed, wont-fix, cannot-reproduce] }
+      severity: { type: enum, values: [low, normal, high, critical] }
+      reported: { type: json, description: "by, at, link" }
+      hypotheses: { type: json, description: "Leads followed: claim, verdict (open, ruled-out, confirmed), evidence, note" }
+      root-cause: { type: json, description: "summary, step" }
+
 
   Seal:
     kind: entity

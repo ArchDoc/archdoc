@@ -70,6 +70,11 @@ export interface CanvasProps {
   journey?: JourneyNode | undefined;
   /** The open journey's interactions, and the one it's at. */
   interactions: readonly Interaction[];
+  /**
+   * For a bug's journey (a Triage record): what each 0-based step did in the
+   * failing run (cause, spreads, symptom, or ok), drawn on its arrow.
+   */
+  stepRoles?: readonly string[] | undefined;
   at: number;
   /** Node to bring into view once it's laid out. Cleared through onCentered. */
   centerOn?: string | undefined;
@@ -654,6 +659,11 @@ export function Canvas(props: CanvasProps) {
         zIndex: lit || hovered ? 5 : 2,
       };
     });
+    // On a bug's journey, the cause, where it spreads, and the symptom each have a colour.
+    const roleOf = (step: number) => {
+      const role = props.stepRoles?.[step];
+      return role && role !== "ok" ? role : undefined;
+    };
     // A step inside a collapsed group has nowhere to go; the group is still highlighted.
     const journeyOverlay: RoutedEdge[] = steps
       .filter((s) => s.source !== s.target)
@@ -677,10 +687,11 @@ export function Canvas(props: CanvasProps) {
           },
           markerEnd: arrowHead(
             s.at === at ? 16 : 20,
-            `journey${s.at === at ? " is-current" : ""}${route.undeclared ? " is-undeclared" : ""}`,
+            `journey${s.at === at ? " is-current" : ""}${route.undeclared ? " is-undeclared" : ""}${roleOf(s.step) ? ` role-${roleOf(s.step)}` : ""}`,
           ),
           className: [
             "journey",
+            roleOf(s.step) ? `role-${roleOf(s.step)}` : "",
             s.at === at ? "is-current" : "",
             crossings.has(s.at) ? "is-crossing" : "",
             route.undeclared ? "is-undeclared" : "",
@@ -740,6 +751,7 @@ export function Canvas(props: CanvasProps) {
     emphasis,
     lines,
     props.simulation,
+    props.stepRoles,
     notes,
   ]);
 
@@ -1176,11 +1188,15 @@ function arrowHead(size: number, className: string) {
   const color = has.has("fk")
     ? "var(--line-strong)"
     : has.has("journey")
-      ? has.has("is-undeclared")
-        ? "var(--removed)"
-        : has.has("is-current")
-          ? "var(--accent)"
-          : "var(--muted)"
+      ? has.has("role-cause")
+        ? "var(--breaks)"
+        : has.has("role-spreads")
+          ? "var(--changed)"
+          : has.has("is-undeclared")
+            ? "var(--removed)"
+            : has.has("is-current")
+              ? "var(--accent)"
+              : "var(--muted)"
       : has.has("is-flow")
         ? "var(--accent)"
         : has.has("change-removed")

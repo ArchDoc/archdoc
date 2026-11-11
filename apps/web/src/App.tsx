@@ -26,7 +26,7 @@ import type { PayloadEntry } from "./components/Payload.js";
 import { ChangesList, DataList, dataGroups, JourneyList, SearchBox } from "./components/Sidebar.js";
 import { Soon } from "./components/Soon.js";
 import { StepPanel } from "./components/StepPanel.js";
-import { TraceList, TraceStepPanel, TraceStory } from "./components/Traces.js";
+import { NEW, TraceList, TraceStepPanel, TraceStory, TriageStart } from "./components/Traces.js";
 import {
   dataPlaces,
   type Interaction,
@@ -50,7 +50,13 @@ import { type GroupBy, type Grouping, groupLandscape } from "./graph/groups.js";
 import { type Compare, compareCode } from "./model/compare.js";
 import { actorLabel, journeyLanes, journeysByImportance } from "./model/stories.js";
 import { landingTab, type Section, sectionOf, sections } from "./model/tabs.js";
-import { firstCause, readTraces } from "./model/traces.js";
+import {
+  firstCause,
+  readTraces,
+  traceInteractions,
+  traceJourney,
+  traceRoles,
+} from "./model/traces.js";
 import {
   defaultBase,
   type HashState,
@@ -127,11 +133,7 @@ export function App() {
         files={shown.files}
         snippets={shown.snippets}
         repo={shown.repo}
-        tab={
-          (tab === "changes" && !changes) || (tab === "traces" && !shown.traces.length)
-            ? "overview"
-            : tab
-        }
+        tab={tab === "changes" && !changes ? "overview" : tab}
         onTab={setTab}
         initial={initial}
         pair={chosen}
@@ -245,13 +247,17 @@ function Explorer({
     () => initial.environment ?? defaultEnvironment(model),
   );
   const traceState = useMemo(() => readTraces(model, traces, files), [model, traces, files]);
-  const traceCheck = traceState.checks.find((c) => c.view.id === traceId) ?? traceState.checks[0];
+  // The start panel when asked for, or when there's nothing to show yet.
+  const traceCheck =
+    traceId === NEW
+      ? undefined
+      : (traceState.checks.find((c) => c.view.id === traceId) ?? traceState.checks[0]);
   const traceStep = traceCheck
     ? Math.min(traceAt ?? firstCause(traceCheck.view), traceCheck.view.steps.length - 1)
     : 0;
   const openTrace = useCallback(
     (id: string) => {
-      onTab("traces");
+      onTab("triage");
       setSelected(undefined);
       setTraceId(id);
       setTraceAt(undefined);
@@ -275,7 +281,21 @@ function Explorer({
     () => ({ codemap: resolveCodeMap(model, files), repo, files: new Set(files), snippets }),
     [model, files, repo, snippets],
   );
-  const journeyOnMap = tab === "journeys" && onMap && journey ? journey : undefined;
+  // A Triage record on the map walks through the bug the way a journey walks through a flow.
+  const triageJourney = useMemo(
+    () =>
+      tab === "triage" && onMap && traceCheck?.view.steps.length
+        ? traceJourney(traceCheck.view)
+        : undefined,
+    [tab, onMap, traceCheck],
+  );
+  const triageInteractions = useMemo(
+    () => (triageJourney && traceCheck ? traceInteractions(traceCheck.view) : []),
+    [triageJourney, traceCheck],
+  );
+  const journeyOnMap = tab === "journeys" && onMap && journey ? journey : triageJourney;
+  const mapInteractions = triageJourney ? triageInteractions : interactions;
+  const mapAt = triageJourney ? triageInteractions.findIndex((x) => x.step === traceStep) : at;
 
   useEffect(
     () =>
@@ -283,14 +303,14 @@ function Explorer({
         tab,
         pair,
         journey: tab === "journeys" ? journeyId : undefined,
-        trace: tab === "traces" ? traceCheck?.view.id : undefined,
+        trace: tab === "triage" ? (traceId === NEW ? NEW : traceCheck?.view.id) : undefined,
         environment: tab === "infrastructure" ? environment : undefined,
         data:
           tab === "data" && (selected?.startsWith("data:") || selected?.startsWith("field:"))
             ? selected
             : undefined,
       }),
-    [tab, pair, journeyId, selected, traceCheck, environment],
+    [tab, pair, journeyId, selected, traceCheck, traceId, environment],
   );
 
   // After a live reload, drop references to things that no longer exist.
@@ -371,9 +391,9 @@ function Explorer({
   const rows = useMemo(
     () =>
       journeyOnMap && rowStores.size
-        ? interactionRows(model, journeyOnMap, interactions, at, simulation)
+        ? interactionRows(model, journeyOnMap, mapInteractions, mapAt, simulation)
         : undefined,
-    [model, journeyOnMap, interactions, at, rowStores],
+    [model, journeyOnMap, mapInteractions, mapAt, rowStores],
   );
   // What the journey uses; the rest of its datastores folds away.
   const involved = useMemo(
@@ -485,7 +505,7 @@ function Explorer({
   const pick = useCallback(
     (key: string) => {
       // Search: a box on the Journeys tab is shown on the Overview's map.
-      if ((tab === "journeys" || tab === "traces") && /^(element|actor|domain):/.test(key))
+      if ((tab === "journeys" || tab === "triage") && /^(element|actor|domain):/.test(key))
         onTab("overview");
       select(key);
     },
@@ -568,7 +588,7 @@ function Explorer({
         go(at + 1);
       } else if (!typing && tab === "journeys" && journey && e.key === "ArrowLeft") {
         go(at - 1);
-      } else if (!typing && tab === "traces" && traceCheck && /^Arrow(Right|Left)$/.test(e.key)) {
+      } else if (!typing && tab === "triage" && traceCheck && /^Arrow(Right|Left)$/.test(e.key)) {
         const last = traceCheck.view.steps.length - 1;
         setTraceAt(Math.max(0, Math.min(last, traceStep + (e.key === "ArrowRight" ? 1 : -1))));
       }
@@ -621,8 +641,9 @@ function Explorer({
       view={view}
       selected={selected}
       journey={journeyOnMap}
-      interactions={journeyOnMap ? interactions : []}
-      at={at}
+      interactions={journeyOnMap ? mapInteractions : []}
+      at={mapAt}
+      stepRoles={triageJourney && traceCheck ? traceRoles(traceCheck.view) : undefined}
       centerOn={centerOn}
       onCentered={() => setCenterOn(undefined)}
       onSelect={selectHere}
@@ -759,12 +780,12 @@ function Explorer({
           }}
         />
       ) : null;
-  } else if (tab === "traces") {
+  } else if (tab === "triage") {
     side = (
       <TraceList
         checks={traceState.checks}
         problems={traceState.problems}
-        traceId={traceCheck?.view.id}
+        traceId={traceCheck?.view.id ?? NEW}
         onTrace={openTrace}
       />
     );
@@ -775,15 +796,28 @@ function Explorer({
         at={traceStep}
         onAt={setTraceAt}
         landscape={landscape}
+        map={triageJourney ? canvas : undefined}
+        sequence={sequence}
+        onSequence={setSequence}
       />
     ) : (
-      <p className="empty-main">The traces here couldn't be read.</p>
+      <TriageStart
+        model={model}
+        files={files}
+        checks={traceState.checks}
+        onJourney={openJourney}
+        onTrace={openTrace}
+        onSelect={(key) => {
+          onTab("overview");
+          select(key);
+        }}
+      />
     );
     panel =
       details && selected ? (
         <>
           <button type="button" className="link back" onClick={() => select(undefined)}>
-            ← Back to the trace
+            ← Back to the bug
           </button>
           {details}
         </>
@@ -888,7 +922,7 @@ function Explorer({
     // The page is the entry; the panel follows a field's value from table to table, and on the
     // map it says what the entry is.
     panel = selected?.startsWith("field:") || (picked && dataOnMap) ? details : undefined;
-  } else if (tab === "plan" || tab === "triage") {
+  } else if (tab === "plan") {
     side = undefined;
     main = <Soon tab={tab} />;
     panel = undefined;
@@ -906,7 +940,6 @@ function Explorer({
   }
 
   const top = sections({
-    traces: traces.length > 0,
     data: hasData,
     diff: {
       available: !!changes,
@@ -1041,7 +1074,7 @@ function Explorer({
       {panel ? (
         <aside className="panel" aria-label="Details">
           <ResizeHandle width={panelWidth} onResize={setPanelWidth} />
-          {selected && tab !== "journeys" && tab !== "traces" ? (
+          {selected && tab !== "journeys" && tab !== "triage" ? (
             <button
               type="button"
               className="panel-close"

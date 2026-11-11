@@ -1,0 +1,36 @@
+# What a careful triage of this bug records: what the scorer gives full marks.
+triage: shipped-email-missing
+title: Customers don't get the shipped email
+status: root-caused
+symptom: Customers never get the "your order has shipped" email; the notifier logs nothing.
+expands: ship-order#3
+hypotheses:
+  - claim: The notifier fails to send the email
+    element: notifier
+    verdict: ruled-out
+    evidence: read
+    note: It logs nothing at all, not even errors, so it never gets a message to send.
+  - claim: Fulfillment publishes the shipped event under the wrong routing key
+    element: fulfillment
+    verdict: confirmed
+    evidence: read
+    note: It publishes orders.shipped; the notifier's queue is bound to order.shipped.
+root-cause:
+  step: 2
+  summary: Fulfillment publishes the shipped event as orders.shipped, but the notifier binds its queue to order.shipped, so the exchange routes it nowhere.
+steps:
+  - { from: fulfillment, to: carrier, action: Books a label, code: fulfillment/fulfillment/carrier.py, evidence: read }
+  - from: fulfillment
+    to: rabbitmq
+    action: Publishes the shipped event
+    code: fulfillment/fulfillment/events.py#publish_shipped
+    role: cause
+    evidence: read
+    observed: { routing_key: orders.shipped }
+    expected: { routing_key: order.shipped }
+  - from: notifier
+    to: rabbitmq
+    action: Waits on its queue, bound to order.shipped
+    code: notifier/notifier/listener.py#main
+    role: symptom
+    evidence: read

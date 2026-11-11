@@ -28,10 +28,10 @@ describe("archdoc MCP server", () => {
     expect(INSTRUCTIONS).toMatch(
       /before you grep[\s\S]*archdoc_context[\s\S]*archdoc_show[\s\S]*archdoc_check[\s\S]*archdoc_seal/,
     );
-    expect(INSTRUCTIONS.length).toBeLessThan(1200);
+    expect(INSTRUCTIONS.length).toBeLessThan(1250);
   });
 
-  it("has one tool per question, read-only except edit, seal, and init", async () => {
+  it("has one tool per question, read-only except edit, seal, triage, and init", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "archdoc_check",
@@ -42,14 +42,21 @@ describe("archdoc MCP server", () => {
       "archdoc_paths",
       "archdoc_seal",
       "archdoc_show",
+      "archdoc_triage",
     ]);
     const writers = tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
-    expect(writers.sort()).toEqual(["archdoc_edit", "archdoc_init", "archdoc_seal"]);
+    expect(writers.sort()).toEqual([
+      "archdoc_edit",
+      "archdoc_init",
+      "archdoc_seal",
+      "archdoc_triage",
+    ]);
     expect(tools.find((t) => t.name === "archdoc_seal")?.annotations?.destructiveHint).toBe(false);
     expect(tools.find((t) => t.name === "archdoc_edit")?.annotations?.destructiveHint).toBe(true);
     // Every agent session reads this list, so it stays small. find and edit
-    // take most of it: they replace reading and hand-editing the YAML.
-    expect(JSON.stringify(tools).length).toBeLessThan(10500);
+    // take most of it: they replace reading and hand-editing the YAML. triage
+    // (0.8) added about 500.
+    expect(JSON.stringify(tools).length).toBeLessThan(11100);
   });
 
   it("finds parts of the model, and outlines it", async () => {

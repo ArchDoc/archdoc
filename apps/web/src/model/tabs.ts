@@ -22,7 +22,6 @@ export interface SectionInfo {
 
 /** What the explorer has to show, which decides the tabs it offers. */
 export interface TabsInput {
-  traces: boolean;
   data: boolean;
   /** Whether there are branches to diff, and when there are, what the Diff compares. */
   diff: { available: boolean; title?: string | undefined };
@@ -38,15 +37,6 @@ export function sections(input: TabsInput): SectionInfo[] {
   const explore: TabInfo[] = [
     { id: "overview", label: "Overview" },
     { id: "journeys", label: "Journeys" },
-    ...(input.traces
-      ? [
-          {
-            id: "traces" as const,
-            label: "Traces",
-            title: "Bugs followed through the system: the path a failing request took",
-          },
-        ]
-      : []),
     ...(input.data ? [{ id: "data" as const, label: "Data" }] : []),
     {
       id: "infrastructure",
@@ -60,8 +50,7 @@ export function sections(input: TabsInput): SectionInfo[] {
     {
       id: "triage",
       label: "Triage",
-      soon: true,
-      title: "Place a bug in the system and follow it: coming soon",
+      title: "Bugs followed to their root cause: each one's journey through the system",
     },
     {
       id: "changes",

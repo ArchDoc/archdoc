@@ -1,0 +1,17 @@
+# Opening a ticket publishes ticket.opened but never saves it: Open doesn't
+# call Save. The worker then updates no rows. The symptom shows in the worker
+# and the list, but the cause is a call the backend never makes.
+fixture: polyglot
+symptom: |
+  Tickets people file never show up in the ticket list. POST /api/tickets
+  answers 200, and the worker logs a line for each one, such as:
+
+    priority normal for 'Printer jammed': 0 rows updated
+expected:
+  cause: [tickets.backend.domain]
+  # What it's part of: right, though not as specific as the model goes.
+  coarse: [tickets.backend]
+  code: backend/tickets/open.go
+  # Where it shows up (the worker), or where it starts.
+  journeys: [open-ticket, triage-ticket]
+  not-cause: [tickets.worker]

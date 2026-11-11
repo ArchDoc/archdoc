@@ -233,9 +233,8 @@ p {
     "side main panel";
 }
 
-/* Plan and Triage: one page, no list beside it. */
-.app.tab-plan,
-.app.tab-triage {
+/* Plan: one page, no list beside it. */
+.app.tab-plan {
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     "top"
@@ -249,7 +248,7 @@ p {
 }
 
 .app.tab-journeys,
-.app.tab-traces {
+.app.tab-triage {
   --side-width: 240px;
 }
 
@@ -3485,25 +3484,31 @@ table.observed td.is-wrong code {
     max-height: 80vh;
   }
   .app.tab-journeys .side-list,
-  .app.tab-traces .side-list {
+  .app.tab-triage .side-list {
     display: flex;
     gap: 6px;
     overflow-x: auto;
     padding: 10px 12px;
   }
   .app.tab-journeys .side-title,
-  .app.tab-traces .side-title {
+  .app.tab-triage .side-title {
     display: none;
   }
   .app.tab-journeys .side-item,
-  .app.tab-traces .side-item {
+  .app.tab-triage .side-item {
     flex: none;
     width: auto;
     max-width: 75vw;
     border: 1px solid var(--line);
   }
   .app.tab-journeys .side-item-sub,
-  .app.tab-traces .side-item-sub {
+  .app.tab-triage .side-item-sub {
+    display: none;
+  }
+  .app.tab-triage .triage-group {
+    display: contents;
+  }
+  .app.tab-triage .triage-group-title {
     display: none;
   }
   .resize-handle {
@@ -3522,11 +3527,11 @@ table.observed td.is-wrong code {
   .trace-head-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .app.tab-traces .main {
+  .app.tab-triage .main {
     height: auto;
     max-height: none;
   }
-  .app.tab-traces .lanes {
+  .app.tab-triage .lanes {
     max-height: 70vh;
   }
 }
@@ -3929,4 +3934,208 @@ table.observed td.is-wrong code {
   .catalog-table.schema td:nth-child(4) {
     display: none;
   }
+}
+
+/* Triage: a bug's journey on the map, the cause in red and where it spreads in amber. */
+.react-flow__edge.journey.role-cause path {
+  stroke: var(--breaks);
+  stroke-width: 3.5;
+  stroke-dasharray: none;
+  opacity: 1;
+}
+
+.react-flow__edge.journey.role-cause .react-flow__edge-textbg {
+  fill: var(--breaks);
+}
+
+.react-flow__edge.journey.role-cause .react-flow__edge-text {
+  fill: var(--surface);
+  font-weight: 600;
+}
+
+.react-flow__edge.journey.role-spreads path {
+  stroke: var(--changed);
+  stroke-width: 2.5;
+}
+
+.react-flow__edge.journey.role-symptom path {
+  stroke: var(--ink);
+  stroke-dasharray: 2 4;
+}
+
+.triage-start-item .side-item-label {
+  font-weight: 600;
+}
+
+.triage-group {
+  display: grid;
+  gap: 2px;
+  margin-top: 12px;
+}
+
+.triage-group-title {
+  margin: 0 0 2px;
+  padding: 0 8px;
+  font-size: var(--fs-1);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.triage-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.triage-status {
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: var(--fs-1);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.triage-status.status-investigating,
+.triage-status.status-open {
+  color: var(--changed);
+  border-color: var(--changed);
+  background: var(--changed-soft);
+}
+
+.triage-status.status-root-caused {
+  color: var(--breaks);
+  border-color: var(--breaks);
+  background: var(--breaks-soft);
+}
+
+.triage-status.status-fixed {
+  color: var(--added);
+  border-color: var(--added);
+  background: var(--added-soft);
+}
+
+.severity {
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: var(--fs-1);
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+.severity.severity-high,
+.severity.severity-critical {
+  color: var(--breaks);
+  border-color: var(--breaks);
+}
+
+.trace-head .story-head {
+  padding: 0;
+  border: 0;
+}
+
+.triage-leads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.triage-lead {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  max-width: 100%;
+  padding: 2px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: var(--fs-1);
+  cursor: help;
+}
+
+.triage-lead.verdict-ruled-out {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line-strong);
+}
+
+.triage-lead.verdict-confirmed {
+  color: var(--ink);
+  border-color: var(--breaks);
+  background: var(--breaks-soft);
+}
+
+.triage-lead-mark {
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.triage-start-body {
+  display: grid;
+  gap: 16px;
+  padding: 16px 24px 24px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.triage-paste textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--log-bg, var(--surface));
+  color: var(--log-ink, var(--ink));
+  font: var(--fs-1) / 1.5 var(--mono, ui-monospace, monospace);
+  resize: vertical;
+}
+
+.triage-placed {
+  display: grid;
+  gap: 4px;
+}
+
+.triage-anchors,
+.triage-elements,
+.triage-known {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+
+.triage-anchors p {
+  margin: 2px 0 0;
+}
+
+.triage-prompt {
+  margin: 0 0 8px;
+  max-height: 160px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--log-bg, var(--surface));
+  color: var(--log-ink, var(--ink));
+  font-size: var(--fs-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.triage-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.trace-story .trace-log pre {
+  max-height: 140px;
+  overflow: auto;
 }

@@ -86,7 +86,7 @@ const shop = () =>
     `,
   });
 
-const trace = (yaml: string, file = ".archdoc/traces/t.yaml") => {
+const trace = (yaml: string, file = ".archdoc/triage/t.yaml") => {
   const r = parseTrace(file, dedent(yaml));
   if (!r.trace) throw new Error(JSON.stringify(r.diagnostics));
   return r.trace;
@@ -109,7 +109,7 @@ const codesOf = (r: { findings: { code: string }[] }) => r.findings.map((f) => f
 describe("parseTrace", () => {
   it("reads a trace, with where each part is written", () => {
     const t = trace(`
-      trace: t
+      triage: t
       title: Orders save twice
       symptom: duplicate key
       expands: checkout#3
@@ -164,7 +164,7 @@ describe("checkTrace", () => {
     const r = checkTrace(
       shop(),
       trace(`
-        trace: t
+        triage: t
         title: Checkout fails
         symptom: "500"
         expands: checkout#2
@@ -220,7 +220,7 @@ describe("checkTrace", () => {
     const r = checkTrace(
       m,
       trace(`
-        trace: t
+        triage: t
         title: x
         symptom: x
         expands: nope#1
@@ -246,7 +246,7 @@ describe("checkTrace", () => {
     const step = checkTrace(
       m,
       trace(
-        "trace: t\ntitle: x\nsymptom: x\nexpands: checkout#9\nsteps: [{ from: web, to: api, role: cause, evidence: read }]",
+        "triage: t\ntitle: x\nsymptom: x\nexpands: checkout#9\nsteps: [{ from: web, to: api, role: cause, evidence: read }]",
       ),
     );
     expect(step.findings).toMatchObject([
@@ -258,7 +258,7 @@ describe("checkTrace", () => {
     const r = checkTrace(
       shop(),
       trace(`
-        trace: t
+        triage: t
         title: x
         symptom: x
         steps:
@@ -290,7 +290,7 @@ describe("checkTrace", () => {
 
   it("notes ends in a repo that isn't synced once, and checks them once it is", () => {
     const t = trace(`
-      trace: t
+      triage: t
       title: x
       symptom: x
       expands: checkout#4
@@ -303,7 +303,7 @@ describe("checkTrace", () => {
     expect(unsynced.findings.map((f) => [f.code, f.message])).toEqual([
       [
         "trace/unverified",
-        "payments isn't synced, so what the trace says about it (steps 1, 2, 3) can't be checked. Run archdoc sync.",
+        "payments isn't synced, so what the record says about it (steps 1, 2, 3) can't be checked. Run archdoc sync.",
       ],
     ]);
     expect(unsynced.view.steps.map((s) => s.hop.kind)).toEqual([
@@ -337,7 +337,7 @@ describe("checkTrace", () => {
     const r = checkTrace(
       federated(shop()),
       trace(`
-        trace: t
+        triage: t
         title: x
         symptom: x
         expands: payments.refund#1
@@ -462,6 +462,31 @@ describe("anchorError", () => {
     expect(anchorError(shop(), text, { files })).toEqual(r);
   });
 
+  it("reads elements a bug report names in words, below frames and dotted IDs", () => {
+    const r = anchorError(
+      shop(),
+      "Since the Search update, the Mailer never sends a receipt after checkout. Orders look fine.",
+    );
+    // Search is the system, and two elements are called orders: neither says where.
+    expect(r.elements.map((e) => [e.element, e.score])).toEqual([
+      ["api.checkout", 2],
+      ["mailer", 2],
+    ]);
+    expect(r.elements[1]?.evidence).toEqual(["names element Mailer"]);
+    expect(r.anchors[0]).toMatchObject({ journey: "checkout", step: 2 });
+    // A dotted ID still counts for more, and a word inside a path isn't read twice.
+    const both = anchorError(
+      shop(),
+      "api.orders failed: see services/api/checkout/pay.ts:2, then the mailer",
+      { files },
+    );
+    expect(both.elements.map((e) => [e.element, e.score])).toEqual([
+      ["api.checkout", 5],
+      ["api.orders", 4],
+      ["mailer", 2],
+    ]);
+  });
+
   it("reads Python, Go, Rust, and plain path:line references", () => {
     const m = shop();
     const python = anchorError(
@@ -532,7 +557,7 @@ describe("anchorError", () => {
     const parsed = parseTrace("skeleton.yaml", skeleton);
     expect(parsed.diagnostics).toEqual([]);
     expect(parsed.trace?.spec).toMatchObject({
-      trace: "error-no-order",
+      triage: "error-no-order",
       expands: "checkout#2",
       steps: [
         {
@@ -576,6 +601,7 @@ describe("tracesInChange", () => {
         journey: "checkout",
         step: 3,
         causes: [1],
+        status: "root-caused",
       },
     ]);
     expect(tracesInChange(["repo/.archdoc/traces/b.yaml"], traces).map((t) => t.id)).toEqual(["b"]);
@@ -587,19 +613,19 @@ describe("trace text", () => {
     const r = checkTrace(
       shop(),
       trace(
-        "trace: t\ntitle: Broken\nsymptom: x\nexpands: checkout#2\nsteps: [{ from: web, to: mailer, role: cause, evidence: read }]",
+        "triage: t\ntitle: Broken\nsymptom: x\nexpands: checkout#2\nsteps: [{ from: web, to: mailer, role: cause, evidence: read }]",
       ),
     );
     expect(formatTraceChecks([r])).toBe(
       [
         "! t · Broken",
-        "    expands checkout#2 (web → api) · 1 step · cause at step 1 · 1 hop the model doesn't declare",
-        "    ! .archdoc/traces/t.yaml:5:9 warning trace/undeclared-hop Step 1: web → mailer isn't a relationship the model declares. If the code really does this, add it to the model or fix the code.",
+        "    root-caused · expands checkout#2 (web → api) · 1 step · cause at step 1 · 1 hop the model doesn't declare",
+        "    ! .archdoc/triage/t.yaml:5:9 warning trace/undeclared-hop Step 1: web → mailer isn't a relationship the model declares. If the code really does this, add it to the model or fix the code.",
         "",
-        "1 trace: 0 errors, 1 warning.",
+        "1 Triage record: 0 errors, 1 warning.",
       ].join("\n"),
     );
-    expect(formatTraceChecks([])).toContain("No traces.");
+    expect(formatTraceChecks([])).toContain("No Triage records.");
   });
 });
 

@@ -6,6 +6,7 @@ import {
   loadTraces,
   readTraceSources,
   type Trace,
+  triageStatusOf,
 } from "@archdoc/core";
 import type { Io } from "../io.js";
 import { load, type ModelOptions } from "./code.js";
@@ -39,6 +40,7 @@ export async function traceList(options: ModelOptions, io: Io): Promise<number> 
           traces.map((t) => ({
             id: t.id,
             title: t.spec.title,
+            status: triageStatusOf(t.spec),
             expands: t.spec.expands,
             file: t.file,
           })),

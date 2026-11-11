@@ -102,5 +102,17 @@ export {
   sealReport,
 } from "./seals.js";
 export { indexCode, indexRepository, indexSource } from "./symbols.js";
+export {
+  knownBugs,
+  migrateTraceText,
+  modelDir,
+  type TriageListInput,
+  type TriageMigrateInput,
+  type TriageStartInput,
+  triageCheckAnswer,
+  triageListAnswer,
+  triageMigrateAnswer,
+  triageStartAnswer,
+} from "./triage.js";
 export { resolveSpecifier, tsImports } from "./ts-imports.js";
 export { packageNameOf, type WorkspacePackage, workspacePackages } from "./workspace.js";

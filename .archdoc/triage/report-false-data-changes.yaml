@@ -1,12 +1,15 @@
 # A real bug on main at 5eb2349: run `archdoc report --base main` on main itself. Fixed in this branch.
-trace: report-false-data-changes
+triage: report-false-data-changes
 title: The PR report says data changed when it didn't
+status: fixed
+severity: high
 symptom: |
   Data entries changed (5)
   - Charge (entity): fields ~id (type undefined → uuid) …
-reproduce: archdoc report --base main      # run on main itself
-expands: review-ai-change#5                 # cli → core: diffs base vs. head
-diagnosis: The report loads the base revision without its schema sources, so every field whose type comes from a schema looks new.
+reproduce: archdoc report --base main # run on main itself
+expands: review-ai-change#5 # cli → core: diffs base vs. head
+root-cause:
+  summary: The report loads the base revision without its schema sources, so every field whose type comes from a schema looks new.
 steps:
   - { from: cli, to: analyzers, action: Loads head and applies schemas, code: packages/analyzers/src/check.ts:53, evidence: read }
   - from: cli

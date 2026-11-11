@@ -1,25 +1,41 @@
 import {
+  type FixSpec,
   type TraceCodeSpec,
-  type TraceFile,
   TraceFileSchema,
   type TraceStepSpec,
+  type TriageFile,
+  TriageFileSchema,
+  type TriageStatus,
 } from "@archdoc/spec";
 import type { Diagnostic, SourceLocation } from "../diagnostics.js";
 import { schemaDiagnostics } from "../load/build.js";
 import { parseYaml, type YamlPath } from "../load/yaml.js";
 
-/** A trace as written, without the editor fields. */
-export type TraceSpec = Omit<TraceFile, "$schema" | "archdoc">;
+/**
+ * A Triage record as written, without the editor fields, keyed `triage:`
+ * whichever way the file is (a trace from before 0.8 is keyed `trace:`), and
+ * with its steps, which may be none yet.
+ */
+export type TraceSpec = Omit<TriageFile, "$schema" | "archdoc" | "steps"> & {
+  steps: TraceStepSpec[];
+};
+
+/** A Triage record's spec under its 0.8 name. */
+export type TriageSpec = TraceSpec;
 
 /**
- * A trace: the path one failing request took, read from
- * `.archdoc/traces/<id>.yaml`. Never part of the model.
+ * A Triage record: a bug, the leads followed, and the path the failing
+ * request took, read from `.archdoc/triage/<id>.yaml` (or, before 0.8,
+ * `.archdoc/traces/`). Never part of the model. Core calls it a trace, the
+ * name the walk-through had before Triage.
  */
 export interface Trace {
   id: string;
   /** The file it was read from, as given to {@link parseTrace}. */
   file: string;
   spec: TraceSpec;
+  /** Written the pre-0.8 way: keyed `trace:`, or in `.archdoc/traces/`. */
+  legacy?: boolean | undefined;
   /** Where things are written, by dotted path such as `expands` or `steps.1.from`. */
   locations: Record<string, SourceLocation>;
 }
@@ -53,30 +69,60 @@ export function parseTrace(
         {
           severity: "error",
           code: "trace/not-a-trace",
-          message: 'A trace file needs "trace", "title", "symptom", and "steps".',
+          message: 'A Triage record needs "triage", "title", and "symptom".',
           location: { file, line: 1, column: 1 },
         },
       ],
     };
   }
-  const result = TraceFileSchema.safeParse(parsed.value);
+  const keyedTrace = "trace" in parsed.value && !("triage" in parsed.value);
+  const result = keyedTrace
+    ? TraceFileSchema.safeParse(parsed.value)
+    : TriageFileSchema.safeParse(parsed.value);
   if (!result.success) {
     return { diagnostics: [...diagnostics, ...schemaDiagnostics(result.error, parsed)] };
   }
-  const { $schema: _s, archdoc: _a, ...spec } = result.data;
+  const data = result.data as Record<string, unknown>;
+  const { $schema: _s, archdoc: _a, trace: oldId, triage: newId, steps, ...rest } = data;
+  const spec = {
+    triage: (newId ?? oldId) as string,
+    ...(rest as Omit<TraceSpec, "triage" | "steps">),
+    steps: (steps as TraceStepSpec[] | undefined) ?? [],
+  } as TraceSpec;
   const locations: Record<string, SourceLocation> = {};
   const at = (path: YamlPath) => {
     locations[path.join(".")] = parsed.locate(path);
   };
-  for (const key of ["trace", "expands", "actor", "works-in", "works-in.element", "works-in.code"])
+  const idKey = keyedTrace ? "trace" : "triage";
+  locations.trace = parsed.locate([idKey]);
+  locations.triage = locations.trace;
+  for (const key of [
+    "status",
+    "expands",
+    "actor",
+    "root-cause",
+    "root-cause.step",
+    "fix",
+    "reported.by",
+    "attachments",
+    "works-in",
+    "works-in.element",
+    "works-in.code",
+  ])
     at(key.split("."));
+  for (const [i, h] of (spec.hypotheses ?? []).entries()) {
+    at(["hypotheses", i]);
+    if (h.element) at(["hypotheses", i, "element"]);
+    if (h.code !== undefined) at(["hypotheses", i, "code"]);
+  }
   for (const [i, step] of spec.steps.entries()) {
     at(["steps", i]);
     for (const key of ["from", "to", "code"] as const)
       if (step[key] !== undefined) at(["steps", i, key]);
     if (step.missing) at(["steps", i, "missing", "to"]);
   }
-  return { trace: { id: spec.trace, file, spec, locations }, diagnostics };
+  const legacy = keyedTrace || /(^|[\\/])traces[\\/]/.test(file);
+  return { trace: { id: spec.triage, file, spec, locations, legacy }, diagnostics };
 }
 
 /** Parses trace files (the CLI reads them), and reports two traces with the same ID. */
@@ -93,7 +139,7 @@ export function loadTraces(sources: readonly { path: string; text: string }[]): 
       diagnostics.push({
         severity: "error",
         code: "trace/duplicate",
-        message: `Trace "${r.trace.id}" is also in ${before.file}.`,
+        message: `Triage record "${r.trace.id}" is also in ${before.file}.`,
         location: r.trace.locations.trace,
       });
       continue;
@@ -148,4 +194,31 @@ export function traceRoleOf(step: TraceStepSpec) {
 /** The step's evidence, with the default. */
 export function traceEvidenceOf(step: TraceStepSpec) {
   return step.evidence ?? "inferred";
+}
+
+/**
+ * Where a record stands: its `status`, or, when it doesn't say, what it
+ * holds: fixed with a fix, root-caused with a cause, otherwise investigating.
+ */
+export function triageStatusOf(spec: TraceSpec): TriageStatus {
+  if (spec.status) return spec.status;
+  if (spec.fix !== undefined) return "fixed";
+  if (spec["root-cause"] || spec.steps.some((s) => s.role === "cause")) return "root-caused";
+  return "investigating";
+}
+
+/** Statuses a record ends in. */
+export const CLOSED_STATUSES: readonly TriageStatus[] = ["fixed", "wont-fix", "cannot-reproduce"];
+
+/** The fix as one shape, whichever way it's written. */
+export function fixOf(
+  fix: FixSpec | undefined,
+): { summary: string; link?: string | undefined; test?: TraceCodeSpec | undefined } | undefined {
+  if (fix === undefined) return undefined;
+  return typeof fix === "string" ? { summary: fix } : fix;
+}
+
+/** The root cause in words: root-cause.summary, or diagnosis. */
+export function rootCauseOf(spec: TraceSpec): string | undefined {
+  return spec["root-cause"]?.summary ?? spec.diagnosis;
 }
