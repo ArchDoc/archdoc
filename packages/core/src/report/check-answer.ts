@@ -102,8 +102,16 @@ function formatAll(findings: MarkedFinding[], all: boolean | undefined): string 
   ];
   const rest = findings.slice(shown.length);
   if (rest.length) out.push("", `And ${countByCode(rest)}. --all (MCP: all: true) lists them.`);
+  if (errors + warnings) out.push("", WORK_LIST);
   return out.join("\n");
 }
+
+/**
+ * Said under a list of problems. A first pass at a model usually has dozens,
+ * and an agent that reads the count as a verdict stops there.
+ */
+export const WORK_LIST =
+  "These are the work list, not a verdict: each says what to fix. Fix them (many errors share one cause, such as a renamed element or a path that moved), then check again, until it's clean. Don't stop to hand over a model, or a change, that still has errors.";
 
 function lines(f: MarkedFinding): string[] {
   return [

@@ -11,17 +11,40 @@ expands: review-ai-change#5 # cli → core: diffs base vs. head
 root-cause:
   summary: The report loads the base revision without its schema sources, so every field whose type comes from a schema looks new.
 steps:
-  - { from: cli, to: analyzers, action: Loads head and applies schemas, code: packages/analyzers/src/check.ts:53, evidence: read }
+  - from: cli
+    to: analyzers
+    action: Loads head and applies schemas
+    description: For the head, report goes through the analyzers, which read the schema files (Prisma, SQL, protobuf) and fill in each field's type, so Charge.id is a uuid.
+    sends: ModelSources
+    code: packages/analyzers/src/check.ts:53
+    evidence: read
   - from: cli
     to: core.loader
     action: Loads base at the ref
+    description: For the base, report hands core only the model's YAML at the ref and never applies the schemas, so every field whose type comes from a schema has no type on the base side.
+    sends: ModelSources
     code: packages/cli/src/commands/report.ts:42
     role: cause
     evidence: reproduced
     observed: { Charge.id.type: undefined }
     expected: { Charge.id.type: uuid }
     missing: { to: analyzers, call: applySchemas }
-  - { from: cli, to: core.differ, action: Diffs base vs. head, code: packages/cli/src/commands/report.ts:50, role: spreads, evidence: read }
-  - { from: cli, to: github-action, action: 'Prints "Data entries changed (5)" for the comment', role: symptom, evidence: reproduced }
+  - from: cli
+    to: core.differ
+    action: Diffs base vs. head
+    description: The differ compares the two models as given, so it reads each schema-typed field as changed from no type to its type, five entries in all.
+    sends: ModelSources
+    code: packages/cli/src/commands/report.ts:50
+    role: spreads
+    evidence: read
+  - from: cli
+    to: github-action
+    action: 'Prints "Data entries changed (5)" for the comment'
+    description: The pull request comment lists data changes the pull request never made, which is what the reviewer reported.
+    sends: Output
+    role: symptom
+    evidence: reproduced
+    observed: { Output.text: "Data entries changed (5)" }
+    expected: { Output.text: no data changes }
 works-in: { element: web.model-loader, code: apps/web/src/model/useModel.ts:93, note: applies schemas to base and head before diffing }
 fix: loadRevision (analyzers) builds both sides the same way, with schema sources and other repos' models, and report takes the base from checkRepository.

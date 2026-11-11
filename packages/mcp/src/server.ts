@@ -29,9 +29,9 @@ export interface ArchdocServerOptions {
 export const INSTRUCTIONS = `This repository's architecture is modeled in .archdoc/: actors, elements mapped to code, journeys, and data. People own it. Use it before you grep. With no .archdoc/ yet, archdoc_init starts one.
 
 - archdoc_context: start every task here, with the task in words, the files you'll change, or an error. It says which files and functions to open, what else does the same job, the journeys, data, rules, tests, owners, and who uses it. Name the affected journeys in your plan; ask before changing a critical one.
-- archdoc_paths: where flows start (routes, consumers, jobs, commands) and the calls each makes. Trace a flow with it, not grep.
+- archdoc_paths: where flows start (routes, consumers, jobs, commands) and the calls each makes, to trace a flow.
 - archdoc_show: one thing by ID (element, actor, journey, data entry, Entry.field, Triage record, or a fact like element:<id>).
-- archdoc_triage: start here when handed a bug.
+- archdoc_triage: handed a bug, even to fix? Start here, before the code; its answer says how to fill the record in. Keep it through the fix.
 - archdoc_find, archdoc_edit: find parts of the model and change them by ID, many ops a call, instead of reading and editing its YAML. Pass by: agent:<name>.
 - archdoc_check: after you edit, with base "main". It lists what your change broke or made stale, each with its fix, and facts whose code changed.
 - archdoc_seal: once you've checked each changed fact against its code, seal it. Never seal a fact you haven't read.`;
@@ -234,7 +234,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "Triage a bug",
       description:
-        "Handed a bug? Pass it as symptom: writes .archdoc/triage/<id>.yaml with the journey step it showed up in, leads, and steps from the stack. Fill it in as you follow the code: rule leads in or out, a step per hop with evidence, role: cause, root-cause, status. Only id: what a record lacks. list: the records.",
+        "Handed a bug, even to fix? Start here, before the code: pass it as symptom. Writes .archdoc/triage/<id>.yaml with the journey step it showed up in, leads, and steps from the stack. Fill it in as you follow the code: rule leads in or out, a step per hop with a description of what happened there, what it sends (observed/expected values), code, evidence; role: cause, root-cause, status (fixed, with fix, once fixed). Only id: what a record lacks. list: the records.",
       inputSchema: {
         symptom: z.string().optional().describe("The bug as given: error, log, or issue text"),
         title: z.string().optional().describe("The bug in one line"),

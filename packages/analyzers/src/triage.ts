@@ -92,11 +92,12 @@ export async function triageStartAnswer(where: Where, input: TriageStartInput): 
   out.push("", formatAnchors(anchored));
   out.push(
     "",
-    "Next:",
-    "  1. Follow the code from the top journey step. As you go, rule each lead in or out (verdict, evidence, note), and add a step per hop the failing request took, with code and evidence.",
-    "  2. Mark the step where it goes wrong role: cause, with code: where it happens (path#function or path:line, on the most specific element), and say why in root-cause: { summary }. Set status: root-caused.",
-    "  3. If you fix it, set status: fixed and fix: { summary, link, test }, and commit the record with the fix.",
-    `  4. archdoc check checks the record; archdoc show ${id} shows it the way the explorer will.`,
+    "Next (this is the whole workflow; you don't need to find the skill file):",
+    "  1. Follow the code from the top journey step. As you go, rule each lead in or out (verdict, evidence, note), and add a step per hop the failing request took, on the most specific element.",
+    "  2. Give every step what a reader needs to walk through it on the map: action (what it does, in a few words), description (what happened at this hop in the failing run: the value it had, what the code did with it, and why that's right or wrong there), sends (the data entry it passes, by its name under data:; creates or changes for a write), observed and expected on that entry's fields where they differ (observed: { Order.status: pending }), code (path#function or path:line), and evidence (reproduced, read, or inferred).",
+    "  3. Mark the step where it goes wrong role: cause, and say why in root-cause: { summary, step }. Set status: root-caused. If you were asked only to explain it, stop and report.",
+    "  4. If you fix it, keep the record: set status: fixed and fix: { summary, link, test }, and commit it with the fix. A fix without its record isn't done.",
+    `  5. archdoc check checks the record; archdoc_triage with id: ${id} shows it the way the explorer will, and what it still lacks.`,
   );
   return { ok: true, text: out.join("\n") };
 }

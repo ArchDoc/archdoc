@@ -404,37 +404,26 @@ describe("archdoc init, layer by layer", () => {
       api: "container",
       "api.orders": "component",
       "api.users": "component",
+      // A flat package stays one container: a component per file is too fine to read
+      // top-down. No code elements either: which functions a newcomer opens first takes
+      // reading the code.
       util: "container",
-      // A flat package: its files are the components. No code elements, one per file or
-      // function: which functions a newcomer opens first takes reading the code.
-      "util.dates": "component",
-      "util.ids": "component",
-      "util.money": "component",
-      "util.numbers": "component",
-      "util.strings": "component",
     });
     const uses = model.relationships
       .map((x) => `${"id" in x.from ? x.from.id : ""}->${"id" in x.to ? x.to.id : ""}`)
       .sort();
-    expect(uses).toEqual([
-      "api.orders->api.users",
-      "util.dates->util.numbers",
-      "util.dates->util.strings",
-      "util.ids->util.strings",
-      "util.money->util.numbers",
-      "util.numbers->util.strings",
-      "web->api",
-    ]);
+    expect(uses).toEqual(["api.orders->api.users", "web->api"]);
     // web has one file: a container that small stays lean, with no components.
-    expect(r.stats).toMatchObject({ elements: 3, components: 7, code: 0, uses: 7 });
+    expect(r.stats).toMatchObject({ elements: 3, components: 2, code: 0, uses: 2 });
 
     // check agrees: every import is declared, and every layer sits inside the one above it.
     const checked = await checkRepository({ cwd: dir });
     const codes = checked.findings.map((f) => `${f.code} ${f.element ?? ""}`);
-    expect(codes).toEqual([]);
+    // Nothing imports util: the one thing left to find out is how it's reached.
+    expect(codes).toEqual(["model/orphan-element shop.util"]);
   });
 
-  it("makes services/ inside a package a component, and the files beside its directories too", async () => {
+  it("makes services/ inside a package a component, and leaves the files beside its directories to the container", async () => {
     const root = join(dir, "py");
     const w = (p: string, t: string) => write(`py/${p}`, t);
     await w("pyproject.toml", '[project]\nname = "invoicing"\ndependencies = ["fastapi"]\n');
@@ -449,12 +438,8 @@ describe("archdoc init, layer by layer", () => {
       .filter((e) => e.spec.kind === "component")
       .map((e) => e.id)
       .sort();
-    expect(components).toEqual([
-      "invoicing.api",
-      "invoicing.db",
-      "invoicing.models",
-      "invoicing.services",
-    ]);
+    expect(components).toEqual(["invoicing.api", "invoicing.models", "invoicing.services"]);
+    expect(model.elements.get("invoicing.db")).toBeUndefined();
     expect(model.elements.get("invoicing.services.billing")).toBeUndefined();
   });
 });

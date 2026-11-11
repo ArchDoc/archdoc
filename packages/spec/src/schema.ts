@@ -378,6 +378,9 @@ export const JourneyStepSchema = z.strictObject({
   description: z.string().optional(),
   code: z.string().optional().describe("Code entry point for this step"),
   sends: OneOrMany.optional().describe("Data entries this step sends, such as RefundRequest"),
+  returns: OneOrMany.optional().describe(
+    "Data entries the callee answers with, such as RefundDecision: the step is a request and its response",
+  ),
   creates: CreatesSchema.optional(),
   changes: ChangesSchema.optional(),
   provenance: ProvenanceSchema.optional(),

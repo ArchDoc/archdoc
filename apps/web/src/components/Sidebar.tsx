@@ -22,14 +22,21 @@ export function JourneyList(props: {
       <h2 className="side-title">Journeys</h2>
       {journeys.length === 0 ? <p className="empty">No journeys yet.</p> : null}
       {journeys.map((j) => (
+        // The whole title, wrapped, with the importance beneath it: a long goal stays readable.
         <Item
           key={j.id}
           active={props.journeyId === j.id}
           onClick={() => props.onJourney(j.id)}
-          sub={j.spec.goal && j.spec.name ? j.spec.goal : undefined}
-          tag={
-            <span className={`importance importance-${j.spec.importance ?? "normal"}`}>
-              {j.spec.importance ?? "normal"}
+          title={[j.spec.name, j.spec.goal].filter(Boolean).join(": ") || j.id}
+          sub={
+            <span className="journey-sub">
+              <span className={`importance importance-${j.spec.importance ?? "normal"}`}>
+                {j.spec.importance ?? "normal"}
+              </span>
+              <span>
+                {j.steps.length} step{j.steps.length === 1 ? "" : "s"}
+                {j.spec.goal && j.spec.name ? ` · ${j.spec.goal}` : ""}
+              </span>
             </span>
           }
         >
@@ -301,8 +308,9 @@ function Concern(props: {
 function Item(props: {
   active: boolean;
   onClick: () => void;
-  sub?: string | undefined;
+  sub?: ReactNode;
   tag?: ReactNode;
+  title?: string | undefined;
   children: ReactNode;
 }) {
   return (
@@ -311,6 +319,7 @@ function Item(props: {
       className={`side-item${props.active ? " is-active" : ""}`}
       onClick={props.onClick}
       aria-current={props.active ? "true" : undefined}
+      title={props.title}
     >
       <span className="side-item-label">
         {props.children}

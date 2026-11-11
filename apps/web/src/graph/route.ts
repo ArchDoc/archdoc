@@ -38,6 +38,56 @@ export function pointAlong(points: Point[], fraction: number): Point {
   return points[0] as Point;
 }
 
+/** A polyline's length. */
+export function polylineLength(points: readonly Point[]): number {
+  let n = 0;
+  for (let i = 1; i < points.length; i++) n += dist(points[i - 1] as Point, points[i] as Point);
+  return n;
+}
+
+/** How fast a message chip moves along its line, in map pixels a second, however long the line. */
+export const PACKET_SPEED = 110;
+/** The shortest a chip takes over a line, so one on a short line isn't a blink. */
+const PACKET_MIN_SECONDS = 1;
+/** How long a request waits at the callee before its answer comes back, and a loop rests. */
+const PACKET_PAUSE_SECONDS = 0.5;
+
+/**
+ * How a step's message chip moves along a line `length` long: at one speed
+ * whatever the line's length, so a long line is as easy to read as a short
+ * one. A request with a response goes to the callee, waits, and the answer
+ * comes back. Key times are fractions of `dur`, for SVG's animateMotion.
+ */
+export function packetTiming(
+  length: number,
+  roundTrip: boolean,
+): {
+  /** Seconds for one loop. */
+  dur: number;
+  /** The request's (or the one-way message's) motion and when it shows. */
+  out: { keyPoints: string; keyTimes: string; shown: [number, number] };
+  /** The answer's, coming back. */
+  back?: { keyPoints: string; keyTimes: string; shown: [number, number] } | undefined;
+} {
+  const leg = Math.max(PACKET_MIN_SECONDS, length / PACKET_SPEED);
+  const pause = PACKET_PAUSE_SECONDS;
+  const r = (n: number) => Number(n.toFixed(4));
+  if (!roundTrip) {
+    const dur = leg + pause;
+    const at = r(leg / dur);
+    return { dur: r(dur), out: { keyPoints: "0;1;1", keyTimes: `0;${at};1`, shown: [0, 1] } };
+  }
+  const dur = 2 * leg + 2 * pause;
+  const arrive = r(leg / dur);
+  const turn = r((leg + pause) / dur);
+  const home = r((2 * leg + pause) / dur);
+  return {
+    dur: r(dur),
+    out: { keyPoints: "0;1;1", keyTimes: `0;${arrive};1`, shown: [0, turn] },
+    back: { keyPoints: "1;1;0;0", keyTimes: `0;${turn};${home};1`, shown: [turn, 1] },
+  };
+}
+
 const dist = (a: Point, b: Point) => Math.hypot(b.x - a.x, b.y - a.y);
 const toward = (from: Point, to: Point, by: number): Point => {
   const d = dist(from, to);

@@ -8,6 +8,7 @@ import {
   readTraces,
   startPrompt,
   traceChips,
+  traceData,
   traceInteractions,
   traceJourney,
   traceLanes,
@@ -189,5 +190,48 @@ describe("a Triage record on the map", () => {
 
   it("hands a pasted bug to the agent", () => {
     expect(startPrompt("  Error: x\n").prompt).toMatch(/archdoc_triage[\s\S]*\n\nError: x$/);
+  });
+});
+
+describe("what a bug's step carries", () => {
+  const m = buildModel([
+    {
+      path: "archdoc.yaml",
+      text: `
+archdoc: "2.0"
+namespace: shop
+elements:
+  web: { kind: container, uses: { api: { description: Places orders, sends: Order } } }
+  api: { kind: container, uses: { db: Saves orders } }
+  db: { kind: datastore, stores: { orders: { entity: Order } } }
+data:
+  Order: { kind: entity, fields: { id: { type: uuid }, status: { type: string } } }
+`,
+    },
+  ]);
+  const record = (steps: string) =>
+    readTraces(m, [
+      {
+        path: ".archdoc/triage/t.yaml",
+        text: `triage: t\ntitle: x\nsymptom: x\nstatus: root-caused\nsteps:\n${steps}`,
+      },
+    ]).checks[0]?.view as NonNullable<ReturnType<typeof readTraces>["checks"][0]>["view"];
+
+  it("shows the data the record says, with the fields it has values for", () => {
+    const v = record(
+      "  - { from: web, to: api, sends: Order, observed: { Order.status: pending }, expected: { Order.status: paid } }\n  - { from: api, to: db, changes: { Order.status: pending -> paid } }",
+    );
+    const sent = traceData(m, v, 0);
+    expect(sent.written).toBe(true);
+    expect(sent.sends.map((e) => [e.label, [...e.changed]])).toEqual([["Order", ["status"]]]);
+    const wrote = traceData(m, v, 1);
+    expect(wrote.writes.map((e) => [e.label, [...e.changed]])).toEqual([["Order", ["status"]]]);
+  });
+
+  it("falls back on what the model says the use carries, and says so", () => {
+    const v = record("  - { from: web, to: api, observed: { status: pending } }");
+    const d = traceData(m, v, 0);
+    expect(d.written).toBe(false);
+    expect(d.sends.map((e) => [e.label, [...e.changed]])).toEqual([["Order", ["status"]]]);
   });
 });

@@ -76,6 +76,7 @@ export {
   type StepStore,
   type Subscription,
   stepMessage,
+  stepReply,
   stepStores,
   subscriptionOf,
 } from "./data/flows.js";

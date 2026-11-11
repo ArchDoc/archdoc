@@ -21,8 +21,8 @@ import { analyze } from "./run.js";
 /**
  * A starting model for a repository that has none, from what the repository
  * declares: containers for packages and modules from their manifests,
- * components for the directories (or, in a flat package, the files) inside
- * each (code elements, at the functions a newcomer opens first, are left
+ * components for the directories inside each big one
+ * (code elements, at the functions a newcomer opens first, are left
  * for whoever reads the code); datastores and queues from compose files; uses, at every level, from the
  * dependencies the analyzers see; and data
  * and contracts from schema files. Deterministic: no LLM, no network. Every
@@ -667,9 +667,9 @@ function inside(dir: string, f: string): boolean {
 
 /**
  * A container's components: the directories its code is split into (looking
- * through src/, lib/, internal/, and the like), and the files beside them. A
- * container with one part has no components; files that wire it together
- * (index.ts, main.go, __init__.py) stay with the container.
+ * through src/, lib/, internal/, and the like). A container with one part, or
+ * a flat one (files and no directories), has no components; the files beside
+ * the directories stay with the container, never a component each.
  */
 function components(dir: string, sources: string[], depth = 0): Unit[] {
   const prefix = dir ? `${dir}/` : "";
@@ -702,11 +702,9 @@ function components(dir: string, sources: string[], depth = 0): Unit[] {
     ...[...dirs.keys()].map((at) =>
       part(key(sanitize(basename(at))), at, "component", [`${at}/**`], "a code directory"),
     ),
-    // A file beside the directories, or in a flat package: each is a part.
-    ...loose.map((f) =>
-      part(key(sanitize(stem(basename(f)))), f, "component", [f], "a source file"),
-    ),
   ];
+  // Files beside the directories, or in a flat package, stay with the container: one
+  // component per file is too fine to read top-down, and a directory is the part.
   return out.length >= 2 ? out.sort((a, b) => a.dir.localeCompare(b.dir)) : [];
 }
 
@@ -730,11 +728,6 @@ function uniqueIn(keys: Set<string>, key: string): string {
   for (let i = 2; keys.has(k); i++) k = `${base}-${i}`;
   keys.add(k);
   return k;
-}
-
-/** packages/core/src/check/check.ts → check. */
-function stem(path: string): string {
-  return path.replace(/\.[^./]+$/, "");
 }
 
 /** Datastores and queues from compose images; built services' dependencies as uses. */

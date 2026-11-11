@@ -828,6 +828,7 @@ function Explorer({
           at={traceStep}
           onAt={setTraceAt}
           code={code}
+          onSelect={select}
         />
       ) : null;
   } else if (tab === "infrastructure") {

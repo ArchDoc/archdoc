@@ -10,7 +10,7 @@ import {
   type TraceStepView,
   type TraceView,
 } from "@archdoc/core/browser";
-import type { Interaction } from "../graph/data.js";
+import { type FieldInfo, type Interaction, stepData } from "../graph/data.js";
 import { type Lane, type LaneRow, type Lanes, repoName, repoOf, targetLabel } from "./stories.js";
 import type { LandscapeInfo } from "./useModel.js";
 
@@ -230,6 +230,66 @@ export function observedExpected(
     observed: s.observed && key in s.observed ? show(s.observed[key]) : undefined,
     expected: s.expected && key in s.expected ? show(s.expected[key]) : undefined,
   }));
+}
+
+/** One record a step of the bug carries or writes, with the fields the record has values for. */
+export interface TraceData {
+  entry: string;
+  label: string;
+  kind?: string | undefined;
+  fields: FieldInfo[];
+  /** Fields the record observed or expected a value for. */
+  changed: Set<string>;
+}
+
+/**
+ * What step `at` of a bug carries across its hop, and what it writes: as the
+ * record says (sends, creates, changes), or else as the model says the use it
+ * follows carries. `written` says which.
+ */
+export function traceData(
+  model: Model,
+  view: TraceView,
+  at: number,
+): { sends: TraceData[]; writes: TraceData[]; written: boolean } {
+  const s = view.steps[at];
+  if (!s?.from.target || !s.to.target) return { sends: [], writes: [], written: false };
+  const d = stepData(model, traceJourney(view), at);
+  const named = new Set([...Object.keys(s.observed ?? {}), ...Object.keys(s.expected ?? {})]);
+  // observed: { Order.status: x } names Order's field; { status: x } names a field of any of them.
+  const changedOf = (entry: string, label: string, fields: { name: string }[]) =>
+    new Set(
+      fields
+        .map((f) => f.name)
+        .filter((f) => named.has(f) || named.has(`${label}.${f}`) || named.has(`${entry}.${f}`)),
+    );
+  const ns = `${model.namespace}.`;
+  const sends = (d.message?.how === "writes" ? [] : (d.message?.entries ?? [])).map((e) => ({
+    entry: e.entry,
+    label: e.label,
+    kind: e.kind,
+    fields: e.fields,
+    changed: changedOf(e.entry, e.label, e.fields),
+  }));
+  const writes = d.writes.map((w) => {
+    const label = w.entry.startsWith(ns) ? w.entry.slice(ns.length) : w.entry;
+    const node = model.data.get(label);
+    const fields: FieldInfo[] = Object.entries(node?.spec.fields ?? {}).map(([name, f]) => ({
+      name,
+      type: f.type,
+      classification: f.classification,
+      value: w.values.get(name),
+    }));
+    const changed = changedOf(w.entry, label, fields);
+    for (const k of w.values.keys()) changed.add(k);
+    return { entry: w.entry, label, kind: node?.spec.kind, fields, changed };
+  });
+  const spec = s.spec;
+  return {
+    sends,
+    writes,
+    written: spec.sends !== undefined || spec.creates !== undefined || spec.changes !== undefined,
+  };
 }
 
 /** How a hop relates to the model, in words. */

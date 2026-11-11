@@ -114,6 +114,7 @@ export function checkData(model: Model, scope: "local" | "imported"): Diagnostic
     for (const s of j.steps) {
       const label = `Journey "${j.id}", step ${s.index + 1}`;
       for (const data of [s.spec.sends ?? []].flat()) ref(data, `${label} sends`, s.location);
+      for (const data of [s.spec.returns ?? []].flat()) ref(data, `${label} returns`, s.location);
 
       effects(label, s.spec, s.location);
       for (const [outcome, branch] of Object.entries(s.spec.branches ?? {})) {

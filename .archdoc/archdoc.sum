@@ -50,7 +50,7 @@ seals:
     by: agent:claude-code
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-63cc12df30ad8de3
+    hash: fnv-6941fcd980f72625
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -62,10 +62,12 @@ seals:
         - PathsInput
         - SealInput
         - ShowInput
+        - TRIAGE_FIRST
         - Where
         - checkAnswer
         - contextAnswer
         - initAnswer
+        - looksLikeBug
         - pathsAnswer
         - readRepoFile
         - repoPath
@@ -224,7 +226,7 @@ seals:
       packages/cli/tsconfig.json: []
   element:toolchain.cli.commands:
     kind: structure
-    hash: fnv-1fa9f700cb32c004
+    hash: fnv-9b7fc6d2fe3fb9a2
     files:
       packages/cli/src/commands/check.ts:
         - CheckOptions
@@ -291,7 +293,9 @@ seals:
         - ValidateOptions
         - validate
       packages/cli/src/commands/view.ts:
+        - DetachedState
         - ViewOptions
+        - detachedStateFile
         - view
     by: agent:claude-code
   element:toolchain.cli.view-server:
@@ -427,7 +431,7 @@ seals:
         lines: 22
   element:toolchain.core.data:
     kind: structure
-    hash: fnv-209c15baeaddb27e
+    hash: fnv-7a3443b8b30c9d0e
     files:
       packages/core/src/data/branches.ts:
         - BranchOutcome
@@ -457,6 +461,7 @@ seals:
         - dataFlows
         - dataStores
         - stepMessage
+        - stepReply
         - stepStores
         - subscriptionOf
       packages/core/src/data/lineage.ts:
@@ -742,10 +747,11 @@ seals:
     by: agent:claude-code
   element:toolchain.core.report:
     kind: structure
-    hash: fnv-2ff3c478e237f526
+    hash: fnv-be52d1baabf9eb3a
     files:
       packages/core/src/report/check-answer.ts:
         - CheckAnswerOptions
+        - WORK_LIST
         - formatCheck
       packages/core/src/report/check-report.ts:
         - MarkedFinding
@@ -905,10 +911,10 @@ seals:
     by: agent:claude-code
   element:toolchain.core.traces#packages/core/src/trace/anchor.ts:anchorError:
     kind: content
-    hash: fnv-e73064c74da1d615
+    hash: fnv-386db69aa72c6b34
     refs:
       packages/core/src/trace/anchor.ts (anchorError):
-        hash: fnv-4b5ad1dd6108eb87
+        hash: fnv-1b8bc2c6321e7428
         lines: 108
     by: agent:claude-code
   element:toolchain.core.traces#packages/core/src/trace/check.ts:checkTrace:
@@ -1134,7 +1140,7 @@ seals:
         - default
   element:toolchain.web.graph:
     kind: structure
-    hash: fnv-8cdb8b438ed86069
+    hash: fnv-e9d76747cb02658d
     files:
       apps/web/src/graph/catalog.ts:
         - EntryMove
@@ -1242,14 +1248,17 @@ seals:
         - absoluteBoxes
         - layoutGraph
       apps/web/src/graph/route.ts:
+        - PACKET_SPEED
         - countCrossings
         - directRoute
+        - packetTiming
         - pointAlong
+        - polylineLength
         - roundedPath
     by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-1b1dcfc75ac065e7
+    hash: fnv-d816af2d548a2e23
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
@@ -1290,6 +1299,7 @@ seals:
         - sections
       apps/web/src/model/traces.ts:
         - STATUS_GROUPS
+        - TraceData
         - Traces
         - anchorChip
         - endLabel
@@ -1301,6 +1311,7 @@ seals:
         - startPrompt
         - statusLabel
         - traceChips
+        - traceData
         - traceInteractions
         - traceJourney
         - traceLanes
@@ -1568,11 +1579,14 @@ seals:
         - lookupImported
   step:explore-architecture#1:
     kind: structure
-    hash: fnv-85bc4c589138b30c
+    hash: fnv-9afca90a8d225e6a
     files:
       packages/cli/src/commands/view.ts:
+        - DetachedState
         - ViewOptions
+        - detachedStateFile
         - view
+    by: agent:claude-code
   step:explore-architecture#2:
     kind: structure
     hash: fnv-2baa63e5c92cfa0d
@@ -1654,7 +1668,7 @@ seals:
     by: agent:claude-code
   step:keep-the-model-true#7:
     kind: structure
-    hash: fnv-c54145c4365c9b68
+    hash: fnv-228bbf32d7bab54e
     files:
       packages/analyzers/src/answers.ts:
         - Answer
@@ -1665,10 +1679,12 @@ seals:
         - PathsInput
         - SealInput
         - ShowInput
+        - TRIAGE_FIRST
         - Where
         - checkAnswer
         - contextAnswer
         - initAnswer
+        - looksLikeBug
         - pathsAnswer
         - readRepoFile
         - repoPath

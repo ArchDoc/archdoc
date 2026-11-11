@@ -9,11 +9,13 @@ import {
   startPrompt,
   statusLabel,
   traceChips,
+  traceData,
   traceLanes,
 } from "../model/traces.js";
 import type { LandscapeInfo } from "../model/useModel.js";
 import { type CodeContext, linkTarget, PathLinks } from "./code.js";
 import { Lanes } from "./Lanes.js";
+import { Payload } from "./Payload.js";
 
 /** The Triage records, grouped by status (what needs looking at first), with a way to start one. */
 export function TraceList(props: {
@@ -87,12 +89,11 @@ export function TraceList(props: {
 /** The ID that opens the start panel instead of a record. */
 export const NEW = "new";
 
-const VERDICT = { open: "?", "ruled-out": "✗", confirmed: "✓" } as const;
-
 /**
- * A Triage record: the report and the root cause, the leads followed, then
- * the bug's journey, on the map (the `map` given) or as lanes beneath the
- * journey step it opens up, with the cause marked.
+ * A Triage record: a small header with the root cause in brief (the report
+ * on asking; the leads are the agent's working, not shown), then the bug's
+ * journey, on the map (the `map` given) or as lanes beneath the journey step
+ * it opens up, with the cause marked.
  */
 export function TraceStory(props: {
   model: Model;
@@ -108,6 +109,8 @@ export function TraceStory(props: {
   const { model, check, landscape } = props;
   const v = check.view;
   const lanes = useMemo(() => traceLanes(model, v, landscape), [model, v, landscape]);
+  // The header stays small, so the map has the room: the root cause in brief, the report on asking.
+  const [open, setOpen] = useState(false);
   return (
     <section className="story trace-story" aria-label="Triage record">
       <header className="trace-head">
@@ -126,7 +129,11 @@ export function TraceStory(props: {
                   the report
                 </a>
               ) : null}
-              <span>{v.id}</span>
+              {traceChips(v).map((c) => (
+                <span key={c.label} className={`chip trace-chip chip-${c.kind}`}>
+                  {c.label}
+                </span>
+              ))}
             </p>
           </div>
           {v.steps.length ? (
@@ -152,7 +159,39 @@ export function TraceStory(props: {
             </fieldset>
           ) : null}
         </div>
-        <div className="trace-head-grid">
+        <div className="trace-rca">
+          <p
+            className={`trace-rca-text${open ? " is-open" : ""}`}
+            title={open ? undefined : v.diagnosis}
+          >
+            <span className="trace-rca-label">
+              Root cause{v.causes.length ? ` · step ${v.causes.join(", ")}` : ""}
+            </span>{" "}
+            {v.diagnosis ?? <span className="muted">Not found yet.</span>}
+          </p>
+          {v.fixDetail ? (
+            <p className="trace-rca-text trace-fix">
+              <span className="trace-rca-label">Fix</span> {v.fixDetail.summary}
+              {v.fixDetail.link ? (
+                <>
+                  {" "}
+                  <a href={v.fixDetail.link} target="_blank" rel="noreferrer">
+                    (the change)
+                  </a>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="link trace-more"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? "Less" : "The report"}
+          </button>
+        </div>
+        {open ? (
           <div className="trace-log">
             <p className="trace-log-label">What you gave the agent</p>
             <pre>{v.symptom.trimEnd()}</pre>
@@ -166,56 +205,6 @@ export function TraceStory(props: {
               <p className="muted small">Attached: {v.attachments.join(", ")}</p>
             ) : null}
           </div>
-          <div className="trace-diagnosis">
-            <div className="chips">
-              {traceChips(v).map((c) => (
-                <span key={c.label} className={`chip trace-chip chip-${c.kind}`}>
-                  {c.label}
-                </span>
-              ))}
-            </div>
-            <p className="trace-log-label">
-              Root cause{v.causes.length ? ` · step ${v.causes.join(", ")}` : ""}
-            </p>
-            {v.diagnosis ? <p>{v.diagnosis}</p> : <p className="muted">Not found yet.</p>}
-            {v.fixDetail ? (
-              <p className="trace-fix">
-                <strong>Fix:</strong> {v.fixDetail.summary}
-                {v.fixDetail.link ? (
-                  <>
-                    {" "}
-                    <a href={v.fixDetail.link} target="_blank" rel="noreferrer">
-                      (the change)
-                    </a>
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-          </div>
-        </div>
-        {v.hypotheses.length ? (
-          <ul className="triage-leads" aria-label="Leads followed">
-            {v.hypotheses.map((h) => (
-              <li
-                key={h.claim}
-                className={`triage-lead verdict-${h.verdict}`}
-                title={[h.note, h.evidence ? `Evidence: ${h.evidence}` : undefined]
-                  .filter(Boolean)
-                  .join(" · ")}
-              >
-                <span className="triage-lead-mark" aria-hidden="true">
-                  {VERDICT[h.verdict]}
-                </span>
-                <span>
-                  <span className="sr-only">{h.verdict}: </span>
-                  {h.claim}
-                  {h.element ? (
-                    <span className="muted"> · {endLabel(model, h.element)}</span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
         ) : null}
       </header>
       <div className="story-body">
@@ -406,12 +395,14 @@ export function TraceStepPanel(props: {
   at: number;
   onAt: (at: number) => void;
   code: CodeContext;
+  onSelect?: ((key: string) => void) | undefined;
 }) {
   const { model, check, at } = props;
   const v = check.view;
   const s = v.steps[at];
   if (!s) return <div className="details" />;
   const rows = observedExpected(s);
+  const carried = traceData(model, v, at);
   const findings = check.findings;
   return (
     <div className="details step-panel">
@@ -442,6 +433,30 @@ export function TraceStepPanel(props: {
       </div>
       <p className="muted small">{hopText(model, s)}</p>
       {s.description ? <p className="lede">{s.description}</p> : null}
+
+      {carried.sends.length ? (
+        <section className="block">
+          <h3>What it carries</h3>
+          <Payload key={`${v.id}${at}`} entries={carried.sends} onSelect={props.onSelect} />
+          {carried.written ? null : (
+            <p className="muted small">
+              As the model says the use carries it; the record doesn't say.
+            </p>
+          )}
+        </section>
+      ) : null}
+      {carried.writes.length ? (
+        <section className="block">
+          <h3>What it writes</h3>
+          <Payload key={`${v.id}${at}w`} entries={carried.writes} onSelect={props.onSelect} />
+        </section>
+      ) : null}
+      {!carried.sends.length && !carried.writes.length && s.from.id !== s.to.id ? (
+        <p className="muted small">
+          The record doesn't say what this step carries. The agent adds <code>sends:</code> with the
+          data entry, and <code>observed:</code> with the values the run had.
+        </p>
+      ) : null}
 
       {rows.length ? (
         <section className="block">

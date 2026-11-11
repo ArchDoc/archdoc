@@ -14,6 +14,7 @@ import {
   type StepMessage,
   type StepStore,
   stepMessage,
+  stepReply,
   stepStores,
   type Target,
 } from "@archdoc/core/browser";
@@ -271,6 +272,8 @@ export interface StepData {
     | undefined;
   /** Records it creates or changes: as simulated, or else as declared. */
   writes: StepWrite[];
+  /** What the callee answers with, for a request and its response: qualified entries and labels. */
+  reply?: { entry: string; label: string }[] | undefined;
 }
 
 export interface StepWrite {
@@ -301,6 +304,10 @@ export function stepData(
     (sim?.events ?? []).filter((e) => e.kind === "sent").map((e) => [e.entry, e.record]),
   );
   const msg = stepMessage(model, step);
+  const reply = stepReply(model, step)?.map((ref) => {
+    const entry = qualifyData(ref, ns);
+    return { entry, label: shortRef(entry, ns) };
+  });
   const message = msg && {
     how: msg.how,
     entries: msg.data.map((ref) => {
@@ -338,7 +345,7 @@ export function stepData(
         ),
         record: e.record,
       }));
-    return { message, writes };
+    return { message, writes, reply };
   }
   const writes: StepWrite[] = [];
   const declare = (spec: Effects, when?: string) => {
@@ -381,7 +388,7 @@ export function stepData(
   }
   declare(step.spec);
   for (const [outcome, b] of Object.entries(step.spec.branches ?? {})) declare(b, outcome);
-  return { message, writes: merge(writes) };
+  return { message, writes: merge(writes), reply };
 }
 
 /** One write per record and branch: a record the step also changes is updated, not created. */

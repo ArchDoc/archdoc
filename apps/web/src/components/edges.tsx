@@ -6,15 +6,18 @@ import {
   getSmoothStepPath,
 } from "@xyflow/react";
 import type { Box, Point } from "../graph/layout.js";
-import { pointAlong, roundedPath } from "../graph/route.js";
+import { packetTiming, pointAlong, polylineLength, roundedPath } from "../graph/route.js";
 
 export interface RoutedData extends Record<string, unknown> {
   /** The route the layout found, in absolute coordinates. Without one, a smooth step is drawn. */
   points?: Point[] | undefined;
   /** Where along the route the label sits, from 0 to 1. Defaults to the middle. */
   labelAt?: number | undefined;
-  /** A message travelling the edge, such as the current journey step's. */
-  packet?: { label: string; missing?: boolean | undefined } | undefined;
+  /**
+   * A message travelling the edge, such as the current journey step's; with
+   * `reply`, a request that goes to the target and whose answer comes back.
+   */
+  packet?: { label: string; missing?: boolean | undefined; reply?: string | undefined } | undefined;
   /**
    * What the use is for, always shown: wrapped lines in the box the layout
    * kept for them beside the line, or, without one, at the label point.
@@ -39,13 +42,17 @@ export function Routed(props: EdgeProps<RoutedEdge>) {
   const points = props.data?.points;
   let path: string;
   let at: Point;
+  let length: number;
   if (points && points.length >= 2) {
     path = roundedPath(points, 10);
     at = pointAlong(points, props.data?.labelAt ?? 0.5);
+    length = polylineLength(points);
   } else {
     const [d, x, y] = getSmoothStepPath({ ...props, borderRadius: 10 });
     path = d;
     at = { x, y };
+    // A smooth step goes across and then along: about the two legs.
+    length = Math.abs(props.targetX - props.sourceX) + Math.abs(props.targetY - props.sourceY);
   }
   const packet = props.data?.packet;
   return (
@@ -65,7 +72,7 @@ export function Routed(props: EdgeProps<RoutedEdge>) {
         labelBgBorderRadius={props.labelBgBorderRadius}
         interactionWidth={props.interactionWidth}
       />
-      {packet ? <Packet path={path} at={at} {...packet} /> : null}
+      {packet ? <Packets path={path} at={at} length={length} {...packet} /> : null}
       {props.data?.note ? <Note {...props.data.note} at={at} /> : null}
     </>
   );
@@ -106,39 +113,109 @@ function Note(props: {
 /** The widest a message chip gets. */
 const PACKET_WIDTH = 220;
 
-/** A chip with the message's name, moving along the edge from source to target. */
-function Packet(props: { path: string; at: Point; label: string; missing?: boolean | undefined }) {
-  // A long name is cut to fit the chip; the full name is its tooltip.
-  const fits = Math.floor((PACKET_WIDTH - 22) / 7);
-  const text =
-    props.label.length > fits ? `${props.label.slice(0, fits - 1).trimEnd()}…` : props.label;
-  const width = Math.min(PACKET_WIDTH, text.length * 7 + 22);
+/**
+ * The step's message moving along the edge from source to target, at one
+ * speed whatever the line's length. With a reply, the request goes to the
+ * target, waits, and the answer comes back to the caller.
+ */
+function Packets(props: {
+  path: string;
+  at: Point;
+  length: number;
+  label: string;
+  missing?: boolean | undefined;
+  reply?: string | undefined;
+}) {
   const still =
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  if (still) {
+    const label = props.reply ? `${props.label} ⇄ ${props.reply}` : props.label;
+    return (
+      <g
+        className={`packet${props.missing && !props.reply ? " is-missing" : ""}`}
+        transform={`translate(${props.at.x} ${props.at.y - 18})`}
+      >
+        <Chip label={label} />
+      </g>
+    );
+  }
+  const t = packetTiming(props.length, props.reply !== undefined);
   return (
-    <g
-      className={`packet${props.missing ? " is-missing" : ""}`}
-      transform={still ? `translate(${props.at.x} ${props.at.y - 18})` : undefined}
-    >
-      {still ? null : (
-        <animateMotion
-          dur="2.4s"
-          repeatCount="indefinite"
+    <>
+      <Moving
+        path={props.path}
+        dur={t.dur}
+        motion={t.out}
+        className={`packet${props.missing ? " is-missing" : ""}`}
+        label={props.label}
+      />
+      {t.back && props.reply !== undefined ? (
+        <Moving
           path={props.path}
-          keyPoints="0;1"
-          keyTimes="0;1"
-          calcMode="linear"
+          dur={t.dur}
+          motion={t.back}
+          className="packet is-reply"
+          label={props.reply}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** One chip on its way, shown only for its part of the loop. */
+function Moving(props: {
+  path: string;
+  dur: number;
+  motion: { keyPoints: string; keyTimes: string; shown: [number, number] };
+  className: string;
+  label: string;
+}) {
+  const [from, to] = props.motion.shown;
+  // Shown from `from` to `to` of each loop, hidden the rest of it.
+  const whole = from === 0 && to === 1;
+  const values = from === 0 ? "1;0" : "0;1";
+  const times = from === 0 ? `0;${to}` : `0;${from}`;
+  return (
+    <g className={props.className} opacity={whole || from === 0 ? 1 : 0}>
+      <animateMotion
+        dur={`${props.dur}s`}
+        repeatCount="indefinite"
+        path={props.path}
+        keyPoints={props.motion.keyPoints}
+        keyTimes={props.motion.keyTimes}
+        calcMode="linear"
+      />
+      {whole ? null : (
+        <animate
+          attributeName="opacity"
+          dur={`${props.dur}s`}
+          repeatCount="indefinite"
+          values={values}
+          keyTimes={times}
+          calcMode="discrete"
         />
       )}
-      <g transform={still ? undefined : "translate(0 -14)"}>
-        <title>{props.label}</title>
-        <rect x={-width / 2} y={-10} width={width} height={20} rx={10} />
-        <text textAnchor="middle" dominantBaseline="central">
-          {text}
-        </text>
+      <g transform="translate(0 -14)">
+        <Chip label={props.label} />
       </g>
     </g>
+  );
+}
+
+/** A chip with the message's name, cut to fit; the full name is its tooltip. */
+function Chip({ label }: { label: string }) {
+  const fits = Math.floor((PACKET_WIDTH - 22) / 7);
+  const text = label.length > fits ? `${label.slice(0, fits - 1).trimEnd()}…` : label;
+  const width = Math.min(PACKET_WIDTH, text.length * 7 + 22);
+  return (
+    <>
+      <title>{label}</title>
+      <rect x={-width / 2} y={-10} width={width} height={20} rx={10} />
+      <text textAnchor="middle" dominantBaseline="central">
+        {text}
+      </text>
+    </>
   );
 }
 

@@ -91,6 +91,10 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     )
     .option("-p, --port <port>", "port to listen on (default: a free port)")
     .option("--open", "open the explorer in your default browser")
+    .option(
+      "-d, --detach",
+      "run it in the background: print the URL and return (reuses one already running)",
+    )
     .action(
       async (
         path: string,
@@ -98,6 +102,7 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
           watch?: boolean;
           port?: string;
           open?: boolean;
+          detach?: boolean;
           base?: string;
           landscape?: boolean;
         },

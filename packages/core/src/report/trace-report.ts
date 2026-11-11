@@ -164,6 +164,20 @@ function formatStep(s: TraceStepView): string[] {
     `  ${s.step}. ${ROLE[s.role]}${endLabel(s.from)} → ${endLabel(s.to)}${s.action ? `: ${s.action}` : ""}  [${s.evidence}]${hop}${outside}`,
   ];
   if (s.description) out.push(`     ${s.description.trim()}`);
+  const carries = [
+    ...[s.spec.sends ?? []].flat().map((d) => `sends ${d}`),
+    ...[
+      s.spec.creates === undefined
+        ? []
+        : typeof s.spec.creates === "string" || Array.isArray(s.spec.creates)
+          ? [s.spec.creates].flat()
+          : Object.keys(s.spec.creates),
+    ]
+      .flat()
+      .map((d) => `creates ${d}`),
+    ...Object.entries(s.spec.changes ?? {}).map(([k, v]) => `changes ${k}: ${String(v)}`),
+  ];
+  if (carries.length) out.push(`     ${carries.join("; ")}`);
   for (const c of s.code) {
     out.push(
       `     code: ${c.label}${c.exists === false ? " (not in the repository)" : c.problem ? ` (${c.problem})` : ""}`,

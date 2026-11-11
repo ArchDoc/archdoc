@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { startViewServer, type ViewServer } from "../src/index.js";
 
@@ -119,5 +121,38 @@ describe("view server", () => {
       sources: { path: string }[];
     };
     expect(model.sources.map((s) => s.path)).toContain(".archdoc/actors.yaml");
+  });
+});
+
+describe("view --detach", () => {
+  // The built CLI: --detach starts it again in a process of its own (typecheck builds it).
+  const bin = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
+  const detached = (cwd: string) =>
+    new Promise<{ code: number; out: string; err: string }>((done) => {
+      execFile(process.execPath, [bin, "view", "--detach"], { cwd }, (e, out, err) =>
+        done({ code: typeof e?.code === "number" ? e.code : 0, out, err }),
+      );
+    });
+  const pidOf = (out: string) => Number(/process (\d+)/.exec(out)?.[1]);
+
+  it("prints the URL and returns, and reuses the explorer that's running", async () => {
+    const first = await detached(repo);
+    expect(first.code).toBe(0);
+    const url = /ArchDoc explorer: (http:\/\/127\.0\.0\.1:\d+)/.exec(first.out)?.[1];
+    const pid = pidOf(first.out);
+    try {
+      expect(url).toBeDefined();
+      expect((await fetch(`${url}/api/model`)).ok).toBe(true);
+      const again = await detached(repo);
+      expect(again.out).toContain(`ArchDoc explorer: ${url} (already running, process ${pid})`);
+    } finally {
+      process.kill(pid);
+    }
+  });
+
+  it("says why when there's no model, instead of returning with nothing", async () => {
+    const r = await detached(tmp);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("No ArchDoc model at .");
   });
 });
