@@ -1,5 +1,14 @@
 # @archdoc/mcp
 
+## 0.7.2
+
+### Patch Changes
+
+- Updated dependencies [d5019df]
+- Updated dependencies [0efcd77]
+  - @archdoc/core@0.7.2
+  - @archdoc/analyzers@0.7.2
+
 ## 0.7.1
 
 ### Patch Changes
