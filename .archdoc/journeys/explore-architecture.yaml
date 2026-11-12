@@ -5,7 +5,7 @@ importance: high
 steps:
   - from: developer
     to: cli
-    action: Runs archdoc view --watch
+    action: Runs archdoc view --watch, or with --detach, which starts it in the background and prints its URL
     code: packages/cli/src/commands/view.ts
   - from: cli
     to: web

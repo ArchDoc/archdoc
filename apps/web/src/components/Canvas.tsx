@@ -678,12 +678,7 @@ export function Canvas(props: CanvasProps) {
           data: {
             points: route.points,
             labelAt: (shared.indexOf(s.at) + 1) / (shared.length + 1),
-            packet:
-              s.at === at
-                ? current?.message
-                  ? { label: current.message.entries.map((e) => e.label).join(", ") }
-                  : { label: "no message", missing: true }
-                : undefined,
+            packet: s.at === at ? packetOf(current) : undefined,
           },
           markerEnd: arrowHead(
             s.at === at ? 16 : 20,
@@ -1209,4 +1204,20 @@ function arrowHead(size: number, className: string) {
                 ? "var(--accent)"
                 : "var(--edge)";
   return { type: MarkerType.ArrowClosed, width: size, height: size, color };
+}
+
+/**
+ * The chip the current step's arrow carries: its message, and for a request
+ * with a response, the answer that comes back.
+ */
+function packetOf(
+  d: StepData | undefined,
+): { label: string; missing?: boolean; reply?: string } | undefined {
+  const reply = d?.reply?.length ? d.reply.map((e) => e.label).join(", ") : undefined;
+  if (d?.message) {
+    return { label: d.message.entries.map((e) => e.label).join(", "), ...(reply ? { reply } : {}) };
+  }
+  return reply
+    ? { label: "request", missing: true, reply }
+    : { label: "no message", missing: true };
 }

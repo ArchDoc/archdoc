@@ -27,13 +27,15 @@ const shop = () =>
           elements:
             checkout: { kind: component, code: [services/api/checkout/**] }
         db: { kind: datastore }
+      data:
+        Order: { kind: entity, fields: { id: { type: uuid }, status: { type: string } } }
       journeys:
         checkout:
           actor: shopper
           goal: Buy what's in the cart
           steps:
             - { from: shopper, to: web, action: Clicks pay }
-            - { from: web, to: api, action: Places the order }
+            - { from: web, to: api, action: Places the order, sends: Order }
             - { from: api, to: db, action: Saves the order }
     `,
   });
@@ -60,7 +62,7 @@ describe("Triage records", () => {
         - { claim: The db retries, element: db, verdict: ruled-out, evidence: read, note: No retries configured }
         - { claim: The api saves twice, element: api.checkout, verdict: confirmed, evidence: reproduced }
       steps:
-        - { from: api, to: db, action: Saves, role: cause, evidence: reproduced, code: services/api/checkout/pay.ts#payOrder }
+        - { from: api, to: db, action: Saves, description: It saves the order before payment and again after., creates: Order, role: cause, evidence: reproduced, code: services/api/checkout/pay.ts#payOrder }
       root-cause: { summary: The handler saves before and after payment. }
       fix: { summary: Save once, link: https://example.com/pull/2, test: services/api/checkout/pay.test.ts }
     `);
@@ -103,7 +105,9 @@ describe("Triage records", () => {
 
   it("holds a record to what its status needs", () => {
     const m = shop();
-    const check = (yaml: string) => codes(checkTrace(m, record(yaml)));
+    // What each step says is its own test, below.
+    const check = (yaml: string) =>
+      codes(checkTrace(m, record(yaml))).filter((c) => !c.startsWith("triage/step-no-"));
     expect(check("triage: t\ntitle: x\nsymptom: x\nstatus: open")).toEqual(["trace/no-anchor"]);
     expect(
       check("triage: t\ntitle: x\nsymptom: x\nstatus: investigating\nexpands: checkout#2"),
@@ -136,7 +140,7 @@ describe("Triage records", () => {
 
   it("reports a closed record's stale code as info", () => {
     const yaml = (status: string) =>
-      `triage: t\ntitle: x\nsymptom: x\nstatus: ${status}\nexpands: checkout#2\nroot-cause: { summary: y }\nfix: z\nsteps: [{ from: web, to: api, role: cause, evidence: read, code: services/api/gone.ts }]`;
+      `triage: t\ntitle: x\nsymptom: x\nstatus: ${status}\nexpands: checkout#2\nroot-cause: { summary: y }\nfix: z\nsteps: [{ from: web, to: api, description: d, sends: Order, role: cause, evidence: read, code: services/api/gone.ts }]`;
     const files = { files: ["services/api/checkout/pay.ts"] };
     const fixed = checkTrace(shop(), record(yaml("fixed")), files);
     expect(fixed.findings.map((f) => [f.code, f.severity])).toEqual([["trace/stale-code", "info"]]);
@@ -144,6 +148,36 @@ describe("Triage records", () => {
     expect(open.findings.map((f) => [f.code, f.severity])).toEqual([
       ["trace/stale-code", "warning"],
     ]);
+  });
+
+  it("asks each step what happened there and what it carried, with the journey's data as a hint", () => {
+    const yaml = (status: string, steps: string) =>
+      `triage: t\ntitle: x\nsymptom: x\nstatus: ${status}\nexpands: checkout#2\nroot-cause: { summary: y }\nsteps: ${steps}`;
+    const bare =
+      "[{ from: web, to: api, role: cause, evidence: read, code: services/api/checkout/pay.ts }, { from: api, to: api.checkout, evidence: read }]";
+    const found = checkTrace(shop(), record(yaml("root-caused", bare)));
+    expect(found.findings.map((f) => [f.code, f.severity])).toEqual([
+      ["triage/step-no-description", "warning"],
+      ["triage/step-no-data", "warning"],
+    ]);
+    const [described, data] = found.findings;
+    expect(described?.message).toMatch(/^Steps 1, 2 have no description\./);
+    expect(data?.message).toMatch(/^Steps 1, 2 don't say what they carry\./);
+    expect(data?.message).toContain("(the journey step it opens up sends Order)");
+    // While it's investigated, they're notes.
+    const looking = checkTrace(shop(), record(yaml("investigating", bare)));
+    expect(looking.findings.map((f) => f.severity)).toEqual(["info", "info"]);
+    // A step inside one element carries nothing across; a name that isn't data is a note.
+    const told = checkTrace(
+      shop(),
+      record(
+        yaml(
+          "root-caused",
+          "[{ from: web, to: api, description: d, sends: Order, role: cause, evidence: read, code: services/api/checkout/pay.ts, observed: { Order.status: x } }, { from: api, to: api, description: d, evidence: read }, { from: api, to: db, description: d, sends: OrderRow, evidence: read }]",
+        ),
+      ),
+    );
+    expect(told.findings.map((f) => [f.code, f.step])).toEqual([["triage/unknown-data", 3]]);
   });
 
   it("reads a trace from before 0.8, and says to migrate it", () => {

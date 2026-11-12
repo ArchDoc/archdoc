@@ -1,4 +1,10 @@
-import type { JourneyNode, Model, Simulation } from "@archdoc/core/browser";
+import {
+  DataRegistry,
+  type JourneyNode,
+  type Model,
+  type Simulation,
+  stepReply,
+} from "@archdoc/core/browser";
 import { useMemo } from "react";
 import type { Interaction } from "../graph/data.js";
 import { repoName, repoOf, stepUses, targetLabel } from "../model/stories.js";
@@ -30,6 +36,26 @@ export function StepPanel(props: StepPanelProps) {
   const x = interactions[at];
   const step = x ? journey.steps[x.step] : undefined;
   const uses = useMemo(() => (x ? stepUses(model, x.from, x.to) : undefined), [model, x]);
+  // A request and its response: what comes back to the caller.
+  const reply = useMemo((): PayloadEntry[] => {
+    if (!step || x?.store) return [];
+    const registry = new DataRegistry(model);
+    const ns = `${model.namespace}.`;
+    return (stepReply(model, step) ?? []).map((ref) => {
+      const found = registry.entry(ref);
+      const entry = found?.ref ?? ref;
+      return {
+        entry,
+        label: entry.startsWith(ns) ? entry.slice(ns.length) : entry,
+        kind: found?.node.spec.kind,
+        fields: Object.entries(found?.node.spec.fields ?? {}).map(([name, f]) => ({
+          name,
+          type: f.type,
+          classification: f.classification,
+        })),
+      };
+    });
+  }, [model, step, x]);
   // What check says is wrong with this step, such as a step that doesn't follow a use.
   const problems = useMemo(() => {
     const here = step?.location;
@@ -121,7 +147,7 @@ export function StepPanel(props: StepPanelProps) {
           <h3>{x.store ? "What it stores" : "What it sends"}</h3>
           <Payload key={x.label} entries={props.payload} onSelect={props.onSelect} />
         </section>
-      ) : (
+      ) : reply.length ? null : (
         <p className="muted">
           {x.store ? (
             <>
@@ -137,6 +163,12 @@ export function StepPanel(props: StepPanelProps) {
           )}
         </p>
       )}
+      {reply.length ? (
+        <section className="block">
+          <h3>What it gets back</h3>
+          <Payload key={`${x.label}r`} entries={reply} onSelect={props.onSelect} />
+        </section>
+      ) : null}
 
       {sim?.ran &&
       sim.events.some((e) => e.kind !== "sent" && (!x.store || x.writes.includes(e.entry))) ? (

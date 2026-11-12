@@ -348,6 +348,8 @@ const rows = chosen.map((name) => {
     wrongBlame: share((r) => r.score?.wrongBlame),
     honest: share((r) => r.score?.honest),
     inModel: mean(scored.map((r) => r.score.inModel).filter((x) => x !== undefined)),
+    described: mean(scored.map((r) => r.score.described).filter((x) => x !== undefined)),
+    data: mean(scored.map((r) => r.score.data).filter((x) => x !== undefined)),
     stopped: share((r) => r.score?.stopped && !r.codeTouched.length),
     started: share((r) => r.started),
     skill: share((r) => r.skill),
@@ -366,10 +368,10 @@ const lines = [
   "",
   `${new Date().toISOString()} · ${runs} run${runs === 1 ? "" : "s"} per scenario${model ? ` · ${model}` : ""}`,
   "",
-  "Each column is the share of runs. Pass: the record's cause step is in the right element and file, it stopped at root-caused without changing code, says nothing was reproduced, and checks clean. Record: it wrote a Triage record. Cause and code: its cause step's element (or what that's part of) and file. Specific: on the element itself, as specific as the model goes. Journey: it opens up a journey the bug shows up in. Ruled out: the share of misleading leads it ruled out. Wrong blame: a cause step on a misleading lead instead. In model: the share of its steps the model declares. Stopped: root-caused, no code changed. Started: it began with archdoc_triage or archdoc triage start.",
+  "Each column is the share of runs. Pass: the record's cause step is in the right element and file, it stopped at root-caused without changing code, says nothing was reproduced, and checks clean. Record: it wrote a Triage record. Cause and code: its cause step's element (or what that's part of) and file. Specific: on the element itself, as specific as the model goes. Journey: it opens up a journey the bug shows up in. Ruled out: the share of misleading leads it ruled out. Wrong blame: a cause step on a misleading lead instead. In model: the share of its steps the model declares. Described: the share of its steps that say what happened there. Data: the share of its steps across elements that say what they carry. Stopped: root-caused, no code changed. Started: it began with archdoc_triage or archdoc triage start.",
   "",
-  "| Scenario | Pass | Record | Cause | Specific | Code | Journey | Ruled out | Wrong blame | Honest | In model | Stopped | Started | Skill | Minutes | Turns | Cost |",
-  "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+  "| Scenario | Pass | Record | Cause | Specific | Code | Journey | Ruled out | Wrong blame | Honest | In model | Described | Data | Stopped | Started | Skill | Minutes | Turns | Cost |",
+  "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
   ...rows.map(
     (r) =>
       [
@@ -384,6 +386,8 @@ const lines = [
         pct(r.wrongBlame),
         pct(r.honest),
         pct(r.inModel),
+        pct(r.described),
+        pct(r.data),
         pct(r.stopped),
         pct(r.started),
         pct(r.skill),

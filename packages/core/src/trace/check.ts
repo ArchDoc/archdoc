@@ -9,6 +9,7 @@ import type {
 import { locate } from "../codemap/codemap.js";
 import { normalizePath } from "../codemap/glob.js";
 import { findSnippet } from "../codemap/snippet.js";
+import { DataRegistry } from "../data/registry.js";
 import type { Diagnostic } from "../diagnostics.js";
 import { otherModels } from "../federation/consumers.js";
 import type { JourneyNode, Model } from "../model.js";
@@ -505,6 +506,51 @@ export function checkTrace(
       "trace",
     );
   }
+  // What a reader walks through on the map: what happened at each hop, and what it carried.
+  // Asked of Triage records (they say their status), not of traces from before 0.8.
+  const detail: TraceFinding["severity"] = found ? "warning" : "info";
+  const list = (ns: number[]) => `Step${ns.length === 1 ? "" : "s"} ${ns.join(", ")}`;
+  const undescribed = s.steps.flatMap((x, i) => (x.description?.trim() ? [] : [i + 1]));
+  if (s.status && undescribed.length) {
+    add(
+      detail,
+      "triage/step-no-description",
+      `${list(undescribed)} ${undescribed.length === 1 ? "has" : "have"} no description. A reader walks through the bug one step at a time: say in a sentence or two what happened at that hop in the failing run (the value it had, what the code did with it, and why that's right or wrong there), not only the action.`,
+      `steps.${(undescribed[0] as number) - 1}`,
+    );
+  }
+  const silent = steps.flatMap((x) => {
+    const across =
+      x.from.status !== "unknown" &&
+      x.to.status !== "unknown" &&
+      x.hop.kind !== "same" &&
+      x.from.id !== x.to.id;
+    const says =
+      x.spec.sends !== undefined || x.spec.creates !== undefined || x.spec.changes !== undefined;
+    return across && !says ? [x.step] : [];
+  });
+  if (s.status && silent.length) {
+    const sent = modeledSends(model, anchor);
+    add(
+      detail,
+      "triage/step-no-data",
+      `${list(silent)} ${silent.length === 1 ? "doesn't" : "don't"} say what ${silent.length === 1 ? "it carries" : "they carry"}. Add sends: with the data entry the hop passes, by its name under data:${sent.length ? ` (the journey step it opens up sends ${sent.join(", ")})` : ""}, or creates: or changes: for a write, and observed:/expected: on its fields where the values go wrong, such as observed: { Order.status: pending }.${sent.length ? "" : ` If the model has no entry for what the code passes, it's missing from the design, not only the record: add it with archdoc edit ({ "op": "add", "type": "data", "id": "Posting", "spec": { "description": "…", "fields": { … } } }, fields from the type the code passes), then name it here.`}`,
+      `steps.${(silent[0] as number) - 1}`,
+    );
+  }
+  const registry = new DataRegistry(model);
+  for (const [i, x] of s.steps.entries()) {
+    for (const ref of [x.sends ?? []].flat()) {
+      if (registry.entry(ref)) continue;
+      add(
+        "info",
+        "triage/unknown-data",
+        `sends "${ref}", which isn't a data entry in the model. Use the model's name for it, or add it under data: with its fields.`,
+        `steps.${i}`,
+        i + 1,
+      );
+    }
+  }
   const noEvidence = s.steps.flatMap((x, i) => (x.evidence ? [] : [i + 1]));
   if (noEvidence.length) {
     add(
@@ -639,4 +685,11 @@ export function recordsOn(
       (options.closed || !closedStatuses.includes(c.view.status)) &&
       c.view.elements.some((e) => elements.some((x) => related(e, x))),
   );
+}
+
+/** What the journey step a record opens up sends, as the model writes it. */
+function modeledSends(model: Model, anchor: TraceAnchorView | undefined): string[] {
+  if (anchor?.status !== "found" || anchor.namespace) return [];
+  const step = model.journeys.get(anchor.journey)?.spec.steps[anchor.step - 1];
+  return step?.sends === undefined ? [] : [step.sends].flat();
 }

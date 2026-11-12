@@ -1157,7 +1157,7 @@ export function formatDiscovery(a: DiscoveryAssessment, errors = 0, warnings = 0
     .join(" and ");
   out.push(
     ok
-      ? "✓ The model is done: every level is small and inside the system, every element is named as the code names it, described, and connected, its code points at the functions that do the work, no test code is modeled, the main flows are journeys that say what they carry, and the model says where it runs."
+      ? "✓ The model is done: every level is small and inside the system, every element is named as the code names it, described, and connected, its code points at the functions that do the work, no test code is modeled, the main flows are journeys that say what they carry, and the model says where it runs. Hand it over: say what it covers, the journeys you traced, and what's left for a person. Then ask the user whether they'd like to see it in the explorer, and if so open it (archdoc view --detach --watch --open, or give the URL again if it's already running)."
       : `✗ Not done yet: ${plural(a.gaps.length, "thing")} to finish${found ? `, and archdoc check has ${found} to fix` : ""}.`,
     "",
     `  ${s.described} of ${s.elements} elements described, ${s.orphans.length} unconnected, widest level ${s.widestLevel}`,

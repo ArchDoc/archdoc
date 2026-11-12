@@ -47,6 +47,8 @@ export interface AnchorCandidate {
   to: string;
   action?: string | undefined;
   code?: string | undefined;
+  /** What the step sends, as the journey writes it. */
+  sends?: string | string[] | undefined;
   goal: string;
   actor: string;
   importance: Importance;
@@ -359,6 +361,7 @@ export function anchorError(model: Model, text: string, options: AnchorOptions =
         to: idOf(step.to) ?? step.spec.to,
         action: step.spec.action,
         code: step.spec.code,
+        sends: step.spec.sends,
         goal: j?.spec.goal ?? "",
         actor: j?.spec.actor ?? "",
         importance: j?.spec.importance ?? "normal",
@@ -550,9 +553,11 @@ export function traceSkeleton(
     ] as const
   ).filter(([, v]) => v);
   const out = [
-    "# Started from the error. Follow the code, and as you go: rule leads in or out,",
-    "# fix every step (what it does, evidence: reproduced, read, or inferred), and mark",
-    "# the cause. Then set root-cause and status: root-caused (and fix, once it's fixed).",
+    "# Started from the error. Follow the code, and as you go: rule leads in or out, and",
+    "# give every step its action, a description of what happened there in the failing run,",
+    "# what it carries (sends: a data entry, with observed/expected values on its fields),",
+    "# code, and evidence: reproduced, read, or inferred. Mark the cause. Then set",
+    "# root-cause and status: root-caused (and fix, once it's fixed).",
     `# Saved as .archdoc/triage/${id}.yaml; run archdoc check.`,
     `triage: ${id}`,
     `title: ${report.title ? q(report.title) : "TODO the bug in one line, as the user would say it"}`,
@@ -593,6 +598,9 @@ export function traceSkeleton(
         `  - from: ${q(h.from)}`,
         `    to: ${q(h.to)}`,
         "    action: TODO what it asks for",
+        "    description: TODO what happened at this hop in the failing run, and why",
+        "    # sends: TODO the data entry it passes, by its name under data:",
+        "    # observed: { TODO Entry.field: the value the run had }",
         `    code: ${q(h.code)}`,
         `    evidence: reproduced   # the stack trace shows this call`,
       );
@@ -605,6 +613,14 @@ export function traceSkeleton(
       `  - from: ${q(top?.from ?? "TODO")}`,
       `    to: ${q(top?.to ?? "TODO")}`,
       `    action: ${q(top?.action ? `TODO ${top.action}` : "TODO what happens")}`,
+      "    description: TODO what happened at this hop in the failing run, and why",
+      ...(top?.sends !== undefined
+        ? [
+            `    sends: ${Array.isArray(top.sends) ? `[${top.sends.map(q).join(", ")}]` : q(top.sends)}   # as the journey step sends it`,
+          ]
+        : ["    # sends: TODO the data entry it passes, by its name under data:"]),
+      "    # observed: { TODO Entry.field: the value the run had }",
+      "    # expected: { TODO Entry.field: the value it should have had }",
       ...(first?.path
         ? [`    code: ${q(`${first.path}${first.line !== undefined ? `:${first.line}` : ""}`)}`]
         : []),

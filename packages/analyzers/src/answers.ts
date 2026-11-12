@@ -121,6 +121,7 @@ export function contextAnswer(where: Where, input: ContextInput): Promise<Answer
     const error = input.error?.trim();
     if (!task && !paths.length && !error) return ok(formatOverview(m, 1));
     const out: string[] = [];
+    if (error || looksLikeBug(task)) out.push(TRIAGE_FIRST);
     if (error) {
       const files = await listRepoFiles(m.baseDir);
       const anchored = anchorError(m, error, { files, root: m.baseDir });
@@ -139,6 +140,18 @@ export function contextAnswer(where: Where, input: ContextInput): Promise<Answer
     }
     return ok(out.join("\n\n"));
   });
+}
+
+/** What context says first when the task is a bug: the record comes before the code. */
+export const TRIAGE_FIRST =
+  "This reads like a bug. Start its Triage record first: archdoc_triage with symptom set to the bug as given (CLI: archdoc triage start -). Its answer says how to fill the record in as you follow the code. Keep it up to date when you fix the bug, too: set status: fixed and fix, and commit the record with the fix.";
+
+const BUG =
+  /\b(bugs?|broken|breaks?|fail(s|ed|ing|ure)?|errors?|exceptions?|crash(es|ed|ing)?|regress(ion|ed)?|wrong|incorrect|stack ?trace|traceback|panic|timeouts?|timed out|hangs?|stuck|missing|never|doesn'?t|does not|isn'?t|not working|stopped|undefined|null pointer|nil pointer|500)\b/i;
+
+/** Whether a task in words reports a bug (a failure, wrong output, an error), not a change to make. */
+export function looksLikeBug(task: string): boolean {
+  return BUG.test(task);
 }
 
 export interface ShowInput {

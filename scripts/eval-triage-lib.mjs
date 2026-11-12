@@ -100,6 +100,9 @@ const bare = (path) =>
  *   the cause is in.
  * - honest: no step or lead says reproduced (the agent can't run anything).
  * - inModel: the share of steps whose hop the model declares.
+ * - described: the share of steps with a description of what happened there.
+ * - data: the share of steps across elements that say what they carry
+ *   (sends, creates, or changes).
  * - stopped: status root-caused: it explained the bug and didn't fix it.
  * - errors: what archdoc check says is wrong with it.
  * - pass: cause, code, stopped, honest, and no errors.
@@ -140,6 +143,18 @@ export function scoreRecord(check, scenario) {
   const inModel = view.steps.length
     ? (view.steps.length - view.undeclared.length) / view.steps.length
     : undefined;
+  const described = view.steps.length
+    ? view.steps.filter((s) => s.description?.trim()).length / view.steps.length
+    : undefined;
+  const across = view.steps.filter((s) => s.from.id && s.to.id && s.from.id !== s.to.id);
+  const data = across.length
+    ? across.filter(
+        (s) =>
+          s.spec.sends !== undefined ||
+          s.spec.creates !== undefined ||
+          s.spec.changes !== undefined,
+      ).length / across.length
+    : undefined;
   const stopped = view.status === "root-caused";
   const errors = findings
     .filter((f) => f.severity === "error")
@@ -153,6 +168,8 @@ export function scoreRecord(check, scenario) {
     wrongBlame,
     honest,
     inModel,
+    described,
+    data,
     stopped,
     status: view.status,
     steps: view.steps.length,

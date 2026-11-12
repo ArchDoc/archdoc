@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { countCrossings, directRoute, pointAlong, roundedPath } from "../src/graph/route.js";
+import {
+  countCrossings,
+  directRoute,
+  packetTiming,
+  pointAlong,
+  polylineLength,
+  roundedPath,
+} from "../src/graph/route.js";
 
 const route = [
   { x: 0, y: 0 },
@@ -87,5 +94,31 @@ describe("directRoute", () => {
     const points = directRoute(box(0, 0), box(20, 300));
     expect(points[0]?.y).toBe(60);
     expect(points.at(-1)?.y).toBe(300);
+  });
+});
+
+describe("packetTiming", () => {
+  it("moves a message at one speed, so a long line takes longer, not faster", () => {
+    const short = packetTiming(220, false);
+    const long = packetTiming(1100, false);
+    // 110 px a second, and half a second's rest at the end of each loop.
+    expect(short.dur).toBe(2.5);
+    expect(long.dur).toBe(10.5);
+    expect(long.out.keyTimes).toBe("0;0.9524;1");
+    expect(long.back).toBeUndefined();
+    // A short line still takes a second, so it isn't a blink.
+    expect(packetTiming(20, false).dur).toBe(1.5);
+  });
+
+  it("plays a request to the callee, a pause, and the answer back", () => {
+    const t = packetTiming(220, true);
+    // 2 s there, 0.5 s at the callee, 2 s back, 0.5 s at rest.
+    expect(t.dur).toBe(5);
+    expect(t.out).toEqual({ keyPoints: "0;1;1", keyTimes: "0;0.4;1", shown: [0, 0.5] });
+    expect(t.back).toEqual({ keyPoints: "1;1;0;0", keyTimes: "0;0.5;0.9;1", shown: [0.5, 1] });
+  });
+
+  it("measures a route by its legs", () => {
+    expect(polylineLength(route)).toBe(150);
   });
 });

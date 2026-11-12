@@ -28,7 +28,8 @@ describe("archdoc MCP server", () => {
     expect(INSTRUCTIONS).toMatch(
       /before you grep[\s\S]*archdoc_context[\s\S]*archdoc_show[\s\S]*archdoc_check[\s\S]*archdoc_seal/,
     );
-    expect(INSTRUCTIONS.length).toBeLessThan(1250);
+    // 0.8.1: triage says to start the record before the code, even for a fix.
+    expect(INSTRUCTIONS.length).toBeLessThan(1350);
   });
 
   it("has one tool per question, read-only except edit, seal, triage, and init", async () => {
@@ -55,8 +56,8 @@ describe("archdoc MCP server", () => {
     expect(tools.find((t) => t.name === "archdoc_edit")?.annotations?.destructiveHint).toBe(true);
     // Every agent session reads this list, so it stays small. find and edit
     // take most of it: they replace reading and hand-editing the YAML. triage
-    // (0.8) added about 500.
-    expect(JSON.stringify(tools).length).toBeLessThan(11100);
+    // (0.8) added about 500, and what a step needs (0.8.1) about 100.
+    expect(JSON.stringify(tools).length).toBeLessThan(11250);
   });
 
   it("finds parts of the model, and outlines it", async () => {
@@ -136,13 +137,23 @@ describe("archdoc MCP server", () => {
     expect((await call("archdoc_context")).text).toMatch(/^ArchDoc \(namespace archdoc\)/);
   });
 
+  it("says to start a Triage record first when the task reads like a bug", async () => {
+    const bug = await call("archdoc_context", { task: "shipped emails stopped after the deploy" });
+    expect(bug.text).toMatch(
+      /^This reads like a bug\. Start its Triage record first: archdoc_triage/,
+    );
+    const change = await call("archdoc_context", { task: "add a refund rounding option" });
+    expect(change.text).not.toContain("This reads like a bug");
+  });
+
   it("places an error and starts a trace", async () => {
     const r = await call("archdoc_context", {
       error:
         "TypeError: x is undefined\n    at diffModels (/ci/repo/packages/core/dist/diff/diff.js:12:3)\n    at report (/ci/repo/packages/cli/dist/commands/report.js:50:20)",
     });
     expect(r.isError).toBe(false);
-    expect(r.text).toMatch(/^Where this error belongs, best first:\n {2}1\. review-ai-change#5/);
+    expect(r.text).toMatch(/^This reads like a bug\. Start its Triage record first/);
+    expect(r.text).toMatch(/\n\nWhere this error belongs, best first:\n {2}1\. review-ai-change#5/);
     expect(r.text).toContain("toolchain.core.differ · packages/core/src/diff/diff.ts:12");
     expect(r.text).toContain("  - from: toolchain.cli.commands\n    to: toolchain.core.differ");
   });

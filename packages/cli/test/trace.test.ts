@@ -55,8 +55,9 @@ describe("archdoc context --error", () => {
     await writeFile(file, STACK);
     const r = await run(repo, "context", "--error", file);
     expect(r.code).toBe(0);
+    expect(r.out).toMatch(/^This reads like a bug\. Start its Triage record first/);
     expect(r.out).toMatch(
-      /^Where this error belongs, best first:\n {2}1\. review-ai-change#5 \(critical\)/,
+      /\n\nWhere this error belongs, best first:\n {2}1\. review-ai-change#5 \(critical\)/,
     );
     expect(r.out).toContain(
       "toolchain.core.loader · packages/core/src/load/git.ts:93 (frame 1, in readModelSourcesAtRef)",

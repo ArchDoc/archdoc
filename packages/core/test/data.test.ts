@@ -15,6 +15,7 @@ import {
   resolveData,
   serializeBundle,
   stepMessage,
+  stepReply,
 } from "../src/index.js";
 import { dedent, model, root } from "./helpers.js";
 
@@ -280,6 +281,39 @@ describe("journey step messages", () => {
       undefined,
       // A subscriber's step carries what the topic does, from the publisher to it.
       { data: ["RefundIssued"], how: "carries", against: true },
+    ]);
+  });
+
+  it("say what comes back for a request and its response", () => {
+    // The contract the call goes through says what it returns; a one-way send gets nothing back.
+    expect(steps.map((s) => stepReply(m, s))).toEqual([
+      ["Refund"],
+      ["Refund"],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    const asked = payments(`
+      actors:
+        clerk: { kind: role, uses: { app: Asks } }
+      elements:
+        app: { kind: container, uses: { charges: Asks } }
+      journeys:
+        quote:
+          actor: clerk
+          goal: Quote
+          steps:
+            - { from: app, to: charges, sends: RefundRequest, returns: Refund }
+            - { from: app, to: charges, returns: [Refund, Charge] }
+    `);
+    expect(asked.journeys.get("quote")?.steps.map((s) => stepReply(asked, s))).toEqual([
+      ["Refund"],
+      ["Refund", "Charge"],
     ]);
   });
 

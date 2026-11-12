@@ -351,3 +351,30 @@ function writes(spec: {
     ...Object.keys(spec.changes ?? {}).map((k) => k.slice(0, k.lastIndexOf("."))),
   ];
 }
+
+/**
+ * What a journey step gets back: a request and its response, which the
+ * explorer plays to the callee and back. The step's `returns`, or else what
+ * the contract of the use it travels along returns (between the boxes, or
+ * else their parents). Undefined for a one-way step, and for one whose message
+ * is the answer already.
+ */
+export function stepReply(
+  model: Model,
+  step: JourneyStep,
+  flows: readonly DataFlow[] = dataFlows(model),
+): string[] | undefined {
+  if (step.spec.returns !== undefined) return [step.spec.returns].flat();
+  const { from, to } = step;
+  if (!from || !to) return undefined;
+  if (stepMessage(model, step, flows)?.against) return undefined;
+  const fromChain = chainOf(model, from);
+  const toChain = chainOf(model, to);
+  for (let depth = 0; depth < Math.max(fromChain.length, toChain.length); depth++) {
+    const a = fromChain[Math.min(depth, fromChain.length - 1)] as string;
+    const b = toChain[Math.min(depth, toChain.length - 1)] as string;
+    const back = flows.filter((f) => f.how === "returns" && key(f.from) === b && key(f.to) === a);
+    if (back.length) return [...new Set(back.map((f) => f.data))];
+  }
+  return undefined;
+}

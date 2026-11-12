@@ -249,7 +249,7 @@ p {
 
 .app.tab-journeys,
 .app.tab-triage {
-  --side-width: 240px;
+  --side-width: 300px;
 }
 
 .app.tab-changes {
@@ -923,11 +923,17 @@ p {
   overflow-wrap: anywhere;
 }
 
+/* A journey's whole title wraps; what it is (importance, steps) goes beneath. */
 .app.tab-journeys .side-item-label {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.journey-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
 }
 
 .side-item-sub {
@@ -1752,8 +1758,8 @@ ul.plain {
 
 .trace-head {
   display: grid;
-  gap: 12px;
-  padding: 16px 20px 14px;
+  gap: 8px;
+  padding: 12px 20px 10px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
@@ -1763,10 +1769,44 @@ ul.plain {
   line-height: 1.3;
 }
 
-.trace-head-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
+/* The root cause in brief: two lines, the rest on asking, so the map keeps the room. */
+.trace-rca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  font-size: var(--fs-2);
+}
+
+.trace-rca-text {
+  flex: 1 1 420px;
+  min-width: 0;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.trace-rca-text.trace-fix {
+  -webkit-line-clamp: 1;
+}
+
+.trace-rca-text.is-open {
+  display: block;
+}
+
+.trace-rca-label {
+  font-size: var(--fs-1);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.trace-more {
+  flex: none;
+  font-size: var(--fs-1);
 }
 
 .trace-log {
@@ -1801,14 +1841,6 @@ ul.plain {
 .trace-reproduce code {
   font-size: var(--fs-1);
   color: var(--log-ink);
-}
-
-.trace-diagnosis {
-  display: grid;
-  gap: 8px;
-  align-content: start;
-  font-size: var(--fs-2);
-  min-width: 0;
 }
 
 .trace-fix {
@@ -2873,6 +2905,16 @@ table.observed td.is-wrong code {
   fill: var(--muted);
 }
 
+/* The answer to a request, on its way back to the caller. */
+.packet.is-reply rect {
+  fill: var(--surface);
+  stroke: var(--accent);
+}
+
+.packet.is-reply text {
+  fill: var(--accent);
+}
+
 /* ---------- Tables, inside datastores ---------- */
 
 .table-card {
@@ -3524,9 +3566,6 @@ table.observed td.is-wrong code {
   .lanes {
     --gutter: 30px;
   }
-  .trace-head-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .app.tab-triage .main {
     height: auto;
     max-height: none;
@@ -4037,44 +4076,6 @@ table.observed td.is-wrong code {
 .trace-head .story-head {
   padding: 0;
   border: 0;
-}
-
-.triage-leads {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.triage-lead {
-  display: inline-flex;
-  gap: 6px;
-  align-items: baseline;
-  max-width: 100%;
-  padding: 2px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  font-size: var(--fs-1);
-  cursor: help;
-}
-
-.triage-lead.verdict-ruled-out {
-  color: var(--muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--line-strong);
-}
-
-.triage-lead.verdict-confirmed {
-  color: var(--ink);
-  border-color: var(--breaks);
-  background: var(--breaks-soft);
-}
-
-.triage-lead-mark {
-  font-weight: 700;
-  text-decoration: none;
 }
 
 .triage-start-body {
