@@ -21,7 +21,7 @@ data:
     kind: message
     description: An MCP tool call from an agent.
     fields:
-      tool: { type: string, description: "archdoc_context, archdoc_show, archdoc_find, archdoc_edit, archdoc_check, archdoc_seal, archdoc_paths, archdoc_triage, or archdoc_init" }
+      tool: { type: string, description: "archdoc_context, archdoc_show, archdoc_find, archdoc_edit, archdoc_check, archdoc_seal, archdoc_paths, archdoc_triage, archdoc_plan, or archdoc_init" }
       arguments: { type: json }
 
   ToolResult:
@@ -162,4 +162,29 @@ data:
       ops: { type: json, description: "The ops, in order, each naming what it changes by ID" }
       by: { type: string, description: "Who suggests what the ops add, such as agent:claude-code" }
       dryRun: { type: bool, description: "Say what would change, and write nothing" }
+    provenance: { source: suggested, by: agent:claude-code }
+  PlanFile:
+    kind: entity
+    description: "A plan in .archdoc/plans/: a change designed with the agent before it's built, as changes to the model (archdoc edit ops), sequences of interactions, and notes, each with the person's intent, the agent's suggestions until the person accepts them, what the person changed since the agent last read it, and, once agreed, the tasks that carry it out. Started by archdoc plan start and archdoc_plan, drawn in the explorer's Plan tab, checked by archdoc check; never part of the model."
+    fields:
+      plan: { type: string }
+      title: { type: string }
+      status: { type: enum, values: [drafting, reviewing, ready, executing, done, abandoned] }
+      goal: { type: string, description: "The idea, as the person put it" }
+      by: { type: string }
+      scope: { type: json, description: "The elements, journeys, data, and actors the goal touches, as the plan started" }
+      changes: { type: json, description: "Each one archdoc edit op (add, set, remove, rename, use) with id, intent, by, status (proposed, suggested, dismissed), and where it sits on the map" }
+      sequences: { type: json, description: "New journeys, or new steps for one the model has, each step with its intent" }
+      notes: { type: json, description: "Notes, insights, questions, risks, and answers pinned to an item, with replies" }
+      tasks: { type: json, description: "title, from (the changes it carries out), files, tests, after, status" }
+      unread: { type: json, description: "What the person changed since the agent last read it: id, what" }
+      sent: { type: integer, description: How many times the person sent it to the agent }
+    provenance: { source: suggested, by: agent:claude-code }
+  PlanEdit:
+    kind: message
+    description: "Edit ops on a plan: put, drop, step, accept, dismiss, reply, resolve, move, set, send, and read. The explorer posts the person's to archdoc view with the text it last read, and the agent sends its own through archdoc plan respond."
+    fields:
+      ops: { type: json }
+      base: { type: string, description: The plan's text as the page last read it; a different one on disk is refused as stale }
+      by: { type: string }
     provenance: { source: suggested, by: agent:claude-code }

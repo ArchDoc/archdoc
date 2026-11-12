@@ -1,0 +1,42 @@
+plan: order-confirmation
+title: Email an order confirmation
+status: reviewing
+goal: Email the shopper an order confirmation after checkout
+by: human:@dana
+changes:
+  - id: c1
+    by: human:@dana
+    intent: Sends transactional email through our email provider
+    add: { id: shop.mailer, kind: external, name: Email Provider, description: Sends transactional email }
+  - id: c2
+    by: human:@dana
+    intent: The cart page sends the confirmation as soon as checkout returns the order
+    use: { from: shop.web, to: shop.mailer, description: Sends the order confirmation }
+  - id: c3
+    by: human:@dana
+    use: { from: shop.api.orders, to: shop.mailer, description: Sends email }
+  - id: c4
+    by: human:@dana
+    intent: Simpler to run without Redis while we're in here
+    remove: shop.cache
+sequences:
+  - id: s1
+    by: human:@dana
+    journey: checkout
+    intent: Checkout ends with the confirmation in the shopper's inbox
+    steps:
+      - { from: shopper, to: shop.web, action: Checks out the cart, intent: As today }
+      - { from: shop.web, to: shop.api, action: POSTs the order, intent: As today }
+      - { from: shop.api.routes, to: shop.api.orders, action: Creates the order, intent: As today }
+      - { from: shop.api.orders, to: shop.mailer, action: Emails the confirmation, intent: The shopper hears right away }
+      - { from: shop.api.orders, to: shop.api.payments, action: Charges for it, intent: As today }
+      - { from: shop.api.payments, to: shop.api.storage, action: Records the charge, intent: As today }
+      - { from: shop.api.orders, to: shop.api.storage, action: Saves the order, intent: As today }
+      - { from: shop.api.storage, to: shop.db, action: Inserts the order and the charge, intent: As today }
+unread:
+  - { id: c1, what: added }
+  - { id: c2, what: added }
+  - { id: c3, what: added }
+  - { id: c4, what: added }
+  - { id: s1, what: added }
+sent: 1

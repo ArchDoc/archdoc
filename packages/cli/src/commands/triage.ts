@@ -7,7 +7,7 @@ import {
   triageStartAnswer,
 } from "@archdoc/analyzers";
 import type { Io } from "../io.js";
-import { readStdin } from "./trace.js";
+import { readStdin } from "./stdin.js";
 
 const STATUSES = [
   "open",

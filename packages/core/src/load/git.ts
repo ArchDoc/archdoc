@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { posix, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import { TRIAGE_DIRS } from "@archdoc/spec";
+import { RECORD_DIRS } from "@archdoc/spec";
 import type { Model } from "../model.js";
 import { buildModel, type ModelSource } from "./build.js";
 import { type LoadOptions, readModelSources } from "./fs.js";
@@ -123,8 +123,8 @@ export async function readModelSourcesAtRef(
   const files = listing
     .split("\0")
     .filter((f) => /\.ya?ml$/.test(f) && !/(^|\/)archdoc\.lock$/.test(f))
-    // Triage records are evidence of one bug, never part of the model.
-    .filter((f) => !TRIAGE_DIRS.some((d) => f.startsWith(`${rel ? `${rel}/` : ""}${d}/`)))
+    // Triage records and plans are about the model, never part of it.
+    .filter((f) => !RECORD_DIRS.some((d) => f.startsWith(`${rel ? `${rel}/` : ""}${d}/`)))
     .filter(
       (f) =>
         !f

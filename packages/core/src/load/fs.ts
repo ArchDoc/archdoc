@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
-import { TRIAGE_DIRS } from "@archdoc/spec";
+import { PLAN_DIR, RECORD_DIRS, TRIAGE_DIRS } from "@archdoc/spec";
 import { federate } from "../federation/federate.js";
 import { federationDir, readFederationInput } from "../federation/vendor.js";
 import type { Model } from "../model.js";
@@ -98,7 +98,7 @@ async function findModel(
     for (const name of ROOT_FILES) {
       const root = join(dir, name);
       if (await isFile(root)) {
-        // Triage records are evidence of one bug, never part of the model.
+        // Triage records and plans are about the model, never part of it.
         const others = (await listYaml(dir, true)).filter((f) => f !== root).sort();
         return { root, files: [root, ...others], dir, baseDir };
       }
@@ -112,7 +112,7 @@ async function listYaml(dir: string, top = false): Promise<string[]> {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (top && (TRIAGE_DIRS as readonly string[]).includes(entry.name)) continue;
+      if (top && (RECORD_DIRS as readonly string[]).includes(entry.name)) continue;
       if (!IGNORED_DIRS.has(entry.name) && !entry.name.startsWith(".")) {
         out.push(...(await listYaml(full)));
       }
@@ -142,6 +142,28 @@ export async function readTraceSources(
     if ((await stat(dir).catch(() => undefined))?.isDirectory())
       files.push(...(await listYaml(dir)).sort());
   }
+  return Promise.all(
+    files.map(async (file) => ({
+      path: relative(cwd, file) || basename(file),
+      text: await readFile(file, "utf8"),
+    })),
+  );
+}
+
+/**
+ * The plans beside a model (`.archdoc/plans/*.yaml`), read but not parsed.
+ * Empty when there's no model or no plans.
+ */
+export async function readPlanSources(
+  target = ".",
+  options: LoadOptions = {},
+): Promise<{ path: string; text: string }[]> {
+  const cwd = options.cwd ?? process.cwd();
+  const found = await findModel(resolve(cwd, target), cwd);
+  if (!found?.dir) return [];
+  const dir = join(found.dir, PLAN_DIR);
+  if (!(await stat(dir).catch(() => undefined))?.isDirectory()) return [];
+  const files = (await listYaml(dir)).sort();
   return Promise.all(
     files.map(async (file) => ({
       path: relative(cwd, file) || basename(file),

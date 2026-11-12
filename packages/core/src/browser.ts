@@ -2,7 +2,17 @@
 // The explorer imports this entry point so it builds and queries the model
 // with the same engine as the CLI.
 
-export { TRACES_DIR, TRIAGE_DIR, TRIAGE_DIRS } from "@archdoc/spec";
+export {
+  PLAN_DIR,
+  type PlanFile,
+  type PlanNoteKind,
+  type PlanStatus,
+  type PlanUnreadSpec,
+  RECORD_DIRS,
+  TRACES_DIR,
+  TRIAGE_DIR,
+  TRIAGE_DIRS,
+} from "@archdoc/spec";
 export {
   type CheckOptions,
   type CheckResult,
@@ -194,6 +204,46 @@ export {
 export { type Resolution, Resolver } from "./load/resolve.js";
 export * from "./model.js";
 export {
+  type AppliedPlan,
+  type ApplyPlanOptions,
+  applyPlan,
+  type CheckPlanOptions,
+  checkPlan,
+  itemLocation,
+  type PlanCheck,
+  type PlanFinding,
+  type PlanJourney,
+  type PlanOpen,
+  type PlanReach,
+  withFiles,
+} from "./plan/check.js";
+export {
+  type EditPlanOptions,
+  type EditPlanResult,
+  editPlan,
+  type PlanEditOp,
+  type PlanList,
+} from "./plan/edit.js";
+export {
+  changeKind,
+  changeOp,
+  changeTarget,
+  describeChange,
+  isAgreed,
+  journeySteps,
+  loadPlans,
+  OPEN_PLAN_STATUSES,
+  type ParsedPlans,
+  type Plan,
+  type PlanChangeKind,
+  type PlanSpec,
+  parsePlan,
+  planId,
+  planItemIds,
+  planStatusOf,
+  sequenceOp,
+} from "./plan/plan.js";
+export {
   type CodeIndex,
   fileStem,
   filesNamed,
@@ -281,6 +331,7 @@ export {
   type JourneyDiagramInput,
   journeyDiagram,
 } from "./report/mermaid.js";
+export { formatPlan, formatPlanList, nextStep } from "./report/plan-report.js";
 export {
   ASKED_CONCERNS,
   type Ask,

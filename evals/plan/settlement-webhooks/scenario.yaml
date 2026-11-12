@@ -1,0 +1,20 @@
+# The person wants clients told when a posting settles. Their sketch calls
+# the webhook from the API, which only creates postings (settling happens in
+# the worker), has the webhooks component query Postgres directly instead of
+# through the store, and a step with no intent.
+fixture: go-service
+goal: Call a client's webhook when one of its postings settles
+expected:
+  flaws:
+    - id: wrong-trigger
+      on: [c2]
+      fix: { use: { from: [ledger-worker, ledger.postings], to: [ledger.webhooks] } }
+      words: "worker|settle|creat|ledger-worker"
+    - id: bypasses-store
+      on: [c3]
+      fix: { use: { from: [ledger.webhooks], to: [ledger.store] } }
+      words: "store|directly|bypass|pool|quer"
+    - id: missing-intent
+      on: ["s1#3", s1]
+      words: "intent|why"
+  sound: [c1]

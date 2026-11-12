@@ -455,3 +455,24 @@ describe("editModel", () => {
     expect(set.problems[0]).toContain("uses is a map of target to description");
   });
 });
+
+describe("editModel in a namespace named like an element", () => {
+  it("adds ledger.webhooks inside the element ledger, not at the top", () => {
+    const text = dedent(`
+      archdoc: "2.0"
+      namespace: ledger
+      elements:
+        ledger:
+          kind: container
+          elements:
+            postings: { kind: component }
+    `);
+    const r = editModel(
+      [{ path: "archdoc.yaml", text }],
+      [{ op: "add", id: "ledger.webhooks", spec: { kind: "component" } }],
+    );
+    expect(r.done).toEqual(["Added component ledger.webhooks in archdoc.yaml."]);
+    const m = buildModel([{ path: "archdoc.yaml", text: r.files[0]?.text ?? "" }]);
+    expect(m.elements.has("ledger.webhooks")).toBe(true);
+  });
+});

@@ -161,6 +161,8 @@ export interface HashState {
   trace?: string | undefined;
   /** The environment on the Infrastructure tab. */
   environment?: string | undefined;
+  /** The open plan on the Plan tab, or "new" to start one. */
+  plan?: string | undefined;
 }
 
 /**
@@ -191,7 +193,7 @@ export function readHash(hash = window.location.hash): HashState {
         : undefined;
       return { tab: "data", data };
     }
-    if (name === "plan") return { tab: name };
+    if (name === "plan") return { tab: "plan", plan: value || undefined };
     if (name === "overview") return { tab: "overview" };
   }
   return {};
@@ -202,7 +204,7 @@ export function hashOf(state: HashState): string {
   const pair = state.pair;
   switch (state.tab) {
     case "plan":
-      return `#${state.tab}`;
+      return `#plan${state.plan ? `=${encodeURIComponent(state.plan)}` : ""}`;
     case "triage":
       return `#triage${state.trace ? `=${encodeURIComponent(state.trace)}` : ""}`;
     case "changes":

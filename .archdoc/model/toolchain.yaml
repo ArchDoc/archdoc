@@ -17,7 +17,7 @@ elements:
         kind: container
         deploy: [release.npm]
         technology: TypeScript, Zod, JSON Schema
-        description: Source of truth for the model format, its JSON Schema, and v1→v2 migration.
+        description: Source of truth for the model format, the Triage record and plan formats, their JSON Schema, and v1→v2 migration.
         code: [{ path: packages/spec/** }]
         elements:
           schema:
@@ -35,7 +35,7 @@ elements:
         kind: container
         deploy: [release.npm]
         technology: TypeScript
-        description: Deterministic engine. Loads, validates, queries, diffs, edits by ID, maps to code, checks rules and data, and checks references into other repos.
+        description: Deterministic engine. Loads, validates, queries, diffs, edits by ID, maps to code, checks rules and data, checks references into other repos, and checks Triage records and plans against the model.
         code: [{ path: packages/core/** }]
         uses:
           spec:
@@ -48,7 +48,7 @@ elements:
         elements:
           loader:
             kind: component
-            description: Multi-file loading, reference resolution (deploy targets in environments included), diagnostics with file and line.
+            description: Multi-file loading, reference resolution (deploy targets in environments included), diagnostics with file and line. Leaves out the records beside the model (triage/, plans/, and traces/ from before 0.8), which it reads on their own.
             code: [{ path: packages/core/src/load/** }]
             uses:
               checker: Validates journeys once references resolve
@@ -79,7 +79,7 @@ elements:
               - { path: packages/core/src/codemap/snippet.ts, symbol: findSnippet, description: The lines or declaration a code reference points at }
           report:
             kind: component
-            description: Text, JSON, and Mermaid answers shared by the CLI, MCP, and the explorer, so people and agents read the same words. summarizeChange is the one verdict on a change that the PR comment, the explorer's Diff tab, and archdoc check all render (formatCheck keeps it short enough for an agent, and says a list of problems is the work list, not a verdict); it also draws the change and its journeys, with their branches.
+            description: Text, JSON, and Mermaid answers shared by the CLI, MCP, and the explorer, so people and agents read the same words. summarizeChange is the one verdict on a change that the PR comment, the explorer's Diff tab, and archdoc check all render (formatCheck keeps it short enough for an agent, and says a list of problems is the work list, not a verdict); it also draws the change and its journeys, with their branches. formatPlan writes a plan for the agent, what the person changed first, with what to do next.
             code: [{ path: packages/core/src/report/** }]
             uses:
               imports:
@@ -99,6 +99,9 @@ elements:
                 description: Prints traces, trace checks, and error anchors
               seals:
                 description: Prints what archdoc check --seals says
+              plans:
+                description: Writes a plan for the agent to read
+                provenance: { source: suggested, by: agent:claude-code }
           checker:
             kind: component
             description: Validates journeys, and compares the model with the code and its rules (undeclared dependencies, rule violations, stale paths including deployment code, orphans, and components outside containers or code outside components). Lets a container without components hold code elements directly. Also says whether a new model is done (archdoc check --done), listing levels over the limits, small containers with components and big ones without, unmapped code, init's descriptions, test and verification code modeled as elements, unconnected elements, actors (and actors with a kebab-case ID and no plain name:), journeys, steps without an action or code, a missing system and parts outside it, parts not named the way their code is, code elements and steps that point at a whole file instead of a function or lines, components with no code element at the functions that do their work or with more than five, entry points no journey starts at, steps that cross a boundary without saying what they carry, datastores and queues without data, data entries without a description, what no environment places when the repository has deployment files, the warnings the code can answer (setting aside the owners, seals, other repos, and team rules only a person settles), and to keep going however big the repository. Build tooling (devDependencies, tool config files) is not a dependency between elements.
@@ -116,6 +119,9 @@ elements:
                 description: Maps observed file dependencies onto elements
               loader:
                 description: Resolves rule selectors and journey steps
+              plans:
+                description: Checks open plans with the model
+                provenance: { source: suggested, by: agent:claude-code }
           differ:
             kind: component
             description: Semantic diff between two model revisions (actors, elements, relationships, journeys, data, rules), and the code diff the explorer's Diff tab shows. deriveCodeChange reads a branch's changed files (with what the analyzers saw at both ends) into the branch's own model as elements, uses, proposed elements for new code no element maps, and entry points, each marked with whether the model already says it; projectCodeChange draws that change onto the model.
@@ -166,7 +172,7 @@ elements:
                 description: Reports in the shape of check's findings
           traces:
             kind: component
-            description: "Triage records, in .archdoc/triage/ (and traces/ from before 0.8), never part of the model. Parses them, works out each record's status, checks them against the model and the code (elements, the journey step they expand, code references, hops the model doesn't declare, what the status needs: a cause and root cause once root-caused, a fix once fixed, and that every step says what happened there and what it carried), and places a bug report on elements and ranked journey steps by its stack frames, paths, and the names in it, elements a report in plain words names included, with a record to start from that asks each step for its description and data."
+            description: "Triage records, in .archdoc/triage/, never part of the model. Parses them, works out each record's status, checks them against the model and the code (elements, the journey step they expand, code references, hops the model doesn't declare, what the status needs: a cause and root cause once root-caused, a fix once fixed, and that every step says what happened there and what it carried), and places a bug report on elements and ranked journey steps by its stack frames, paths, and the names in it, elements a report in plain words names included, with a record to start from that asks each step for its description and data."
             code:
               - { path: packages/core/src/trace/** }
               - { path: packages/core/src/trace/check.ts, symbol: checkTrace, description: Checks a trace and resolves it for drawing }
@@ -190,12 +196,40 @@ elements:
             uses:
               loader:
                 description: Resolves IDs and references the way the model does
+          plans:
+            kind: component
+            description: "Plans, in .archdoc/plans/, never part of the model. Parses them; makes a plan's agreed changes and sequences on a copy of the model's sources one at a time, so one that can't be made doesn't stop the rest; and checks it: every change and step has its intent, what can't be made and why, what the plan would break (findings the model with the plan has that the model hasn't), open questions and suggestions, the journeys, actors, owners, and other repos it reaches, the tasks once it's ready, and while it's carried out, which changes the model doesn't show yet. Edits a plan file by op, all or none, and records what the person changed for the agent's next read."
+            code:
+              - path: packages/core/src/plan/**
+              - path: packages/core/src/plan/check.ts
+                symbol: checkPlan
+                description: Checks a plan against the model
+              - path: packages/core/src/plan/check.ts
+                symbol: applyPlan
+                description: Makes a plan on a copy of the model
+              - path: packages/core/src/plan/edit.ts
+                symbol: editPlan
+                description: Edits a plan file by op
+            provenance: { source: suggested, by: agent:claude-code }
+            uses:
+              editor:
+                description: Makes each change on a copy of the model's sources
+                provenance: { source: suggested, by: agent:claude-code }
+              checker:
+                description: Checks the model with the plan made
+                provenance: { source: suggested, by: agent:claude-code }
+              query:
+                description: Finds what each change reaches
+                provenance: { source: suggested, by: agent:claude-code }
+              loader:
+                description: Builds the model with the plan made
+                provenance: { source: suggested, by: agent:claude-code }
 
       analyzers:
         kind: container
         deploy: [release.npm]
         technology: TypeScript (ts.preProcessFile), yaml
-        description: "Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. codeChange reads what a branch's code changed since it left another branch (analyzers and entry points at both ends of the merge base) into the branch's model, for the explorer's Diff. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, find, check, seal, paths, and triage, which starts, lists, checks, and migrates Triage records), applies edits by ID and refuses one that adds errors to the model, and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers and their components, leaving code elements to whoever reads the code) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components, and never makes a component of one file: files beside the directories, and a flat package's files, stay with their container. context says to start a Triage record first when the task reads like a bug. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements."
+        description: "Pluggable analyzers that find the dependencies code actually has (workspace manifests, and TS/JS, Python, and Go imports, resolved through workspaces, Python project roots, and Go modules), a symbol index (exported declarations and named imports per TS/JS, Python, and Go file) for search and context, and schema importers that read data entries' fields from SQL migrations, Prisma, OpenAPI and JSON Schema, and Protobuf. loadRevision builds the model at any ref the way every surface reads it, and check --base checks the merge base the same way. codeChange reads what a branch's code changed since it left another branch (analyzers and entry points at both ends of the merge base) into the branch's model, for the explorer's Diff. Reads archdoc.sum and the files seals fingerprint, and finds the facts a change sealed again. Answers the agent's questions for the CLI and MCP alike (context, show, find, check, seal, paths, triage, which starts, lists, checks, and migrates Triage records, and plan, which starts a plan with its scope, waits for the person to send it, reads it with what they changed first, takes the agent's answer as suggestions it can't use to change the person's items, and tracks its tasks), applies edits by ID and refuses one that adds errors to the model, and init infers a starting model from manifests, compose files, imports, schema files, and the AWS CDK and Terraform (tables, queues, functions, grants, triggers, and environments), layer by layer (containers and their components, leaving code elements to whoever reads the code) inside a system, with uses from imports at the level where the two sides part. Init keeps a container with fewer than five source files lean, with no components, and never makes a component of one file: files beside the directories, and a flat package's files, stay with their container. context says to start a Triage record first when the task reads like a bug. paths finds where flows start (routes, consumers, schedules, commands, pages) and the calls each makes, in TypeScript, Python, and Go; with many, it summarizes them by place and resource, lists one group on request, and can fold a call tree to the hops between elements."
         code: [{ path: packages/analyzers/** }]
         uses:
           source-tree: Reads manifests, imports, and infra files
@@ -229,7 +263,7 @@ elements:
         kind: container
         deploy: [release.npm, workstation.node, ci.actions]
         technology: Node.js, commander
-        description: "`archdoc` command. For agents, the same answers as the MCP tools: init, context, show, find, edit, check, seal, and paths. For people and CI: validate, view, site, map, diff, report, trace list, mcp, and schema. sync, publish, landscape build, and view --landscape are experimental and left out of --help. eval and migrate are hidden maintainer commands."
+        description: "`archdoc` command. For agents, the same answers as the MCP tools: init, context, show, find, edit, check, seal, paths, triage, and plan. For people and CI: validate, view, site, map, diff, report, mcp, and schema. sync, publish, landscape build, and view --landscape are experimental and left out of --help. eval and migrate are hidden maintainer commands."
         code: [{ path: packages/cli/** }]
         uses:
           core:
@@ -256,14 +290,18 @@ elements:
           view-server:
             kind: component
             technology: node:http, fs.watch, server-sent events
-            description: Localhost-only server for the explorer. Sends model files, not a built model, so the browser runs core itself; with them, other repos' vendored models, and which sealed facts to re-check.
+            description: "Localhost-only server for the explorer. Sends model files, not a built model, so the browser runs core itself; with them, other repos' vendored models, which sealed facts to re-check, Triage records, and plans. Takes the person's plan edits from the Plan tab: JSON only, from the explorer's own origin, against the text the page last read, so the person and the agent never write over each other."
             code: [packages/cli/src/server.ts]
+            uses:
+              analyzers:
+                description: Applies the person's plan edits
+                provenance: { source: suggested, by: agent:claude-code }
 
       mcp:
         kind: container
         deploy: [release.npm, workstation.agent]
         technology: Node.js, @modelcontextprotocol/sdk (stdio)
-        description: "MCP tools for agents, one per question: archdoc_context (where to start, from a task, paths, or an error, with known bugs on what it touches), archdoc_show (one thing by ID), archdoc_find (parts of the model by words, place, file, or what they lack, or its outline), archdoc_edit (change the model by ID), archdoc_check (what's wrong or stale, and with a base, what the change does), archdoc_seal (record checked facts), archdoc_paths (where flows start and the calls each makes), archdoc_triage (start a Triage record from a bug, check one, or list them), and archdoc_init (start a model). Only edit, seal, triage, and init write."
+        description: "MCP tools for agents, one per question: archdoc_context (where to start, from a task, paths, or an error, with known bugs on what it touches), archdoc_show (one thing by ID), archdoc_find (parts of the model by words, place, file, or what they lack, or its outline), archdoc_edit (change the model by ID), archdoc_check (what's wrong or stale, and with a base, what the change does), archdoc_seal (record checked facts), archdoc_paths (where flows start and the calls each makes), archdoc_triage (start a Triage record from a bug, check one, or list them), archdoc_plan (design a change with the person: start a plan, wait for their sketch, read it, respond with notes and suggestions, and carry out its tasks), and archdoc_init (start a model). Only edit, seal, triage, plan, and init write."
         code: [{ path: packages/mcp/** }]
         uses:
           core:
@@ -276,7 +314,7 @@ elements:
         kind: container
         deploy: [workstation.browser]
         technology: React 19, Vite, @xyflow/react, elkjs
-        description: Explorer. Two top-level tabs, Explore and Build, each with tabs beneath it. Explore has Overview (journeys as cards, owners, a top-level map), Journeys (on the map by default, or as a sequence with lanes per participant, branches by outcome, one step at a time), Data (entries, tables, lineage), and Infrastructure (one environment at a time, its nodes as boxes inside boxes colored by what they are, what runs on each, and the uses between them). Build has Plan (a placeholder, coming soon), Triage (Triage records by status; each one's report, leads, root cause, and fix, and the bug's journey on the map one step at a time with the cause in red, or as lanes beneath the modeled step, checked in the browser; and a start panel that places a pasted error and hands it to the agent), and Diff (the PR comment's verdict and what changed on the map). The map starts at the C4 context and opens a level at a time (containers, then components), left to right or top down; a box's kind is its shape and its color, with a key, and every use says what it's for on its line. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain.
+        description: "Explorer. Two top-level tabs, Explore and Build, each with tabs beneath it. Explore has Overview (journeys as cards, owners, a top-level map), Journeys (on the map by default, or as a sequence with lanes per participant, branches by outcome, one step at a time), Data (entries, tables, lineage), and Infrastructure (one environment at a time, its nodes as boxes inside boxes colored by what they are, what runs on each, and the uses between them). Build has Plan (the person designs a change on the map with the agent: the model as it would be with the plan made, drawn with the explorer's diff marks; double-click to add an element, drag between boxes for an arrow, click boxes in order for a sequence, each with its intent; notes and replies; the agent's suggestions, dashed, to accept or dismiss; what the plan reaches and what its check found; Send to agent and Mark ready; read-only on a published site), Triage (Triage records by status; each one's report, leads, root cause, and fix, and the bug's journey on the map one step at a time with the cause in red, or as lanes beneath the modeled step, checked in the browser; and a start panel that places a pasted error and hands it to the agent), and Diff (the PR comment's verdict and what changed on the map). The map starts at the C4 context and opens a level at a time (containers, then components), left to right or top down; a box's kind is its shape and its color, with a key, and every use says what it's for on its line. Runs from any path, so a landscape's site is the same explorer, grouped by repo, team, or domain."
         code: [{ path: apps/web/** }]
         uses:
           core:
@@ -285,17 +323,21 @@ elements:
         elements:
           model-loader:
             kind: component
-            description: Fetches the model files and rebuilds the model on every change event; reads it for the tabs (which tabs sit under Explore and Build, journey cards and lanes, the Diff of a branch's code change read into its model with branch 1 defaulting to the working tree and branch 2 to main, the address, with old #traces links opening the Triage tab), with the facts whose sealed code changed; reads Triage records and checks them in the browser, groups them by status, turns one into a journey for the map, and says what each of its steps carried, as the record says or else as the model says the use carries; names actors in plain words when they have no name:.
+            description: "Fetches the model files and rebuilds the model on every change event; reads it for the tabs (which tabs sit under Explore and Build, journey cards and lanes, the Diff of a branch's code change read into its model with branch 1 defaulting to the working tree and branch 2 to main, the address, with old #traces= links opening the Triage tab), with the facts whose sealed code changed; reads plans, checks each in the browser, and makes it on a copy of the model for the map, with what's suggested and what has notes; writes the person's plan edits to archdoc view against the text it last read; reads Triage records and checks them in the browser, groups them by status, turns one into a journey for the map, and says what each of its steps carried, as the record says or else as the model says the use carries; names actors in plain words when they have no name:."
             code: [{ path: apps/web/src/model/** }]
             uses:
               graph: Hands the model to the canvas
+              view-server:
+                description: Writes the person's plan edits, against the text it last read
+                sends: PlanEdit
+                provenance: { source: suggested, by: agent:claude-code }
           graph:
             kind: component
             description: Decides what's visible (never code elements, which stand for their component; the C4 context and containers, with one box for a model without a system; expand, focus, journeys, a landscape's boxes by repo, team, or domain, and an environment's infrastructure), lifts relationships to visible boxes, sizes each use's description, and lays them out with ELK, keeping room for the descriptions; routes a journey step no use joins straight across between its boxes; times a step's message chip to move at one speed whatever the line's length, there and back for a request and its response; and gathers the Data tab's catalog (each store's tables and who reaches it, each entry's stores, producers, and journey steps).
             code: [{ path: apps/web/src/graph/** }]
           ui:
             kind: component
-            description: Tabs (Explore and Build, and the tabs beneath each, with Build's Plan placeholder), the map (cards colored by kind, one box for its key, layout, and descriptions, the level control, and the minimap, a step's message moving along its arrow and a response coming back, and a bug's steps colored by what they did), journey lanes and the step panel, the Triage tab's list, record (a small header with the root cause in brief, so the map keeps the room) and step panel (what happened, the data it carried, observed and expected), and start panel, the Data tab's pages, the side lists (journeys with their whole titles), and the details panel with code links, where a component lists its code elements under Key code.
+            description: Tabs (Explore and Build, and the tabs beneath each, with Build's Plan tab), the map (cards colored by kind, one box for its key, layout, and descriptions, the level control, and the minimap, a step's message moving along its arrow and a response coming back, and a bug's steps colored by what they did), journey lanes and the step panel, the Plan tab's list, header (Send to agent, Mark ready), and panel (the forms that add an element, an arrow, a change, or a sequence, each asking for its intent; notes with replies; suggestions to accept or dismiss; what it reaches), the map in plan mode (double-click adds, dragging from a box draws an arrow, suggested boxes and arrows dashed, a dot on boxes with notes), the Triage tab's list, record (a small header with the root cause in brief, so the map keeps the room) and step panel (what happened, the data it carried, observed and expected), and start panel, the Data tab's pages, the side lists (journeys with their whole titles), and the details panel with code links, where a component lists its code elements under Key code.
             code: [{ path: apps/web/src/components/**, description: Components }, apps/web/src/App.tsx, { path: apps/web/src/styles.css, description: Styles and tokens }]
             uses:
               graph: Renders the laid-out graph
@@ -317,7 +359,7 @@ elements:
         kind: container
         deploy: [release.github, workstation.agent]
         technology: Claude Code plugin and marketplace, Markdown (skill, AGENTS.md), MCP configs
-        description: Teaches coding agents the workflows. A change starts with a context brief and ends with check and seal, with the model edited alongside the code. A bug starts with archdoc_triage, which places the error and starts a Triage record, and ends with the record's root cause (and fix), with evidence on every step and every lead ruled in or out. A repository without a model starts with init. Asked to show the model, the skill starts `archdoc view` in the background and gives the user its URL (a static `archdoc site` on a remote machine), and `/archdoc:view` does the same. Claude Code users install it as a plugin (the skills, and an MCP server pinned to the CLI released with it) from the marketplace at the repository root; other agents get an AGENTS.md snippet, MCP configs, and the skill to copy to `.agents/skills/`, where Codex looks for it.
+        description: "Teaches coding agents the workflows. A change starts with a context brief and ends with check and seal, with the model edited alongside the code. A bug starts with archdoc_triage, which places the error and starts a Triage record, and ends with the record's root cause (and fix), with evidence on every step and every lead ruled in or out. A change to design starts with archdoc_plan: the person sketches it on the explorer's map with the intent of each part, the agent reviews it against the code and answers with notes and suggestions until it's solid, then writes the tasks and carries them out. A repository without a model starts with init. Asked to show the model, the skill starts `archdoc view` in the background and gives the user its URL (a static `archdoc site` on a remote machine), and `/archdoc:view` does the same. Claude Code users install it as a plugin (the skills, and an MCP server pinned to the CLI released with it) from the marketplace at the repository root; other agents get an AGENTS.md snippet, MCP configs, and the skill to copy to `.agents/skills/`, where Codex looks for it."
         code: [{ path: integrations/agent-skills/** }, { path: integrations/claude-plugin/** }, .claude-plugin/**, .claude/**, .agents/**, AGENTS.md, CLAUDE.md, .mcp.json]
         uses:
           mcp: Points agents at the MCP tools
@@ -346,6 +388,9 @@ elements:
           vendor: { entity: Bundle, key: namespace }
           triage: { entity: TriageRecord, key: triage }
           archdoc.sum: { entity: Seal, key: fact }
+          plans:
+            entity: PlanFile
+            key: plan
 
       other-repos:
         kind: external

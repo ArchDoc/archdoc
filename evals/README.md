@@ -190,6 +190,32 @@ above a single container holding everything.
 A real-world run costs more than a fixture run: about $1 to $6 for the agent,
 capped by `maxBudgetUsd` in each `repo.yaml`, and about $0.15 to $0.30 a pass to judge.
 
+## Plan review
+
+`plan/` measures whether an agent reviews a plan the way ArchDoc asks. Each
+scenario in `plan/<name>/` is a fixture and a plan a person sketched and sent
+(`plan.yaml`, status `reviewing`), with flaws seeded in it and named in
+`scenario.yaml`: in `order-confirmation` (ts-monorepo), the browser sends the
+email, the sequence emails before charging, an arrow has no intent, and the
+product cache is removed out of scope; in `settlement-webhooks` (go-service),
+the API calls the webhook though settling happens in the worker, the webhooks
+component queries Postgres instead of going through the store, and a step has
+no intent.
+
+```sh
+pnpm build
+pnpm eval:plan                          # every scenario, once
+node scripts/eval-plan.mjs order-confirmation --runs 3
+```
+
+It runs Claude Code headless with the skill, the MCP server, and the CLI from
+this checkout, tells it the plan was sent, and scores the plan it leaves: a
+flaw is caught when the agent pinned a note to the item or suggested the fix,
+a risk or question on a sound item is a false alarm, and the person's items,
+the code, and the model must be left as they were. The free half (each plan
+loads, and its check finds the missing intent and nothing else) runs in
+`pnpm test` (`packages/analyzers/test/plan-evals.test.ts`).
+
 ## The branch diff
 
 The evals above measure modeling. `diff/` measures the other half of a

@@ -31,6 +31,7 @@
     "eval:agent": "node scripts/eval-agent.mjs",
     "eval:diff": "node scripts/eval-diff.mjs",
     "eval:triage": "node scripts/eval-triage.mjs",
+    "eval:plan": "node scripts/eval-plan.mjs",
     "approve-staged": "node scripts/approve-staged.mjs"
   },
   "devDependencies": {

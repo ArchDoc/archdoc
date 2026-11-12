@@ -8,6 +8,7 @@ export {
   MODEL_DIR,
   type ModelSources,
   readModelSources,
+  readPlanSources,
   readTraceSources,
 } from "./load/fs.js";
 export {

@@ -7,10 +7,12 @@ import {
   type Finding,
   isSnippet,
   type LoadedModel,
+  loadPlans,
   loadTraces,
   type MarkedFinding,
   mergeBase,
   type ObservedDependency,
+  PLAN_DIR,
   resolveGitRef,
   sealedPaths,
   TRIAGE_DIRS,
@@ -152,6 +154,7 @@ async function checkRevision(
     schemas: code === false ? [] : rev.schemas,
     read: (path) => (inRepo.has(path) ? texts.get(path) : undefined),
     traces,
+    plans: { ...(await readPlans(snap)), sources: snap.sources, root: snap.root },
     seals: {
       file: sum.file,
       text: sum.text,
@@ -168,7 +171,7 @@ function readWorkingFile(baseDir: string, path: string): string | undefined {
   }
 }
 
-/** The Triage records in .archdoc/triage/ (and traces/, before 0.8) at the snapshot, parsed. */
+/** The Triage records in .archdoc/triage/ at the snapshot, parsed. */
 async function readTraces(snap: Snapshot) {
   const dirs = TRIAGE_DIRS.map(
     (d) => `${relative(snap.baseDir, join(snap.fedDir, d)).replace(/\\/g, "/")}/`,
@@ -180,4 +183,16 @@ async function readTraces(snap: Snapshot) {
     if (text !== undefined) sources.push({ path, text });
   }
   return loadTraces(sources);
+}
+
+/** The plans in .archdoc/plans/ at the snapshot, parsed. */
+async function readPlans(snap: Snapshot) {
+  const dir = `${relative(snap.baseDir, join(snap.fedDir, PLAN_DIR)).replace(/\\/g, "/")}/`;
+  const sources: { path: string; text: string }[] = [];
+  for (const path of snap.files) {
+    if (!path.startsWith(dir) || !/\.ya?ml$/.test(path)) continue;
+    const text = await snap.read(path);
+    if (text !== undefined) sources.push({ path, text });
+  }
+  return loadPlans(sources);
 }
