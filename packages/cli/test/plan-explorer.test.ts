@@ -241,11 +241,16 @@ describe.skipIf(!executablePath)("the explorer's Plan tab", () => {
     await page.getByRole("button", { name: "Accept" }).first().waitFor({ timeout: 10_000 });
     await page.getByRole("button", { name: "Accept" }).first().click();
     await expect.poll(async () => (await spec())?.changes?.[2]?.status).toBeUndefined();
+    // The page has the accepted plan before it's edited again (on a slow machine the
+    // reload would otherwise clear the answer being typed).
+    await expect.poll(() => page.getByRole("button", { name: "Accept" }).count()).toBe(0);
 
     // Answer the question (it's under c1 and in the notes), and resolve it.
-    const reply = page.getByLabel("Reply to n1").first();
-    await reply.fill("Our usual one");
-    await reply.press("Enter");
+    const form = page.locator("form", { has: page.getByLabel("Reply to n1") }).first();
+    await form.getByLabel("Reply to n1").fill("Our usual one");
+    const send = form.getByRole("button", { name: "Answer" });
+    await expect.poll(() => send.isEnabled()).toBe(true);
+    await send.click();
     await expect
       .poll(async () => (await spec())?.notes?.[0]?.replies?.[0])
       .toMatchObject({
