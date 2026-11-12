@@ -1,0 +1,158 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { parse } from "yaml";
+import {
+  planEditAnswer,
+  planListAnswer,
+  planReadAnswer,
+  planRespondAnswer,
+  planStartAnswer,
+  planTaskAnswer,
+  planWaitAnswer,
+} from "../src/index.js";
+
+let cwd: string;
+const where = () => ({ cwd });
+const file = (id: string) => join(cwd, ".archdoc", "plans", `${id}.yaml`);
+const spec = async (id: string) => parse(await readFile(file(id), "utf8"));
+
+beforeAll(async () => {
+  cwd = await mkdtemp(join(tmpdir(), "archdoc-plan-"));
+  await mkdir(join(cwd, ".archdoc"), { recursive: true });
+  await writeFile(
+    join(cwd, ".archdoc", "archdoc.yaml"),
+    [
+      'archdoc: "2.0"',
+      "namespace: shop",
+      "actors:",
+      "  shopper: { kind: person }",
+      "elements:",
+      "  web: { kind: container, description: The storefront, uses: { api: Places orders } }",
+      "  api: { kind: container, description: Takes orders }",
+      "",
+    ].join("\n"),
+  );
+});
+
+afterAll(() => rm(cwd, { recursive: true, force: true }));
+
+describe("archdoc plan", () => {
+  let id = "";
+
+  it("starts a plan from the idea, as drafting, and says how to go on", async () => {
+    const r = await planStartAnswer(where(), {
+      goal: "Email the shopper a receipt",
+      by: "human:@dana",
+    });
+    expect(r.ok).toBe(true);
+    id = r.id ?? "";
+    expect(id).toBe("email-the-shopper-a-receipt");
+    expect(await spec(id)).toMatchObject({ plan: id, status: "drafting", by: "human:@dana" });
+    expect(r.text).toMatch(/archdoc plan wait/);
+    const again = await planStartAnswer(where(), { goal: "Email the shopper a receipt" });
+    expect(again.id).toBe(`${id}-2`);
+  });
+
+  it("records what the person draws as unread, and returns from wait when they send", async () => {
+    const drawn = await planEditAnswer(where(), {
+      id,
+      by: "human:@dana",
+      track: true,
+      ops: [
+        {
+          op: "put",
+          list: "changes",
+          item: { intent: "Sends mail", add: { id: "mailer", kind: "container" } },
+        },
+      ],
+    });
+    expect(drawn.ok).toBe(true);
+    const waiting = await planWaitAnswer(where(), { id, timeout: 0.1 });
+    expect(waiting.text).toMatch(/Still waiting/);
+    await planEditAnswer(where(), { id, by: "human:@dana", track: true, ops: [{ op: "send" }] });
+    const sent = await planWaitAnswer(where(), { id, timeout: 1 });
+    expect(sent.text).toMatch(/added c1/);
+  });
+
+  it("clears unread when the agent reads it, unless it peeks", async () => {
+    await planEditAnswer(where(), {
+      id,
+      by: "human:@dana",
+      track: true,
+      ops: [{ op: "set", goal: "Email the shopper a receipt once they pay" }],
+    });
+    await planEditAnswer(where(), {
+      id,
+      by: "human:@dana",
+      track: true,
+      ops: [{ op: "put", list: "notes", item: { text: "Plain text is fine" } }],
+    });
+    const peek = await planReadAnswer(where(), { id, peek: true });
+    expect(peek.text).toMatch(/since your last read \(1\)/);
+    expect((await spec(id)).unread).toHaveLength(1);
+    await planReadAnswer(where(), { id });
+    expect((await spec(id)).unread).toBeUndefined();
+  });
+
+  it("makes the agent's changes suggestions, and refuses edits to the person's", async () => {
+    const refused = await planRespondAnswer(where(), {
+      id,
+      by: "agent:claude",
+      ops: [
+        { op: "put", list: "changes", item: { id: "c1", intent: "x", add: { id: "mail" } } },
+        { op: "accept", id: "c1" },
+      ],
+    });
+    expect(refused.ok).toBe(false);
+    expect(refused.text).toMatch(/that's the person's/);
+    expect(refused.text).toMatch(/only the person accepts/);
+
+    const ok = await planRespondAnswer(where(), {
+      id,
+      by: "agent:claude",
+      ops: [
+        {
+          op: "put",
+          list: "changes",
+          item: { intent: "The API sends it", use: { from: "api", to: "mailer" } },
+        },
+        { op: "put", list: "notes", item: { on: "c1", kind: "question", text: "SMTP?" } },
+      ],
+    });
+    expect(ok.ok).toBe(true);
+    const s = await spec(id);
+    expect(s.changes[1]).toMatchObject({ id: "c2", status: "suggested", by: "agent:claude" });
+    expect(s.notes[1]).toMatchObject({ id: "n2", kind: "question", by: "agent:claude" });
+    expect(s.unread).toBeUndefined();
+  });
+
+  it("lists plans with what's open", async () => {
+    const r = await planListAnswer(where(), {});
+    expect(r.text).toMatch(/1 open question/);
+    expect(r.text).toMatch(/1 suggestion/);
+  });
+
+  it("sets the plan executing, then done, as tasks land", async () => {
+    await planEditAnswer(where(), {
+      id,
+      by: "human:@dana",
+      track: true,
+      ops: [
+        { op: "accept", id: "c2" },
+        { op: "resolve", note: "n2" },
+        { op: "set", status: "ready" },
+      ],
+    });
+    await planRespondAnswer(where(), {
+      id,
+      by: "agent:claude",
+      ops: [{ op: "put", list: "tasks", item: { title: "Add the mailer", from: ["c1", "c2"] } }],
+    });
+    await planTaskAnswer(where(), { id, task: "t1", status: "doing" });
+    expect((await spec(id)).status).toBe("executing");
+    await planTaskAnswer(where(), { id, task: "t1", status: "done" });
+    expect((await spec(id)).status).toBe("done");
+  });
+});

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PLAN_DIR } from "./plan.js";
 import {
   CodeRefSchema,
   IdSchema,
@@ -13,11 +14,17 @@ import {
  */
 export const TRIAGE_DIR = "triage";
 
-/** Where traces lived before 0.8. Still read, as Triage records, until 0.9. */
+/**
+ * Where traces lived before 0.8. Not read since 0.9: `archdoc triage migrate`
+ * moves them to Triage records, and the model never loads them.
+ */
 export const TRACES_DIR = "traces";
 
-/** The folders read as Triage records, newest first. */
-export const TRIAGE_DIRS = [TRIAGE_DIR, TRACES_DIR] as const;
+/** The folders read as Triage records. */
+export const TRIAGE_DIRS = [TRIAGE_DIR] as const;
+
+/** Folders in the model directory that hold records about the model, never the model itself. */
+export const RECORD_DIRS = [TRIAGE_DIR, TRACES_DIR, PLAN_DIR] as const;
 
 /** Where a bug stands. */
 export const TriageStatusSchema = z

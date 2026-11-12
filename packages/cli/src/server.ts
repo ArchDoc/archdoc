@@ -1,6 +1,6 @@
 import { existsSync, type FSWatcher, watch } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { createServer, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,8 @@ import {
   codeChange,
   contextOf,
   importSchemas,
+  planEditAnswer,
+  planStartAnswer,
   type Snapshot,
   sealReport,
   snapshot,
@@ -16,9 +18,13 @@ import {
   buildModel,
   isSnippet,
   listBranches,
+  loadPlans,
+  PLAN_DIR,
+  type PlanEditOp,
   type RepoInfo,
   readFederationInput,
   readModelSources,
+  readPlanSources,
   repoInfo,
   resolveGitRef,
   resolveSnippets,
@@ -96,7 +102,11 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
             error: `No ArchDoc model found at ${options.target}. Expected .archdoc/archdoc.yaml. Run archdoc init to start one.`,
           });
         }
-        return json(res, 200, { ...body, watch: watching });
+        // The view server can write plans; a published site can't.
+        return json(res, 200, { ...body, watch: watching, editable: true });
+      }
+      if (url.pathname === "/api/plans" || url.pathname.startsWith("/api/plans/")) {
+        return await planRoute(req, res, url, { target: options.target, cwd });
       }
       if (url.pathname === "/api/refs") {
         const { current, branches } = await listBranches(options.cwd);
@@ -191,6 +201,79 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       await new Promise<void>((r) => server.close(() => r()));
     },
   };
+}
+
+/** The most a plan edit's body can be. */
+const MAX_BODY = 1024 * 1024;
+
+/**
+ * Writes plans for the explorer's Plan tab: POST /api/plans starts one, POST
+ * /api/plans/<id> applies edit ops to one. Only JSON from this page (a form
+ * on another site can't send it), and only against the text the page last
+ * saw, so the person and the agent never write over each other.
+ */
+async function planRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  where: { target: string; cwd: string },
+) {
+  if (req.method !== "POST") return json(res, 405, { error: "Plans are changed with POST." });
+  const origin = req.headers.origin;
+  if (origin && new URL(origin).host !== req.headers.host)
+    return json(res, 403, { error: "Plans can only be changed from the explorer itself." });
+  if (!String(req.headers["content-type"] ?? "").startsWith("application/json"))
+    return json(res, 415, { error: "Send JSON." });
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+  } catch (err) {
+    return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+  }
+  const by = typeof body.by === "string" && body.by ? body.by : "human";
+  const w = { model: where.target, cwd: where.cwd };
+  if (url.pathname === "/api/plans") {
+    const goal = typeof body.goal === "string" ? body.goal : "";
+    const title = typeof body.title === "string" ? body.title : undefined;
+    const r = await planStartAnswer(w, { goal: goal || title || "", title, by });
+    if (!r.ok) return json(res, 400, { error: r.text });
+    return json(res, 200, { id: r.id, text: r.text });
+  }
+  const id = decodeURIComponent(url.pathname.slice("/api/plans/".length));
+  const ops = Array.isArray(body.ops) ? (body.ops as PlanEditOp[]) : undefined;
+  if (!ops?.length) return json(res, 400, { error: "Give the ops." });
+  if (typeof body.base === "string") {
+    const sources = await readPlanSources(where.target, { cwd: where.cwd });
+    const file = loadPlans(sources).plans.find((p) => p.id === id)?.file;
+    const now = sources.find((p) => p.path === file);
+    if (now && now.text !== body.base)
+      return json(res, 409, {
+        error:
+          "The plan changed since this page read it (the agent may have answered). Reload and try again.",
+        text: now.text,
+      });
+  }
+  const r = await planEditAnswer(w, { id, ops, by, track: true });
+  if (!r.ok) return json(res, 400, { error: r.text });
+  return json(res, 200, { ids: r.ids ?? [], text: r.text });
+}
+
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolveBody, reject) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > MAX_BODY) {
+        reject(new Error("The request is too big."));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => resolveBody(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
 }
 
 async function serveStatic(root: string, pathname: string, res: ServerResponse) {
@@ -348,13 +431,15 @@ async function payloadOf(
     },
     // Triage records beside the model, for the explorer's Triage tab. Never part of the model.
     traces: await readTraces(snap),
+    // Plans beside the model, for the explorer's Plan tab. Never part of the model.
+    plans: await readPlans(snap),
     // What data entries' schema sources say (types, values, foreign keys), as check reads them.
     schemas: (await importSchemas(contextOf(snap), model)).filter((s) => !s.error),
     repo,
   };
 }
 
-/** The Triage records in the model directory's triage/ (and traces/, before 0.8), as the snapshot has them. */
+/** The Triage records in the model directory's triage/, as the snapshot has them. */
 async function readTraces(snap: Snapshot): Promise<{ path: string; text: string }[]> {
   const dirs = TRIAGE_DIRS.map((d) =>
     relative(snap.baseDir, join(snap.source, d)).replace(/\\/g, "/"),
@@ -363,6 +448,18 @@ async function readTraces(snap: Snapshot): Promise<{ path: string; text: string 
   for (const path of snap.files.filter(
     (f) => dirs.some((d) => f.startsWith(`${d}/`)) && /\.ya?ml$/.test(f),
   )) {
+    const text = await snap.read(path);
+    if (text !== undefined) out.push({ path, text });
+  }
+  return out;
+}
+
+/** The plans in the model directory's plans/, as the snapshot has them. */
+async function readPlans(snap: Snapshot): Promise<{ path: string; text: string }[]> {
+  const dir = relative(snap.baseDir, join(snap.source, PLAN_DIR)).replace(/\\/g, "/");
+  if (dir.startsWith("..")) return [];
+  const out: { path: string; text: string }[] = [];
+  for (const path of snap.files.filter((f) => f.startsWith(`${dir}/`) && /\.ya?ml$/.test(f))) {
     const text = await snap.read(path);
     if (text !== undefined) out.push({ path, text });
   }

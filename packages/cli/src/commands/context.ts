@@ -14,7 +14,7 @@ import {
   resolveGitRef,
 } from "@archdoc/core";
 import type { Io } from "../io.js";
-import { readStdin } from "./trace.js";
+import { readStdin } from "./stdin.js";
 
 export interface ContextOptions {
   model?: string;

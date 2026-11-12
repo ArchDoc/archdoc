@@ -104,6 +104,25 @@ export interface CanvasProps {
   level?: { current?: Level | undefined; onLevel: (level: Level) => void } | undefined;
   /** Facts whose code changed since they were sealed, marked on their boxes. */
   recheck?: readonly { element?: string | undefined }[] | undefined;
+  /**
+   * The Plan tab draws on the map: double-click to add an element (inside
+   * an open box, or at the top), drag from one box's edge to another for an
+   * arrow. Boxes and arrows the agent suggested are drawn dashed.
+   */
+  edit?: PlanEditing | undefined;
+}
+
+export interface PlanEditing {
+  /** Add an element inside this open box (its node ID), or at the top. */
+  onAdd: (parent: string | undefined) => void;
+  /** An arrow drawn from one box to another, by node ID. */
+  onConnect: (source: string, target: string) => void;
+  /** Node IDs the agent suggested and the person hasn't accepted. */
+  suggested?: ReadonlySet<string> | undefined;
+  /** Arrows the agent suggested, as "source|target" node IDs. */
+  suggestedEdges?: ReadonlySet<string> | undefined;
+  /** Node IDs with notes on them, and how many. */
+  notes?: ReadonlyMap<string, number> | undefined;
 }
 
 export function Canvas(props: CanvasProps) {
@@ -885,11 +904,38 @@ export function Canvas(props: CanvasProps) {
     });
   }, [steps, at, flow, written]);
 
+  const edit = props.edit;
+  const shownNodes = useMemo(
+    () =>
+      edit
+        ? nodes.map((n) => {
+            const classes = [
+              n.className,
+              edit.suggested?.has(n.id) ? "is-suggested" : undefined,
+              edit.notes?.get(n.id) ? "has-plan-notes" : undefined,
+            ].filter(Boolean);
+            return classes.length ? { ...n, className: classes.join(" ") } : n;
+          })
+        : nodes,
+    [nodes, edit],
+  );
+  const shownEdges = useMemo(
+    () =>
+      edit?.suggestedEdges?.size
+        ? edges.map((e) =>
+            edit.suggestedEdges?.has(`${e.source}|${e.target}`)
+              ? { ...e, className: [e.className, "is-suggested"].filter(Boolean).join(" ") }
+              : e,
+          )
+        : edges,
+    [edges, edit],
+  );
+
   return (
     <ReactFlow
       ref={pane_}
-      nodes={nodes}
-      edges={edges}
+      nodes={shownNodes}
+      edges={shownEdges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       onNodeClick={(_, node) => {
@@ -903,6 +949,9 @@ export function Canvas(props: CanvasProps) {
         if (g?.id) props.onSelect(g.by === "team" ? `actor:${g.id}` : `domain:${g.id}`);
       }}
       onNodeDoubleClick={(_, node) => {
+        // Planning: double-clicking inside an open box adds an element there.
+        if (edit && node.id.startsWith("element:") && view.expanded.has(node.id.slice(8)))
+          return edit.onAdd(node.id.slice(8));
         // The box a model without a system is drawn as opens to its containers.
         if (node.id.startsWith("system:")) return props.level?.onLevel("containers");
         if (!node.id.startsWith("element:")) return;
@@ -917,7 +966,22 @@ export function Canvas(props: CanvasProps) {
       onEdgeMouseLeave={() => setHoverEdge(undefined)}
       onNodeMouseEnter={(_, node) => setHoverNode(node.id)}
       onNodeMouseLeave={() => setHoverNode(undefined)}
-      nodesConnectable={false}
+      nodesConnectable={!!edit}
+      onConnect={
+        edit ? (c) => c.source !== c.target && edit.onConnect(c.source, c.target) : undefined
+      }
+      zoomOnDoubleClick={!edit}
+      onDoubleClick={
+        edit
+          ? (e) => {
+              // Double-click on the empty map: an element at the top.
+              const on = (e.target as HTMLElement).closest(
+                ".react-flow__node, .react-flow__edge, .react-flow__panel, .react-flow__controls, .react-flow__minimap",
+              );
+              if (!on) edit.onAdd(undefined);
+            }
+          : undefined
+      }
       elementsSelectable={false}
       colorMode="system"
       minZoom={0.1}

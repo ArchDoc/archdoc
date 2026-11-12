@@ -3277,6 +3277,656 @@
       },
       "required": ["trace", "title", "symptom"],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "archdoc": {
+          "type": "string",
+          "pattern": "^2(\\.\\d+)?$"
+        },
+        "plan": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+          "description": "The plan's ID, usually its file name"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The change in one line"
+        },
+        "status": {
+          "description": "Where the plan stands. Defaults to drafting.",
+          "type": "string",
+          "enum": ["drafting", "reviewing", "ready", "executing", "done", "abandoned"]
+        },
+        "goal": {
+          "description": "The idea, as the person put it",
+          "type": "string"
+        },
+        "by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Who wrote it: human:@handle, or agent:<name> such as agent:claude-code"
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "elements": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "journeys": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "actors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "description": "The parts of the model the goal touches, as the plan started"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+                "description": "The item's ID in this plan, such as c1"
+              },
+              "intent": {
+                "type": "string",
+                "description": "Why: what the person means this to do. Every change and step needs one."
+              },
+              "by": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Who wrote it: human:@handle, or agent:<name> such as agent:claude-code"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["proposed", "suggested", "dismissed"],
+                "description": "proposed: part of the plan (the default). suggested: proposed by the agent, not yet accepted. dismissed: a suggestion the person turned down, kept so it isn't suggested again."
+              },
+              "at": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false,
+                "description": "Where it sits on the map"
+              },
+              "add": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The full ID it gets: an element inside its parent (web.pdf-export), an actor, a data entry"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["element", "actor", "journey", "data", "environment", "node"]
+                  }
+                },
+                "required": ["id"],
+                "additionalProperties": {},
+                "description": "Adds one thing: its ID, and its fields as archdoc edit would write them"
+              },
+              "set": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["element", "actor", "journey", "data", "environment", "node"]
+                  }
+                },
+                "required": ["id"],
+                "additionalProperties": {},
+                "description": "Changes fields of one thing: its ID, and the fields to merge (null removes one)"
+              },
+              "remove": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": ["element", "actor", "journey", "data", "environment", "node"]
+                      }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "Removes one thing (an element with its children and the uses that point at it)"
+              },
+              "rename": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "to": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The new ID: without a dot, renamed in place; dotted, moved"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["element", "actor", "journey", "data", "environment", "node"]
+                  }
+                },
+                "required": ["id", "to"],
+                "additionalProperties": false,
+                "description": "Renames or moves one thing"
+              },
+              "use": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "to": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "remove": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["from", "to"],
+                "additionalProperties": {},
+                "description": "Adds (or, with remove: true, removes) an arrow: from uses to, with its fields"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false,
+            "description": "One change to the model, with the intent behind it"
+          }
+        },
+        "sequences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+                "description": "The item's ID in this plan, such as c1"
+              },
+              "intent": {
+                "type": "string",
+                "description": "Why: what the person means this to do. Every change and step needs one."
+              },
+              "by": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Who wrote it: human:@handle, or agent:<name> such as agent:claude-code"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["proposed", "suggested", "dismissed"],
+                "description": "proposed: part of the plan (the default). suggested: proposed by the agent, not yet accepted. dismissed: a suggestion the person turned down, kept so it isn't suggested again."
+              },
+              "at": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false,
+                "description": "Where it sits on the map"
+              },
+              "journey": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+                "description": "The journey it becomes: a new ID, or an existing journey whose steps it replaces"
+              },
+              "name": {
+                "type": "string"
+              },
+              "actor": {
+                "description": "Whose goal it serves. Required for a new journey.",
+                "type": "string",
+                "minLength": 1
+              },
+              "goal": {
+                "description": "What they're doing. Required for a new journey.",
+                "type": "string"
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "to": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "action": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "description": "Code entry point for this step",
+                      "type": "string"
+                    },
+                    "sends": {
+                      "description": "Data entries this step sends, such as RefundRequest",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    },
+                    "returns": {
+                      "description": "Data entries the callee answers with, such as RefundDecision: the step is a request and its response",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    },
+                    "creates": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": ["string", "number", "boolean", "null"]
+                            }
+                          }
+                        }
+                      ],
+                      "description": "Records this step creates, such as Refund or { Refund: { status: pending } }"
+                    },
+                    "changes": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "pattern": "->"
+                      },
+                      "description": "Fields this step changes, such as Charge.status: captured -> refunded"
+                    },
+                    "provenance": {
+                      "type": "object",
+                      "properties": {
+                        "source": {
+                          "type": "string",
+                          "enum": ["declared", "inferred", "suggested"],
+                          "description": "declared: written by a person (the default). inferred: produced by an analyzer. suggested: proposed by an AI agent and not yet accepted."
+                        },
+                        "by": {
+                          "description": "Who produced it: analyzer:ts-imports, agent:claude-code, human:@handle",
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["source"],
+                      "additionalProperties": false,
+                      "description": "Where a fact came from. Absent means declared by a person."
+                    },
+                    "decides": {
+                      "description": "Experimental (docs/experimental.md): a logic block that decides where this step goes, such as payments.refund-approval",
+                      "type": "string"
+                    },
+                    "branches": {
+                      "description": "Experimental (docs/experimental.md): what happens for each outcome of `decides`",
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "description": {
+                            "type": "string"
+                          },
+                          "creates": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "type": ["string", "number", "boolean", "null"]
+                                  }
+                                }
+                              }
+                            ],
+                            "description": "Records this step creates, such as Refund or { Refund: { status: pending } }"
+                          },
+                          "changes": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string",
+                              "pattern": "->"
+                            },
+                            "description": "Fields this step changes, such as Charge.status: captured -> refunded"
+                          },
+                          "next": {
+                            "description": "Another journey this outcome continues as",
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "when": {
+                      "description": "Run this step only when an earlier decision had this outcome",
+                      "type": "string"
+                    },
+                    "via": {
+                      "description": "A mapping that produces the record this step writes, such as refund-to-ledger",
+                      "type": "string"
+                    },
+                    "intent": {
+                      "type": "string",
+                      "description": "Why: what the person means this to do. Every change and step needs one."
+                    },
+                    "by": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Who wrote it: human:@handle, or agent:<name> such as agent:claude-code"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["proposed", "suggested", "dismissed"],
+                      "description": "proposed: part of the plan (the default). suggested: proposed by the agent, not yet accepted. dismissed: a suggestion the person turned down, kept so it isn't suggested again."
+                    }
+                  },
+                  "required": ["from", "to"],
+                  "additionalProperties": false
+                },
+                "description": "The hops, in order, each with its intent"
+              }
+            },
+            "required": ["id", "journey", "steps"],
+            "additionalProperties": false,
+            "description": "A sequence of interactions the plan adds or changes"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              },
+              "on": {
+                "description": "What it's about: a change or sequence ID (c1), a step (s1#2), or a model ID (web.journey-view). Omit for the canvas.",
+                "type": "string"
+              },
+              "at": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false,
+                "description": "Where it sits on the map"
+              },
+              "by": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Who wrote it: human:@handle, or agent:<name> such as agent:claude-code"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["note", "insight", "question", "risk", "answer"],
+                "description": "note: a remark (the default). insight: something the agent found. question: needs an answer before the plan is ready. risk: what could go wrong. answer: a reply that settles a question."
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "replies": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "by": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Who wrote it: human:@handle, or agent:<name> such as agent:claude-code"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["note", "insight", "question", "risk", "answer"],
+                      "description": "note: a remark (the default). insight: something the agent found. question: needs an answer before the plan is ready. risk: what could go wrong. answer: a reply that settles a question."
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["text"],
+                  "additionalProperties": false
+                }
+              },
+              "resolved": {
+                "type": "boolean"
+              }
+            },
+            "required": ["id", "text"],
+            "additionalProperties": false,
+            "description": "A note, question, or insight, and its replies"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "from": {
+                "description": "The changes and sequences it carries out, by ID",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "files": {
+                "description": "The files it changes or adds",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "tests": {
+                "description": "The tests that show it works",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "after": {
+                "description": "Tasks that come first",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": ["todo", "doing", "done", "skipped"]
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "title"],
+            "additionalProperties": false,
+            "description": "One step of carrying out the plan"
+          }
+        },
+        "unread": {
+          "description": "What the person changed since the agent last read the plan; reading clears it",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The item: a change, sequence, step (s1#2), or note"
+              },
+              "what": {
+                "type": "string",
+                "enum": ["added", "edited", "removed", "accepted", "dismissed", "replied"]
+              }
+            },
+            "required": ["id", "what"],
+            "additionalProperties": false
+          }
+        },
+        "sent": {
+          "description": "How many times the person has sent the plan to the agent",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["plan", "title"],
+      "additionalProperties": false
     }
   ],
   "$defs": {

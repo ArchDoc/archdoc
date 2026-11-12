@@ -1,0 +1,10 @@
+# The first stage: the person has an idea and asks to plan it. The agent
+# should start a plan (not write a markdown plan or the code), with the idea
+# as its goal and the parts of the model it touches as its scope, open the
+# explorer's Plan tab, and leave the sketching to the person.
+stage: start
+fixture: ts-monorepo
+idea: Email the shopper an order confirmation after checkout
+expected:
+  # The scope should reach at least one of these.
+  scope: [api.orders, shop.api.orders, checkout]

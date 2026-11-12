@@ -5,7 +5,15 @@ import {
   editAnswer,
   findAnswer,
   initAnswer,
+  type PlanListInput,
+  type PlanTaskInput,
   pathsAnswer,
+  planListAnswer,
+  planReadAnswer,
+  planRespondAnswer,
+  planStartAnswer,
+  planTaskAnswer,
+  planWaitAnswer,
   sealAnswer,
   showAnswer,
   type TriageListInput,
@@ -14,7 +22,7 @@ import {
   triageStartAnswer,
   type Where,
 } from "@archdoc/analyzers";
-import { type EditOp, FIND_GAPS } from "@archdoc/core";
+import { type EditOp, FIND_GAPS, type PlanEditOp } from "@archdoc/core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -32,6 +40,7 @@ export const INSTRUCTIONS = `This repository's architecture is modeled in .archd
 - archdoc_paths: where flows start (routes, consumers, jobs, commands) and the calls each makes, to trace a flow.
 - archdoc_show: one thing by ID (element, actor, journey, data entry, Entry.field, Triage record, or a fact like element:<id>).
 - archdoc_triage: handed a bug, even to fix? Start here, before the code; its answer says how to fill the record in. Keep it through the fix.
+- archdoc_plan: asked to plan or design a change? Start a plan; the person sketches it on the explorer's map, you review and suggest, then carry out its tasks.
 - archdoc_find, archdoc_edit: find parts of the model and change them by ID, many ops a call, instead of reading and editing its YAML. Pass by: agent:<name>.
 - archdoc_check: after you edit, with base "main". It lists what your change broke or made stale, each with its fix, and facts whose code changed.
 - archdoc_seal: once you've checked each changed fact against its code, seal it. Never seal a fact you haven't read.`;
@@ -268,6 +277,82 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
           id: input.id,
         }),
       );
+    },
+  );
+
+  server.registerTool(
+    "archdoc_plan",
+    {
+      title: "Plan a change with the person",
+      description:
+        "Asked to plan or design a change? start: the idea; the person sketches it in the explorer. wait: until they send it. read: what changed, each item's intent, its reach, the check. respond: notes, replies, suggestions, tasks (never edits to the person's items). task: a task's status.",
+      inputSchema: {
+        action: z.enum(["start", "wait", "read", "respond", "task", "list"]),
+        id: z.string().optional(),
+        goal: z.string().optional().describe("start: the idea, as the person put it"),
+        title: z.string().optional(),
+        paths: z.array(z.string()).optional().describe("start: files it will likely touch"),
+        ops: z
+          .array(z.record(z.string(), z.unknown()))
+          .optional()
+          .describe(
+            'respond: {"op":"put","list":"notes"|"changes"|"sequences"|"tasks","item":{…}}, {"op":"reply","note":"n1","text":"…"}, {"op":"step","sequence":"s1","step":{…}}, {"op":"set","status":"ready"}',
+          ),
+        by: z.string().optional().describe("agent:<name>"),
+        task: z.string().optional(),
+        status: z.string().optional().describe("task: todo, doing, done, skipped"),
+        timeout: z.number().optional().describe("wait: seconds"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (input) => {
+      const need = (what: string) =>
+        respond(Promise.resolve({ ok: false, text: `${input.action} needs ${what}.` }));
+      switch (input.action) {
+        case "start":
+          if (!input.goal) return need("goal");
+          return respond(
+            planStartAnswer(where, {
+              goal: input.goal,
+              title: input.title,
+              id: input.id,
+              paths: input.paths,
+            }),
+          );
+        case "list":
+          return respond(
+            planListAnswer(where, { status: input.status as PlanListInput["status"] }),
+          );
+        case "read":
+          if (!input.id) return need("id");
+          return respond(planReadAnswer(where, { id: input.id }));
+        case "wait":
+          if (!input.id) return need("id");
+          return respond(planWaitAnswer(where, { id: input.id, timeout: input.timeout }));
+        case "respond":
+          if (!input.id || !input.ops?.length) return need("id and ops");
+          return respond(
+            planRespondAnswer(where, {
+              id: input.id,
+              ops: input.ops as unknown as PlanEditOp[],
+              by: input.by,
+            }),
+          );
+        case "task":
+          if (!input.id || !input.task) return need("id and task");
+          return respond(
+            planTaskAnswer(where, {
+              id: input.id,
+              task: input.task,
+              status: (input.status ?? "done") as PlanTaskInput["status"],
+            }),
+          );
+      }
     },
   );
 

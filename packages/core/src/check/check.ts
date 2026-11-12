@@ -4,8 +4,11 @@ import { findSnippet, isSnippet, snippetLabel } from "../codemap/snippet.js";
 import { evaluateDataRules } from "../data/rules.js";
 import { type ImportedSchema, schemaDrift } from "../data/schemas.js";
 import type { Diagnostic, Severity, SourceLocation } from "../diagnostics.js";
+import type { ModelSource } from "../load/build.js";
 import type { ElementNode, Model } from "../model.js";
 import { nodeKey } from "../model.js";
+import { checkPlan } from "../plan/check.js";
+import type { Plan } from "../plan/plan.js";
 import type { CodeIndex } from "../query/code-index.js";
 import { fingerprints, parseSum, sealFindings, sealStatuses } from "../seal/seal.js";
 import { checkTrace } from "../trace/check.js";
@@ -56,6 +59,18 @@ export interface CheckOptions {
   seals?: { file: string; text: string | undefined; index?: CodeIndex | undefined } | undefined;
   /** Traces in .archdoc/traces/, checked against the model and the code. */
   traces?: { traces: readonly Trace[]; diagnostics: readonly Diagnostic[] } | undefined;
+  /**
+   * Plans in .archdoc/plans/, checked against the model, with the model's
+   * sources (and root file) to make each plan on a copy of.
+   */
+  plans?:
+    | {
+        plans: readonly Plan[];
+        diagnostics: readonly Diagnostic[];
+        sources: readonly ModelSource[];
+        root?: string | undefined;
+      }
+    | undefined;
 }
 
 export interface CheckResult {
@@ -300,6 +315,35 @@ export function check(model: Model, options: CheckOptions = {}): CheckResult {
       for (const f of checked.findings) {
         if (f.severity === "info") continue;
         findings.push(traceFinding(f, f.step ? `${f.trace} step ${f.step}` : f.trace));
+      }
+    }
+  }
+
+  // Plans: proposals on top of the model, checked so what's still open shows up.
+  if (options.plans) {
+    for (const d of options.plans.diagnostics) {
+      if (d.severity === "info") continue;
+      findings.push({
+        severity: d.severity,
+        code: d.code,
+        message: d.message,
+        evidence: [],
+        files: d.location ? [d.location.file] : [],
+        location: d.location,
+      });
+    }
+    for (const p of options.plans.plans) {
+      const checked = checkPlan(model, options.plans.sources, p, { root: options.plans.root });
+      for (const f of checked.findings) {
+        if (f.severity === "info") continue;
+        findings.push({
+          severity: f.severity,
+          code: f.code,
+          message: f.message,
+          evidence: [f.item ? `${f.plan} ${f.item}` : f.plan],
+          files: [p.file],
+          location: f.location,
+        });
       }
     }
   }

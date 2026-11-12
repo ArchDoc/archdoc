@@ -50,7 +50,7 @@ seals:
     by: agent:claude-code
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-6941fcd980f72625
+    hash: fnv-fe4752897a24171d
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -139,6 +139,20 @@ seals:
         - matchEntries
         - placeEntries
         - resourceOf
+      packages/analyzers/src/plan.ts:
+        - PlanListInput
+        - PlanReadInput
+        - PlanRespondInput
+        - PlanStartInput
+        - PlanTaskInput
+        - PlanWaitInput
+        - planEditAnswer
+        - planListAnswer
+        - planReadAnswer
+        - planRespondAnswer
+        - planStartAnswer
+        - planTaskAnswer
+        - planWaitAnswer
       packages/analyzers/src/python.ts:
         - indexPythonCode
         - indexPythonSource
@@ -226,7 +240,7 @@ seals:
       packages/cli/tsconfig.json: []
   element:toolchain.cli.commands:
     kind: structure
-    hash: fnv-9b7fc6d2fe3fb9a2
+    hash: fnv-05a173c1e4671eb3
     files:
       packages/cli/src/commands/check.ts:
         - CheckOptions
@@ -268,6 +282,14 @@ seals:
       packages/cli/src/commands/paths.ts:
         - PathsOptions
         - paths
+      packages/cli/src/commands/plan.ts:
+        - PlanStartOptions
+        - planList
+        - planRead
+        - planRespond
+        - planStart
+        - planTask
+        - planWait
       packages/cli/src/commands/report.ts:
         - ReportOptions
         - report
@@ -281,9 +303,8 @@ seals:
       packages/cli/src/commands/site.ts:
         - SiteOptions
         - site
-      packages/cli/src/commands/trace.ts:
+      packages/cli/src/commands/stdin.ts:
         - readStdin
-        - traceList
       packages/cli/src/commands/triage.ts:
         - TriageStartOptions
         - triageList
@@ -607,7 +628,7 @@ seals:
         - readFederationInput
   element:toolchain.core.loader:
     kind: structure
-    hash: fnv-48a9f251c8479245
+    hash: fnv-79b72f3a5fc8e5f6
     files:
       packages/core/src/load/build.ts:
         - BuildOptions
@@ -627,6 +648,7 @@ seals:
         - ModelSources
         - loadModel
         - readModelSources
+        - readPlanSources
         - readTraceSources
       packages/core/src/load/git.ts:
         - SourcesAtRef
@@ -649,6 +671,72 @@ seals:
         - ParsedFile
         - YamlPath
         - parseYaml
+    by: agent:claude-code
+  element:toolchain.core.plans:
+    kind: structure
+    hash: fnv-c732d18d505e6339
+    files:
+      packages/core/src/plan/check.ts:
+        - AppliedPlan
+        - ApplyPlanOptions
+        - CheckPlanOptions
+        - PlanCheck
+        - PlanFinding
+        - PlanJourney
+        - PlanOpen
+        - PlanReach
+        - applyPlan
+        - checkPlan
+        - itemLocation
+        - withFiles
+      packages/core/src/plan/edit.ts:
+        - EditPlanOptions
+        - EditPlanResult
+        - PlanEditOp
+        - PlanList
+        - editPlan
+      packages/core/src/plan/plan.ts:
+        - OPEN_PLAN_STATUSES
+        - ParsedPlans
+        - Plan
+        - PlanChangeKind
+        - PlanSpec
+        - changeKind
+        - changeOp
+        - changeTarget
+        - describeChange
+        - isAgreed
+        - journeySteps
+        - loadPlans
+        - parsePlan
+        - planId
+        - planItemIds
+        - planStatusOf
+        - sequenceOp
+    by: agent:claude-code
+  element:toolchain.core.plans#packages/core/src/plan/check.ts:applyPlan:
+    kind: content
+    hash: fnv-4fd7bad96b35beb9
+    refs:
+      packages/core/src/plan/check.ts (applyPlan):
+        hash: fnv-b09bee1c4c27ede6
+        lines: 6
+    by: agent:claude-code
+  element:toolchain.core.plans#packages/core/src/plan/check.ts:checkPlan:
+    kind: content
+    hash: fnv-a1cdb27df19e1df9
+    refs:
+      packages/core/src/plan/check.ts (checkPlan):
+        hash: fnv-589ad40785f09d9d
+        lines: 6
+    by: agent:claude-code
+  element:toolchain.core.plans#packages/core/src/plan/edit.ts:editPlan:
+    kind: content
+    hash: fnv-ba074e95ef90a423
+    refs:
+      packages/core/src/plan/edit.ts (editPlan):
+        hash: fnv-7d805df5f56e97a1
+        lines: 6
     by: agent:claude-code
   element:toolchain.core.query:
     kind: structure
@@ -747,7 +835,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.report:
     kind: structure
-    hash: fnv-be52d1baabf9eb3a
+    hash: fnv-b1ba433c6b8e7f0e
     files:
       packages/core/src/report/check-answer.ts:
         - CheckAnswerOptions
@@ -774,6 +862,10 @@ seals:
         - RemoteUse
         - changeDiagram
         - journeyDiagram
+      packages/core/src/report/plan-report.ts:
+        - formatPlan
+        - formatPlanList
+        - nextStep
       packages/core/src/report/pr-report.ts:
         - ASKED_CONCERNS
         - Ask
@@ -981,7 +1073,7 @@ seals:
     files: {}
   element:toolchain.spec:
     kind: structure
-    hash: fnv-fec7c4137b120523
+    hash: fnv-d30bac6e47ae338a
     files:
       packages/spec/package.json: []
       packages/spec/schema/archdoc.v2.schema.json: []
@@ -999,6 +1091,34 @@ seals:
         - importRange
         - importSource
       packages/spec/src/index.ts: []
+      packages/spec/src/plan.ts:
+        - PLAN_DIR
+        - PlanAuthorSchema
+        - PlanChangeSchema
+        - PlanChangeSpec
+        - PlanFile
+        - PlanFileSchema
+        - PlanItemStatus
+        - PlanItemStatusSchema
+        - PlanNoteKind
+        - PlanNoteKindSchema
+        - PlanNoteSchema
+        - PlanNoteSpec
+        - PlanPositionSchema
+        - PlanReplySchema
+        - PlanReplySpec
+        - PlanScopeSchema
+        - PlanSequenceSchema
+        - PlanSequenceSpec
+        - PlanStatus
+        - PlanStatusSchema
+        - PlanStepSchema
+        - PlanStepSpec
+        - PlanTaskSchema
+        - PlanTaskSpec
+        - PlanTaskStatusSchema
+        - PlanUnreadSchema
+        - PlanUnreadSpec
       packages/spec/src/seals.ts:
         - SUM_FILE
         - Seal
@@ -1014,6 +1134,7 @@ seals:
         - HypothesisSpec
         - MissingHopSchema
         - MissingHopSpec
+        - RECORD_DIRS
         - ReportedSchema
         - RootCauseSchema
         - TRACES_DIR
@@ -1258,7 +1379,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-d816af2d548a2e23
+    hash: fnv-280cd5b4b83c9492
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
@@ -1267,6 +1388,18 @@ seals:
         - Compare
         - UNDECLARED
         - compareCode
+      apps/web/src/model/plans.ts:
+        - PlanMap
+        - PlanWrite
+        - Plans
+        - childKind
+        - nodeOf
+        - planMap
+        - readPlans
+        - refOf
+        - slug
+        - startPlan
+        - writePlan
       apps/web/src/model/stories.ts:
         - IMPORTANCE
         - JourneyCard
@@ -1341,13 +1474,14 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-3ed9ae4a786aa5d4
+    hash: fnv-5337b4e16445316d
     files:
       apps/web/src/App.tsx:
         - App
       apps/web/src/components/Canvas.tsx:
         - Canvas
         - CanvasProps
+        - PlanEditing
         - describe
         - useStoredChoice
         - useStoredFlag
@@ -1387,6 +1521,14 @@ seals:
       apps/web/src/components/Payload.tsx:
         - Payload
         - PayloadEntry
+      apps/web/src/components/Plan.tsx:
+        - DraftStep
+        - NEW_PLAN
+        - PlanDraft
+        - PlanHead
+        - PlanList
+        - PlanPanel
+        - PlanStart
       apps/web/src/components/Sidebar.tsx:
         - ChangesList
         - DataList
@@ -1394,8 +1536,6 @@ seals:
         - SearchBox
         - dataGroups
         - search
-      apps/web/src/components/Soon.tsx:
-        - Soon
       apps/web/src/components/StepPanel.tsx:
         - StepPanel
         - StepPanelProps
@@ -1511,7 +1651,7 @@ seals:
         - validate
   step:check-model#3:
     kind: structure
-    hash: fnv-3747d46c6b568818
+    hash: fnv-977aaf3387e0c0f3
     files:
       packages/core/src/load/fs.ts:
         - LoadOptions
@@ -1520,7 +1660,9 @@ seals:
         - ModelSources
         - loadModel
         - readModelSources
+        - readPlanSources
         - readTraceSources
+    by: agent:claude-code
   step:check-model#4:
     kind: structure
     hash: fnv-5b16c82e21e5b312
@@ -1690,6 +1832,186 @@ seals:
         - repoPath
         - sealAnswer
         - showAnswer
+    by: agent:claude-code
+  step:plan-a-change#1:
+    kind: structure
+    hash: fnv-b5eb9a68eba1ed3e
+    files:
+      integrations/claude-plugin/skills/archdoc/SKILL.md: []
+    by: agent:claude-code
+  step:plan-a-change#10:
+    kind: structure
+    hash: fnv-f84fa04d88dfa3f5
+    files:
+      packages/analyzers/src/plan.ts:
+        - PlanListInput
+        - PlanReadInput
+        - PlanRespondInput
+        - PlanStartInput
+        - PlanTaskInput
+        - PlanWaitInput
+        - planEditAnswer
+        - planListAnswer
+        - planReadAnswer
+        - planRespondAnswer
+        - planStartAnswer
+        - planTaskAnswer
+        - planWaitAnswer
+    by: agent:claude-code
+  step:plan-a-change#11:
+    kind: structure
+    hash: fnv-a93820bd03f9ecfd
+    files:
+      packages/core/src/plan/check.ts:
+        - AppliedPlan
+        - ApplyPlanOptions
+        - CheckPlanOptions
+        - PlanCheck
+        - PlanFinding
+        - PlanJourney
+        - PlanOpen
+        - PlanReach
+        - applyPlan
+        - checkPlan
+        - itemLocation
+        - withFiles
+    by: agent:claude-code
+  step:plan-a-change#12:
+    kind: structure
+    hash: fnv-f84fa04d88dfa3f5
+    files:
+      packages/analyzers/src/plan.ts:
+        - PlanListInput
+        - PlanReadInput
+        - PlanRespondInput
+        - PlanStartInput
+        - PlanTaskInput
+        - PlanWaitInput
+        - planEditAnswer
+        - planListAnswer
+        - planReadAnswer
+        - planRespondAnswer
+        - planStartAnswer
+        - planTaskAnswer
+        - planWaitAnswer
+    by: agent:claude-code
+  step:plan-a-change#13:
+    kind: structure
+    hash: fnv-f84fa04d88dfa3f5
+    files:
+      packages/analyzers/src/plan.ts:
+        - PlanListInput
+        - PlanReadInput
+        - PlanRespondInput
+        - PlanStartInput
+        - PlanTaskInput
+        - PlanWaitInput
+        - planEditAnswer
+        - planListAnswer
+        - planReadAnswer
+        - planRespondAnswer
+        - planStartAnswer
+        - planTaskAnswer
+        - planWaitAnswer
+    by: agent:claude-code
+  step:plan-a-change#2:
+    kind: structure
+    hash: fnv-3c8e7a02bbae7918
+    files:
+      packages/mcp/src/server.ts:
+        - ArchdocServerOptions
+        - INSTRUCTIONS
+        - createArchdocServer
+    by: agent:claude-code
+  step:plan-a-change#3:
+    kind: structure
+    hash: fnv-f84fa04d88dfa3f5
+    files:
+      packages/analyzers/src/plan.ts:
+        - PlanListInput
+        - PlanReadInput
+        - PlanRespondInput
+        - PlanStartInput
+        - PlanTaskInput
+        - PlanWaitInput
+        - planEditAnswer
+        - planListAnswer
+        - planReadAnswer
+        - planRespondAnswer
+        - planStartAnswer
+        - planTaskAnswer
+        - planWaitAnswer
+    by: agent:claude-code
+  step:plan-a-change#5:
+    kind: structure
+    hash: fnv-734994e607b4f566
+    files:
+      apps/web/src/components/Plan.tsx:
+        - DraftStep
+        - NEW_PLAN
+        - PlanDraft
+        - PlanHead
+        - PlanList
+        - PlanPanel
+        - PlanStart
+    by: agent:claude-code
+  step:plan-a-change#6:
+    kind: structure
+    hash: fnv-0b228330ce23e7c4
+    files:
+      apps/web/src/model/plans.ts:
+        - PlanMap
+        - PlanWrite
+        - Plans
+        - childKind
+        - nodeOf
+        - planMap
+        - readPlans
+        - refOf
+        - slug
+        - startPlan
+        - writePlan
+    by: agent:claude-code
+  step:plan-a-change#7:
+    kind: structure
+    hash: fnv-2baa63e5c92cfa0d
+    files:
+      packages/cli/src/server.ts:
+        - ViewServer
+        - ViewServerOptions
+        - findWebDir
+        - modelResponse
+        - startViewServer
+    by: agent:claude-code
+  step:plan-a-change#8:
+    kind: structure
+    hash: fnv-18ff37de398ecb48
+    files:
+      packages/core/src/plan/edit.ts:
+        - EditPlanOptions
+        - EditPlanResult
+        - PlanEditOp
+        - PlanList
+        - editPlan
+    by: agent:claude-code
+  step:plan-a-change#9:
+    kind: structure
+    hash: fnv-f84fa04d88dfa3f5
+    files:
+      packages/analyzers/src/plan.ts:
+        - PlanListInput
+        - PlanReadInput
+        - PlanRespondInput
+        - PlanStartInput
+        - PlanTaskInput
+        - PlanWaitInput
+        - planEditAnswer
+        - planListAnswer
+        - planReadAnswer
+        - planRespondAnswer
+        - planStartAnswer
+        - planTaskAnswer
+        - planWaitAnswer
     by: agent:claude-code
   step:publish-the-landscape#1:
     kind: structure

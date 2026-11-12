@@ -12,11 +12,19 @@ import { init } from "./commands/init.js";
 import { landscapeBuild } from "./commands/landscape.js";
 import { migrate } from "./commands/migrate.js";
 import { paths } from "./commands/paths.js";
+import {
+  type PlanStartOptions,
+  planList,
+  planRead,
+  planRespond,
+  planStart,
+  planTask,
+  planWait,
+} from "./commands/plan.js";
 import { report } from "./commands/report.js";
 import { schema } from "./commands/schema.js";
 import { seal } from "./commands/seal.js";
 import { site } from "./commands/site.js";
-import { traceList } from "./commands/trace.js";
 import {
   type TriageStartOptions,
   triageList,
@@ -285,15 +293,75 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     .option("--dry-run", "say what would move without moving it")
     .action((opts: { model?: string; dryRun?: boolean }) => run(triageMigrate(opts, io)));
 
-  const trace = program
-    .command("trace")
-    .description("Deprecated since 0.8: use archdoc triage. Kept until 0.9.");
-  trace
-    .command("list")
-    .description("List the Triage records (archdoc triage list)")
+  const plan = program
+    .command("plan")
+    .description(
+      "Plans: a change designed with the agent on the explorer's map before it's built, each part with the person's intent, then carried out as tasks (.archdoc/plans/)",
+    );
+  plan
+    .command("start")
+    .description("Start a plan from the idea, and say how to sketch it in the explorer")
+    .argument("<goal...>", "the idea in a sentence, or - (stdin)")
     .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
-    .option("--json", "print the result as JSON")
-    .action((opts: { model?: string; json?: boolean }) => run(traceList(opts, io)));
+    .option("-t, --title <title>", "the change in one line")
+    .option("--id <id>", "the plan's ID (default: from the title or the goal)")
+    .option("--by <who>", "whose plan it is: human:@handle")
+    .option("-p, --path <paths...>", "files the change will likely touch")
+    .option("--dry-run", "print the plan without writing it")
+    .action((words: string[], opts: PlanStartOptions) => run(planStart(words, opts, io)));
+  plan
+    .command("list")
+    .description("List the plans and what's open in each")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option(
+      "-s, --status <status>",
+      "only this status (drafting, reviewing, ready, executing, done, abandoned), or open",
+    )
+    .action((opts: { model?: string; status?: string }) => run(planList(opts, io)));
+  plan
+    .command("read")
+    .description(
+      "Read a plan: what the person changed since your last read, every item with its intent, what it reaches, and the check",
+    )
+    .argument("<id>", "the plan's ID")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("--peek", "don't mark what changed as read")
+    .action((id: string, opts: { model?: string; peek?: boolean }) => run(planRead(id, opts, io)));
+  plan
+    .command("wait")
+    .description("Wait until the person sends the plan from the explorer, then read it")
+    .argument("<id>", "the plan's ID")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("--timeout <seconds>", "give up after this long (default 600)")
+    .action((id: string, opts: { model?: string; timeout?: string }) =>
+      run(planWait(id, opts, io)),
+    );
+  plan
+    .command("respond")
+    .description(
+      "Answer a plan: notes, replies, suggested changes and steps, tasks, and status, as JSON ops",
+    )
+    .argument("<id>", "the plan's ID")
+    .argument("[ops]", "one op or a list, as JSON, or - (stdin)")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("-f, --file <path>", "read the ops from a file, or - (stdin)")
+    .option("--by <who>", "who's answering: agent:<name>")
+    .action(
+      (id: string, ops: string | undefined, opts: { model?: string; file?: string; by?: string }) =>
+        run(planRespond(id, ops, opts, io)),
+    );
+  plan
+    .command("task")
+    .description("Set a task's status while the plan is carried out")
+    .argument("<id>", "the plan's ID")
+    .argument("<task>", "the task's ID, such as t1")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("-s, --status <status>", "todo, doing, done, or skipped", "done")
+    .option("--note <text>", "what happened")
+    .action((id: string, task: string, opts: { model?: string; status?: string; note?: string }) =>
+      run(planTask(id, task, opts, io)),
+    );
+
   program
     .command("check")
     .description(

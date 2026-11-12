@@ -12,7 +12,7 @@ steps:
     action: Loads the model directory
   - from: core
     to: model-files
-    action: Reads every YAML file under .archdoc/
+    action: Reads every YAML file under .archdoc/ but the records beside the model (triage/ and plans/)
     code: packages/core/src/load/fs.ts
   - from: core
     to: spec

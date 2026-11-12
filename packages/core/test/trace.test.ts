@@ -414,9 +414,15 @@ describe("the model loader", () => {
     ]);
   });
 
-  it("reads traces on their own", async () => {
+  it("reads Triage records from triage/ only: traces/ from before 0.8 waits for archdoc triage migrate", async () => {
+    expect(await readTraceSources(".", { cwd: dir })).toEqual([]);
+    await mkdir(join(dir, ".archdoc/triage"), { recursive: true });
+    await writeFile(
+      join(dir, ".archdoc/triage/slow.yaml"),
+      "triage: slow\ntitle: Slow\nsymptom: timeout\nsteps: [{ from: api, to: api }]\n",
+    );
     const sources = await readTraceSources(".", { cwd: dir });
-    expect(sources.map((s) => s.path)).toEqual([".archdoc/traces/slow.yaml"]);
+    expect(sources.map((s) => s.path)).toEqual([".archdoc/triage/slow.yaml"]);
     expect(loadTraces(sources).traces[0]?.id).toBe("slow");
     expect(await readTraceSources("nowhere", { cwd: dir })).toEqual([]);
   });

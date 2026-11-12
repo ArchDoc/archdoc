@@ -43,6 +43,10 @@ export interface ModelPayload {
   samples?: { path: string; text: string }[];
   /** Bug traces beside the model (.archdoc/traces/*.yaml), for the trace view. Never part of the model. */
   traces?: { path: string; text: string }[];
+  /** Plans beside the model (.archdoc/plans/*.yaml), for the Plan tab. Never part of the model. */
+  plans?: { path: string; text: string }[];
+  /** True when the server can write plans (archdoc view); a published site can't. */
+  editable?: boolean;
   /** With an archdoc.sum: the facts whose code changed since they were sealed, and new ones. */
   seals?: SealsInfo | undefined;
   /** What data entries' schema sources say, to fill in what the model leaves out. */
@@ -103,6 +107,13 @@ export type ModelState =
       landscape?: LandscapeInfo | undefined;
       samples: { path: string; text: string }[];
       traces: { path: string; text: string }[];
+      plans: { path: string; text: string }[];
+      /** Whether plans can be changed here (archdoc view), or only read (a published site). */
+      editable: boolean;
+      /** Builds a model from changed sources the way this one was built: schemas and other repos' models with it. */
+      build: (sources: ModelSource[]) => Model;
+      /** Reads the model again now, without waiting for a change event. */
+      reload: () => Promise<void>;
       seals?: SealsInfo | undefined;
       loadedAt: number;
       reloads: number;
@@ -162,6 +173,12 @@ export function useModel(): ModelState {
         landscape: payload.landscape,
         samples: payload.samples ?? [],
         traces: payload.traces ?? [],
+        plans: payload.plans ?? [],
+        editable: payload.editable === true,
+        build: (sources: ModelSource[]) => modelOf({ ...payload, sources }),
+        reload: async () => {
+          await load();
+        },
         seals: payload.seals,
         loadedAt: Date.now(),
         reloads: prev.status === "ready" ? prev.reloads + 1 : 0,

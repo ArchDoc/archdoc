@@ -28,11 +28,11 @@ describe("archdoc MCP server", () => {
     expect(INSTRUCTIONS).toMatch(
       /before you grep[\s\S]*archdoc_context[\s\S]*archdoc_show[\s\S]*archdoc_check[\s\S]*archdoc_seal/,
     );
-    // 0.8.1: triage says to start the record before the code, even for a fix.
-    expect(INSTRUCTIONS.length).toBeLessThan(1350);
+    // 0.8.1: triage says to start the record before the code, even for a fix. 0.9: plan.
+    expect(INSTRUCTIONS.length).toBeLessThan(1500);
   });
 
-  it("has one tool per question, read-only except edit, seal, triage, and init", async () => {
+  it("has one tool per question, read-only except edit, seal, triage, plan, and init", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "archdoc_check",
@@ -41,6 +41,7 @@ describe("archdoc MCP server", () => {
       "archdoc_find",
       "archdoc_init",
       "archdoc_paths",
+      "archdoc_plan",
       "archdoc_seal",
       "archdoc_show",
       "archdoc_triage",
@@ -49,6 +50,7 @@ describe("archdoc MCP server", () => {
     expect(writers.sort()).toEqual([
       "archdoc_edit",
       "archdoc_init",
+      "archdoc_plan",
       "archdoc_seal",
       "archdoc_triage",
     ]);
@@ -56,8 +58,9 @@ describe("archdoc MCP server", () => {
     expect(tools.find((t) => t.name === "archdoc_edit")?.annotations?.destructiveHint).toBe(true);
     // Every agent session reads this list, so it stays small. find and edit
     // take most of it: they replace reading and hand-editing the YAML. triage
-    // (0.8) added about 500, and what a step needs (0.8.1) about 100.
-    expect(JSON.stringify(tools).length).toBeLessThan(11250);
+    // (0.8) added about 500, what a step needs (0.8.1) about 100, and plan
+    // (0.9) about 1,450: the op shapes come with the plan it reads instead.
+    expect(JSON.stringify(tools).length).toBeLessThan(12800);
   });
 
   it("finds parts of the model, and outlines it", async () => {

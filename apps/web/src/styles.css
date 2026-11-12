@@ -233,22 +233,13 @@ p {
     "side main panel";
 }
 
-/* Plan: one page, no list beside it. */
-.app.tab-plan {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "top"
-    "nav"
-    "diag"
-    "main";
-}
-
 .app.tab-overview {
   --side-width: 400px;
 }
 
 .app.tab-journeys,
-.app.tab-triage {
+.app.tab-triage,
+.app.tab-plan {
   --side-width: 300px;
 }
 
@@ -363,39 +354,6 @@ p {
   color: var(--muted);
   font-size: var(--fs-1);
   font-weight: 400;
-}
-
-.soon {
-  height: 100%;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  overflow: auto;
-}
-
-.soon-card {
-  max-width: 520px;
-  padding: 28px 32px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
-.soon-card h1 {
-  margin: 4px 0 8px;
-}
-
-.soon-badge {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-1);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.soon-lead {
-  font-weight: 600;
 }
 
 .topbar-right {
@@ -3526,31 +3484,37 @@ table.observed td.is-wrong code {
     max-height: 80vh;
   }
   .app.tab-journeys .side-list,
-  .app.tab-triage .side-list {
+  .app.tab-triage .side-list,
+  .app.tab-plan .side-list {
     display: flex;
     gap: 6px;
     overflow-x: auto;
     padding: 10px 12px;
   }
   .app.tab-journeys .side-title,
-  .app.tab-triage .side-title {
+  .app.tab-triage .side-title,
+  .app.tab-plan .side-title {
     display: none;
   }
   .app.tab-journeys .side-item,
-  .app.tab-triage .side-item {
+  .app.tab-triage .side-item,
+  .app.tab-plan .side-item {
     flex: none;
     width: auto;
     max-width: 75vw;
     border: 1px solid var(--line);
   }
   .app.tab-journeys .side-item-sub,
-  .app.tab-triage .side-item-sub {
+  .app.tab-triage .side-item-sub,
+  .app.tab-plan .side-item-sub {
     display: none;
   }
-  .app.tab-triage .triage-group {
+  .app.tab-triage .triage-group,
+  .app.tab-plan .triage-group {
     display: contents;
   }
-  .app.tab-triage .triage-group-title {
+  .app.tab-triage .triage-group-title,
+  .app.tab-plan .triage-group-title {
     display: none;
   }
   .resize-handle {
@@ -3566,11 +3530,13 @@ table.observed td.is-wrong code {
   .lanes {
     --gutter: 30px;
   }
-  .app.tab-triage .main {
+  .app.tab-triage .main,
+  .app.tab-plan .main {
     height: auto;
     max-height: none;
   }
-  .app.tab-triage .lanes {
+  .app.tab-triage .lanes,
+  .app.tab-plan .lanes {
     max-height: 70vh;
   }
 }
@@ -4139,4 +4105,262 @@ table.observed td.is-wrong code {
 .trace-story .trace-log pre {
   max-height: 140px;
   overflow: auto;
+}
+
+/* Plan: a change drawn on the map with its intent, refined with the agent. */
+.plan-form {
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  font-size: var(--fs-2);
+}
+
+.field > span {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.field textarea,
+.plan-form > textarea,
+.plan-reply-form input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: var(--fs-2);
+}
+
+.field textarea,
+.plan-form > textarea {
+  resize: vertical;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-error {
+  margin: 0;
+  color: var(--breaks);
+  font-size: var(--fs-2);
+}
+
+.check {
+  font-size: var(--fs-2);
+}
+
+.plan-start .plan-form {
+  max-width: 560px;
+}
+
+.plan-head .story-title {
+  min-width: 0;
+}
+
+.plan-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.plan-hint {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-size: var(--fs-2);
+}
+
+.plan-status-drafting,
+.plan-status-reviewing {
+  color: var(--changed);
+  border-color: var(--changed);
+  background: var(--changed-soft);
+}
+
+.plan-status-ready,
+.plan-status-executing,
+.plan-status-done {
+  color: var(--added);
+  border-color: var(--added);
+  background: var(--added-soft);
+}
+
+.triage-group-title.plan-status-drafting,
+.triage-group-title.plan-status-reviewing,
+.triage-group-title.plan-status-ready,
+.triage-group-title.plan-status-executing,
+.triage-group-title.plan-status-done {
+  background: none;
+}
+
+.plan-changes,
+.plan-notes,
+.plan-findings,
+.plan-tasks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.plan-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 10px;
+}
+
+.plan-change,
+.plan-step {
+  display: grid;
+  gap: 4px;
+}
+
+.plan-step.is-current > .link {
+  font-weight: 600;
+}
+
+.plan-change.is-suggested,
+.plan-change.is-dismissed {
+  padding-left: 8px;
+  border-left: 2px dashed var(--line-strong);
+}
+
+.plan-change.is-dismissed {
+  opacity: 0.6;
+}
+
+.plan-intent {
+  margin: 0;
+  font-size: var(--fs-2);
+}
+
+.plan-remove {
+  margin-left: 8px;
+}
+
+.plan-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-chip {
+  font-size: var(--fs-1);
+}
+
+.plan-chip.plan-suggested,
+.plan-chip.note-chip-question,
+.plan-chip.note-chip-risk {
+  border-color: var(--changed);
+  color: var(--changed);
+}
+
+.plan-chip.note-chip-insight {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.plan-note {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.plan-note.is-resolved {
+  opacity: 0.6;
+}
+
+.plan-note-head,
+.plan-note-text,
+.plan-reply {
+  margin: 0;
+  font-size: var(--fs-2);
+}
+
+.plan-note-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-reply {
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+}
+
+.plan-reply.reply-answer {
+  border-left-color: var(--added);
+}
+
+.plan-reply-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-reply-form button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.plan-findings li {
+  font-size: var(--fs-2);
+}
+
+.plan-findings .sev-error {
+  color: var(--breaks);
+}
+
+.plan-findings .sev-warning {
+  color: var(--changed);
+}
+
+.react-flow__node.is-suggested .card {
+  border-style: dashed;
+}
+
+.react-flow__edge.is-suggested path {
+  stroke-dasharray: 6 4;
+}
+
+.react-flow__node.has-plan-notes .card::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--changed);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.tab-plan .handle {
+  pointer-events: auto;
+}
+
+.tab-plan .react-flow__node:hover .handle {
+  opacity: 1;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  border-color: var(--surface);
 }

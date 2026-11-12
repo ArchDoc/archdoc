@@ -15,7 +15,7 @@ describe("the explorer's tabs", () => {
     ]);
     expect(build?.label).toBe("Build");
     expect(build?.tabs.map((t) => t.label)).toEqual(["Plan", "Triage", "Diff"]);
-    expect(build?.tabs.filter((t) => t.soon).map((t) => t.id)).toEqual(["plan"]);
+    expect(build?.tabs.filter((t) => t.soon)).toEqual([]);
   });
 
   it("leaves out Data when there is none", () => {

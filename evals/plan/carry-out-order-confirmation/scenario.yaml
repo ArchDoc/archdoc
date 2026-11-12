@@ -1,0 +1,13 @@
+# The last stage: the person and the agent agreed a plan and the person marked
+# it ready. The agent should write the tasks that carry it out (each with the
+# changes it makes and its files), build them in order, edit the model as each
+# lands, and mark each task, which moves the plan to executing and then done.
+stage: carry
+fixture: ts-monorepo
+expected:
+  # The plan's items the model should show once it's carried out.
+  built: [c1, c2, c3, c4, s1]
+  # Code the change needs: a file that exists, with words it says.
+  code:
+    - { path: apps/api/src/notify/, words: "fetch|MAIL|mail|email" }
+    - { path: apps/api/src/orders/service.ts, words: "notify|confirm|mail|email" }

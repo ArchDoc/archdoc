@@ -121,12 +121,13 @@ describe("archdoc init on ArchDoc itself", () => {
     const { model, stats } = await inferred(repo);
     const hand = await loadModel(".", { cwd: repo });
     const r = recall(model, hand);
-    // Measured: all 10 containers, and 13 of the 17 uses between them. The
-    // other 4 happen at run time, not in imports: the CLI serves the
-    // explorer's build, the action and the landscape template run the CLI,
-    // and the skill calls the MCP server.
+    // Measured: all 10 containers, and 13 of the 19 uses between them. The
+    // others happen at run time, not in imports: the CLI serves the
+    // explorer's build, the explorer writes plans through the view server,
+    // the action and the landscape template run the CLI, and the skill calls
+    // the MCP server.
     expect(r.containers).toBe(1);
-    expect(r.uses).toBeGreaterThanOrEqual(0.7);
+    expect(r.uses).toBeGreaterThanOrEqual(0.68);
     expect(stats.coverage.claimed / stats.coverage.total).toBeGreaterThanOrEqual(0.95);
     expect(model.elements.get("github-action")?.spec.technology).toBe("GitHub Actions (composite)");
     expect(model.elements.get("cli")?.spec.technology).toBe("TypeScript, CLI");

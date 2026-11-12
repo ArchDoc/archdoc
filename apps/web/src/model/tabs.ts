@@ -46,7 +46,12 @@ export function sections(input: TabsInput): SectionInfo[] {
     },
   ];
   const build: TabInfo[] = [
-    { id: "plan", label: "Plan", soon: true, title: "Plan a change on the model: coming soon" },
+    {
+      id: "plan",
+      label: "Plan",
+      title:
+        "Design a change on the map with your agent, each part with its intent, before it's built",
+    },
     {
       id: "triage",
       label: "Triage",

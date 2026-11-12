@@ -1,0 +1,36 @@
+plan: settlement-webhooks
+title: Webhooks when a posting settles
+status: reviewing
+goal: Call a client's webhook when one of its postings settles
+by: human:@sam
+changes:
+  - id: c1
+    by: human:@sam
+    intent: Keeps each client's webhook URL and calls it, retrying on failure
+    add: { id: ledger.webhooks, kind: component, description: "Client webhooks: registration and delivery" }
+  - id: c2
+    by: human:@sam
+    intent: Tell the client their posting settled
+    use: { from: ledger-api, to: ledger.webhooks, description: Calls the client's webhook for each new posting }
+  - id: c3
+    by: human:@sam
+    intent: Keep the webhook URLs in Postgres
+    use: { from: ledger.webhooks, to: postgres, description: Reads and writes webhook URLs }
+sequences:
+  - id: s1
+    by: human:@sam
+    journey: notify-on-settle
+    name: Notify on settle
+    actor: client
+    goal: Hear when a posting settles
+    intent: The client stops polling for settlement
+    steps:
+      - { from: client, to: ledger-api, action: POSTs a posting, intent: As today }
+      - { from: ledger-api, to: ledger.webhooks, action: Calls the client's webhook, intent: The client learns it settled }
+      - { from: ledger.webhooks, to: postgres, action: Looks up the client's webhook URL }
+unread:
+  - { id: c1, what: added }
+  - { id: c2, what: added }
+  - { id: c3, what: added }
+  - { id: s1, what: added }
+sent: 1

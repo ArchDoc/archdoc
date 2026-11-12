@@ -4,6 +4,7 @@ import {
   type JourneyNode,
   lineage,
   type Model,
+  type PlanEditOp,
   resolveCodeMap,
   type Simulation,
   type SnippetPlace,
@@ -23,8 +24,15 @@ import {
 import { Lanes } from "./components/Lanes.js";
 import { Overview } from "./components/Overview.js";
 import type { PayloadEntry } from "./components/Payload.js";
+import {
+  NEW_PLAN,
+  type PlanDraft,
+  PlanHead,
+  PlanList,
+  PlanPanel,
+  PlanStart,
+} from "./components/Plan.js";
 import { ChangesList, DataList, dataGroups, JourneyList, SearchBox } from "./components/Sidebar.js";
-import { Soon } from "./components/Soon.js";
 import { StepPanel } from "./components/StepPanel.js";
 import { NEW, TraceList, TraceStepPanel, TraceStory, TriageStart } from "./components/Traces.js";
 import {
@@ -48,6 +56,7 @@ import {
 } from "./graph/graph.js";
 import { type GroupBy, type Grouping, groupLandscape } from "./graph/groups.js";
 import { type Compare, compareCode } from "./model/compare.js";
+import { planMap, readPlans, refOf, writePlan } from "./model/plans.js";
 import { actorLabel, journeyLanes, journeysByImportance } from "./model/stories.js";
 import { landingTab, type Section, sectionOf, sections } from "./model/tabs.js";
 import {
@@ -68,7 +77,13 @@ import {
   useRefs,
   writeHash,
 } from "./model/useCompare.js";
-import { type LandscapeInfo, type RepoLinks, type SealsInfo, useModel } from "./model/useModel.js";
+import {
+  type LandscapeInfo,
+  type ModelState,
+  type RepoLinks,
+  type SealsInfo,
+  useModel,
+} from "./model/useModel.js";
 
 export function App() {
   const state = useModel();
@@ -141,6 +156,7 @@ export function App() {
         landscape={state.landscape}
         traces={shown.traces}
         seals={branch ? undefined : state.seals}
+        planning={state.status === "ready" ? state : undefined}
       />
     </ReactFlowProvider>
   );
@@ -176,6 +192,8 @@ interface ExplorerProps {
   traces: { path: string; text: string }[];
   /** The working tree's facts to re-check, when the repository keeps an archdoc.sum. */
   seals?: SealsInfo | undefined;
+  /** The working tree's plans, sources, and how to write and rebuild, for the Plan tab. */
+  planning?: Extract<ModelState, { status: "ready" }> | undefined;
 }
 
 function Explorer({
@@ -193,6 +211,7 @@ function Explorer({
   landscape,
   traces,
   seals,
+  planning,
 }: ExplorerProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>("repo");
   // The tab last open under each top-level tab, so going back to it opens where you were.
@@ -265,6 +284,65 @@ function Explorer({
     [onTab],
   );
 
+  // The open plan, what's being drawn on it, and the sequence stepped through on the map.
+  const [planId, setPlanId] = useState<string | undefined>(initial.plan);
+  const [planDraft, setPlanDraft] = useState<PlanDraft>();
+  const [planSeq, setPlanSeq] = useState<string>();
+  const [planAt, setPlanAt] = useState(0);
+  const [planBusy, setPlanBusy] = useState(false);
+  const [planError, setPlanError] = useState<string>();
+  const planState = useMemo(() => readPlans(planning?.plans ?? []), [planning?.plans]);
+  const plan =
+    planId === NEW_PLAN
+      ? undefined
+      : (planState.plans.find((p) => p.id === planId) ?? planState.plans[0]);
+  const planView = useMemo(
+    () =>
+      tab === "plan" && plan && planning
+        ? planMap(model, planning.sources, plan, planning.build)
+        : undefined,
+    [tab, plan, planning, model],
+  );
+  const planSequence = planView?.plan.spec.sequences.find((q) => q.id === planSeq);
+  const planJourney =
+    planView && planSequence ? planView.after.journeys.get(planSequence.journey) : undefined;
+  const planInteractions = useMemo(
+    () => (planView && planJourney ? journeyInteractions(planView.after, planJourney) : []),
+    [planView, planJourney],
+  );
+  const editPlan = useCallback(
+    async (ops: PlanEditOp[]): Promise<boolean> => {
+      if (!plan || !planning) return false;
+      setPlanBusy(true);
+      setPlanError(undefined);
+      const base = planning.plans.find((p) => p.path === plan.file)?.text;
+      const r = await writePlan(plan.id, ops, base);
+      await planning.reload();
+      setPlanBusy(false);
+      if (!r.ok) setPlanError(r.stale ? `${r.error} It has been reloaded.` : r.error);
+      return r.ok;
+    },
+    [plan, planning],
+  );
+  // A plan opens on what it changes.
+  const planOpened = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!planView || planOpened.current === planView.plan.id) return;
+    planOpened.current = planView.plan.id;
+    const first = [...planView.items.keys()][0];
+    if (first) setCenterOn(first);
+  }, [planView]);
+  const openPlan = useCallback((id: string) => {
+    setPlanId(id);
+    setPlanDraft(undefined);
+    setPlanSeq(undefined);
+    setPlanAt(0);
+    setPlanError(undefined);
+    setSelected(undefined);
+  }, []);
+  // The map on the Plan tab is the model with the plan made.
+  const mapModel = planView?.after ?? model;
+
   const journey = journeyId ? model.journeys.get(journeyId) : undefined;
   const interactions = useMemo(
     () => (journey ? journeyInteractions(model, journey) : []),
@@ -293,9 +371,21 @@ function Explorer({
     () => (triageJourney && traceCheck ? traceInteractions(traceCheck.view) : []),
     [triageJourney, traceCheck],
   );
-  const journeyOnMap = tab === "journeys" && onMap && journey ? journey : triageJourney;
-  const mapInteractions = triageJourney ? triageInteractions : interactions;
-  const mapAt = triageJourney ? triageInteractions.findIndex((x) => x.step === traceStep) : at;
+  const journeyOnMap =
+    tab === "journeys" && onMap && journey ? journey : tab === "plan" ? planJourney : triageJourney;
+  const mapInteractions = triageJourney
+    ? triageInteractions
+    : tab === "plan"
+      ? planInteractions
+      : interactions;
+  const mapAt = triageJourney
+    ? triageInteractions.findIndex((x) => x.step === traceStep)
+    : tab === "plan"
+      ? Math.max(
+          0,
+          planInteractions.findIndex((x) => x.step === planAt),
+        )
+      : at;
 
   useEffect(
     () =>
@@ -305,12 +395,13 @@ function Explorer({
         journey: tab === "journeys" ? journeyId : undefined,
         trace: tab === "triage" ? (traceId === NEW ? NEW : traceCheck?.view.id) : undefined,
         environment: tab === "infrastructure" ? environment : undefined,
+        plan: tab === "plan" ? (planId === NEW_PLAN ? NEW_PLAN : plan?.id) : undefined,
         data:
           tab === "data" && (selected?.startsWith("data:") || selected?.startsWith("field:"))
             ? selected
             : undefined,
       }),
-    [tab, pair, journeyId, selected, traceCheck, traceId, environment],
+    [tab, pair, journeyId, selected, traceCheck, traceId, environment, planId, plan],
   );
 
   // After a live reload, drop references to things that no longer exist.
@@ -352,10 +443,16 @@ function Explorer({
       fields: new Set<string>(),
     };
     if (journeyOnMap) {
-      const stores = journeyStores(model, journeyOnMap);
-      for (const id of journeyExpansion(model, journeyOnMap)) out.expanded.add(id);
-      for (const id of stores.flatMap((s) => ancestorsOf(model, s))) out.expanded.add(id);
+      const stores = journeyStores(mapModel, journeyOnMap);
+      for (const id of journeyExpansion(mapModel, journeyOnMap)) out.expanded.add(id);
+      for (const id of stores.flatMap((s) => ancestorsOf(mapModel, s))) out.expanded.add(id);
       for (const id of stores) out.tables.add(id);
+    } else if (planView) {
+      // Open the boxes that hold what the plan adds or changes, so it's in view.
+      for (const c of [...planView.diff.elements]) {
+        const id = c.kind === "removed" ? undefined : c.id;
+        if (id) for (const a of ancestorsOf(mapModel, id)) out.expanded.add(a);
+      }
     } else if (
       tab === "data" &&
       (selected?.startsWith("data:") || selected?.startsWith("field:"))
@@ -375,7 +472,7 @@ function Explorer({
       if (selected.startsWith("field:")) for (const e of entries) out.fields.add(e);
     }
     return out;
-  }, [model, journeyOnMap, tab, selected]);
+  }, [model, mapModel, journeyOnMap, tab, selected, planView]);
   const shut = closed?.context === context ? closed.ids : undefined;
   const effective = useMemo(() => {
     const merge = (mine: ReadonlySet<string>, theirs: ReadonlySet<string>, prefix: string) =>
@@ -391,14 +488,14 @@ function Explorer({
   const rows = useMemo(
     () =>
       journeyOnMap && rowStores.size
-        ? interactionRows(model, journeyOnMap, mapInteractions, mapAt, simulation)
+        ? interactionRows(mapModel, journeyOnMap, mapInteractions, mapAt, simulation)
         : undefined,
-    [model, journeyOnMap, mapInteractions, mapAt, rowStores],
+    [mapModel, journeyOnMap, mapInteractions, mapAt, rowStores],
   );
   // What the journey uses; the rest of its datastores folds away.
   const involved = useMemo(
-    () => (journeyOnMap ? journeyInvolvement(model, journeyOnMap, rows) : undefined),
-    [model, journeyOnMap, rows],
+    () => (journeyOnMap ? journeyInvolvement(mapModel, journeyOnMap, rows) : undefined),
+    [mapModel, journeyOnMap, rows],
   );
   const view = useMemo(
     () => ({
@@ -489,6 +586,18 @@ function Explorer({
   // A box clicked on the map is already in view: select it without moving the map.
   const selectHere = useCallback(
     (key: string | undefined) => {
+      // Drawing a sequence: each box clicked is the next hop.
+      if (tab === "plan" && planDraft?.kind === "sequence") {
+        const ref = key ? refOf(key) : undefined;
+        if (!ref) return;
+        if (!planDraft.cursor) return setPlanDraft({ ...planDraft, cursor: ref });
+        if (ref === planDraft.cursor) return;
+        return setPlanDraft({
+          ...planDraft,
+          cursor: ref,
+          steps: [...planDraft.steps, { from: planDraft.cursor, to: ref, action: "", intent: "" }],
+        });
+      }
       if (
         key?.startsWith("element:") ||
         key?.startsWith("actor:") ||
@@ -499,7 +608,7 @@ function Explorer({
       }
       select(key);
     },
-    [select],
+    [select, tab, planDraft],
   );
 
   const pick = useCallback(
@@ -635,7 +744,7 @@ function Explorer({
   const canvas = (
     <Canvas
       key={tab}
-      model={model}
+      model={mapModel}
       grouping={grouping}
       simulation={journeyOnMap ? simulation : undefined}
       view={view}
@@ -653,7 +762,32 @@ function Explorer({
       onStoreView={storeView}
       onShowTable={(entry) => setExtra((prev) => new Set([...prev, entry]))}
       onShowAll={(id) => setShowAll((prev) => new Set([...prev, id]))}
-      compare={compare}
+      compare={compare ?? (planView ? { base: model, diff: planView.diff } : undefined)}
+      edit={
+        planView && planning?.editable && !planDraft
+          ? {
+              onAdd: (parent) => {
+                setSelected(undefined);
+                setPlanDraft({ kind: "element", parent });
+              },
+              onConnect: (source, target) => {
+                setSelected(undefined);
+                setPlanDraft({ kind: "use", from: source, to: target });
+              },
+              suggested: planView.suggested,
+              suggestedEdges: planView.suggestedEdges,
+              notes: planView.notes,
+            }
+          : planView
+            ? {
+                onAdd: () => undefined,
+                onConnect: () => undefined,
+                suggested: planView.suggested,
+                suggestedEdges: planView.suggestedEdges,
+                notes: planView.notes,
+              }
+            : undefined
+      }
       preview={tab === "overview" ? preview : undefined}
       recheck={seals?.facts}
       direction={direction}
@@ -924,9 +1058,68 @@ function Explorer({
     // map it says what the entry is.
     panel = selected?.startsWith("field:") || (picked && dataOnMap) ? details : undefined;
   } else if (tab === "plan") {
-    side = undefined;
-    main = <Soon tab={tab} />;
-    panel = undefined;
+    side = (
+      <PlanList
+        plans={planState.plans}
+        problems={planState.problems}
+        planId={plan?.id ?? NEW_PLAN}
+        onPlan={openPlan}
+      />
+    );
+    const top = systemOf(model);
+    main = planView ? (
+      <section className="story plan-story" aria-label="Plan">
+        <PlanHead
+          map={planView}
+          editable={!!planning?.editable}
+          busy={planBusy}
+          onEdit={(ops) => void editPlan(ops)}
+          hint={
+            planDraft?.kind === "sequence"
+              ? "Click boxes on the map in order: each click is the next hop."
+              : planningHint(planView.plan.spec.unread?.length ?? 0, !!planning?.editable)
+          }
+        />
+        <div className="story-body">{canvas}</div>
+      </section>
+    ) : (
+      <PlanStart
+        editable={!!planning?.editable}
+        onStarted={(id) => {
+          void planning?.reload().then(() => openPlan(id));
+        }}
+      />
+    );
+    panel = planView ? (
+      <PlanPanel
+        map={planView}
+        model={model}
+        editable={!!planning?.editable}
+        busy={planBusy}
+        error={planError}
+        draft={planDraft}
+        onDraft={(d) => {
+          setPlanDraft(d);
+          setPlanError(undefined);
+        }}
+        selected={selected}
+        onSelect={(key) => {
+          setSelected(key);
+          setPlanSeq(undefined);
+          if (key) setCenterOn(key);
+        }}
+        sequence={planSeq}
+        onSequence={(id) => {
+          setPlanSeq(id);
+          setPlanAt(0);
+          setSelected(undefined);
+        }}
+        at={planAt}
+        onAt={setPlanAt}
+        onEdit={editPlan}
+        top={top}
+      />
+    ) : undefined;
   } else {
     side = (
       <ChangesList
@@ -1075,7 +1268,7 @@ function Explorer({
       {panel ? (
         <aside className="panel" aria-label="Details">
           <ResizeHandle width={panelWidth} onResize={setPanelWidth} />
-          {selected && tab !== "journeys" && tab !== "triage" ? (
+          {selected && tab !== "journeys" && tab !== "triage" && tab !== "plan" ? (
             <button
               type="button"
               className="panel-close"
@@ -1273,4 +1466,20 @@ function Splash({ children }: { children: React.ReactNode }) {
       <p>{children}</p>
     </div>
   );
+}
+
+/** The system element new top-level parts of a plan go in, when the model has exactly one. */
+function systemOf(model: Model): string | undefined {
+  const systems = [...model.elements.values()].filter(
+    (e) => e.depth === 0 && e.spec.kind === "system",
+  );
+  return systems.length === 1 ? systems[0]?.id : undefined;
+}
+
+/** What the plan's header says to do next. */
+function planningHint(unread: number, editable: boolean): string | undefined {
+  if (!editable) return "Read-only here: plans are drawn in archdoc view.";
+  if (unread)
+    return `${unread} edit${unread === 1 ? "" : "s"} your agent hasn't seen: Send to agent when you want its review.`;
+  return undefined;
 }

@@ -1,13 +1,13 @@
 ---
 name: archdoc
-description: Use at the start of every coding task in a repository that has an .archdoc/ directory, before searching or reading code. Finds where the change belongs in the architecture model and what it affects (consumers, actors, journeys, owners, rules). Also use after editing, to check the change and keep the model true; when handed a bug, issue, error, or stack trace to explain or fix, to triage it to its root cause and record it; in a repository with no .archdoc/ yet, to start a model with archdoc init, including when asked to figure out, explain, map, or document the system's architecture; and when the user asks to see, show, view, or open the architecture or the model, to open the explorer in their browser.
+description: Use at the start of every coding task in a repository that has an .archdoc/ directory, before searching or reading code. Finds where the change belongs in the architecture model and what it affects (consumers, actors, journeys, owners, rules). Also use after editing, to check the change and keep the model true; when handed a bug, issue, error, or stack trace to explain or fix, to triage it to its root cause and record it; when asked to plan, design, or think through a change or feature before building it, to plan it with the user on the explorer's map; in a repository with no .archdoc/ yet, to start a model with archdoc init, including when asked to figure out, explain, map, or document the system's architecture; and when the user asks to see, show, view, or open the architecture or the model, to open the explorer in their browser.
 ---
 
 # Working in a repository with an ArchDoc model
 
 `.archdoc/` holds the architecture the team agreed on: who uses the system (actors), what it's made of (elements, each mapped to code paths), how people use it (journeys), and the data it sends and stores. People own it. It's the fastest way to find where code lives and what a change affects, so start with it, before you grep.
 
-Nine MCP tools, one per question. Use them, not the CLI. Handed a bug, even one you're asked to fix? Start with `archdoc_triage`, before you read the code ([below](#a-bug-triage-it-to-its-root-cause)).
+Ten MCP tools, one per question. Use them, not the CLI. Handed a bug, even one you're asked to fix? Start with `archdoc_triage`, before you read the code ([below](#a-bug-triage-it-to-its-root-cause)). Asked to plan or design a change? Start with `archdoc_plan`, not a markdown plan ([below](#a-change-to-design-plan-it-with-the-user)).
 
 The ArchDoc MCP server starts with the session through `npx`, which takes a few seconds the first time, so its tools may not be in your tool list yet, or may be listed by name only (`mcp__plugin_archdoc_archdoc__archdoc_context` and the like). If you don't see them, search your tools for "archdoc" and load them, and if the server is still starting, wait and search again. Run the CLI instead only when no ArchDoc MCP server is configured at all; each command prints the same answer as its tool.
 
@@ -26,6 +26,7 @@ The ArchDoc MCP server starts with the session through `npx`, which takes a few 
 | `archdoc_check` | What's wrong or stale, and what does my change do? With `done: true`: is a new model done? | `archdoc check --base main`, `--done` |
 | `archdoc_seal` | I checked these facts against their code. | `archdoc seal <fact> --by agent:<name>` |
 | `archdoc_triage` | I've been handed a bug: where does it start, and how do I record it? | `archdoc triage start bug.txt` (or `-`) |
+| `archdoc_plan` | The user wants to design a change with me before it's built. | `archdoc plan start <idea>`, `wait`, `read`, `respond`, `task` |
 | `archdoc_init` | There's no model yet. | `archdoc init` |
 
 ## A change: context, edit, check, seal
@@ -115,7 +116,20 @@ fix: { summary: Pass amount_cents through unchanged., link: https://github.com/a
 4. **Check it** with `archdoc_check`, which checks records too: unknown elements and journeys, stale code references, and what the status needs. A hop the model doesn't declare is drift you found while debugging: say so, and add it to the model if the code is right. `archdoc_triage` with only `id`, or `archdoc_show` with the ID, shows it as the explorer will.
 5. **Commit the record with the fix.** The PR comment then says which bug the change fixes, or whose root cause it found.
 
-`archdoc_context` on a task lists the open records on what it touches, as known bugs, and `archdoc_triage` with `list: true` lists them all. Traces from before 0.8 (`.archdoc/traces/`) still load; `archdoc triage migrate` moves them.
+`archdoc_context` on a task lists the open records on what it touches, as known bugs, and `archdoc_triage` with `list: true` lists them all. Traces from before 0.8 (`.archdoc/traces/`) aren't read since 0.9: `archdoc triage migrate` moves them.
+
+## A change to design: plan it with the user
+
+When the user wants to plan, design, or think through a change or a feature before it's built, don't write a plan as a markdown file for them to skim. Plan it with them on the model: they sketch the change on the explorer's map, with the intent behind each part, and you review it against the code, suggest, and ask until it's solid. The plan is saved in `.archdoc/plans/<id>.yaml`, detailed enough to carry out.
+
+1. **Start the plan** with the idea as they put it: `archdoc_plan` with `action: start`, `goal`, and `paths` if you know the files (CLI: `archdoc plan start <idea>`). It writes the plan as `drafting`, with the parts of the model the idea touches as its scope.
+2. **Open the Plan tab for them**: run `archdoc view --detach --watch --open` yourself (it returns with the URL; don't hand them the command), then point them to Build, then Plan. Tell them how to sketch: double-click the map to add an element (inside an open box to put it there), drag from a box's right edge to another box for an arrow, New sequence to click through a flow box by box, and click a box to change or remove it. Every element, arrow, change, and step needs its intent: what they mean it to do. Then they press Send to agent. The sketch is theirs: don't draw changes or sequences before they send it, though a note with what you found in the code helps.
+3. **Wait for it**: `action: wait` (`archdoc plan wait <id>`). It returns when they send it, with what they changed since your last read first. `action: read` reads it any time.
+4. **Review every item against the code**: `archdoc_context` on what each one touches, and the plan's own check (missing intent, changes that can't be made, what the plan would break, the journeys and actors it reaches, and other repos). Answer with `action: respond` and `ops`: a note pinned to an item (`kind: insight` for what you found, `question` for what they need to decide, `risk` for what could go wrong), a reply to theirs, and suggested changes and steps for what's missing or wrong. Your changes and steps arrive as suggestions; they accept or dismiss them. Never change, accept, or drop their items: suggest beside them, or say why in a note. Tell them what you found in a sentence or two; the detail is on the map.
+5. **Repeat 3 and 4** until nothing's open: no question unanswered, no suggestion waiting, every item with its intent, and the check clean. Ask before changing a critical journey. They press Mark ready.
+6. **Write the tasks** that carry it out (`list: tasks`), each small enough for one commit, with the changes and sequences it carries out (`from`), its files, its tests, and what comes first (`after`). Then carry them out in order, making each change to the model with `archdoc_edit` as its code lands, and set each task's status as you go (`action: task`, `archdoc plan task <id> t1 --status done`): the first sets the plan `executing`, the last sets it `done`. Stop and ask only when `archdoc_check` fails or a task would change a critical journey.
+
+`archdoc_check` checks open plans too, and while one is being carried out, says which changes the model doesn't show yet. A plan is never part of the model.
 
 ## No model yet: init, then make it true
 

@@ -200,7 +200,7 @@ function describe(op: EditOp): string {
     case "rename":
       return `rename ${op.id} -> ${op.to}`;
     case "add":
-      return `add ${op.type} ${op.id}`;
+      return `add ${op.type ?? "element"} ${op.id}`;
     default:
       return `${op.op} ${op.id}`;
   }
@@ -444,7 +444,9 @@ class Editor {
     }
     switch (type) {
       case "element": {
-        const own = this.stripNamespace(id);
+        // ledger.webhooks in namespace ledger goes inside an element named ledger, when there is one.
+        const rawParent = id.includes(".") ? id.slice(0, id.lastIndexOf(".")) : undefined;
+        const own = rawParent && this.index.elements.has(rawParent) ? id : this.stripNamespace(id);
         const dot = own.lastIndexOf(".");
         const key = dot === -1 ? own : own.slice(dot + 1);
         checkKey(key);

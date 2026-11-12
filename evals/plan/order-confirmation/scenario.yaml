@@ -1,0 +1,25 @@
+# The person wants an order confirmation email. Their sketch has the
+# browser send it (the API should, once the order is saved and charged), a
+# sequence that sends it before the charge, an arrow with no intent, and an
+# unrelated removal of the product cache that the browse journey needs.
+stage: review
+fixture: ts-monorepo
+goal: Email the shopper an order confirmation after checkout
+expected:
+  flaws:
+    - id: browser-sends-email
+      on: [c2]
+      # A fix moves the call to the API: an arrow from api.orders (or the API) to the mailer.
+      fix: { use: { from: [shop.api.orders, shop.api], to: [shop.mailer] } }
+      words: "browser|client|front|credential|secret|key|web app|storefront"
+    - id: email-before-charge
+      on: [s1, "s1#4"]
+      words: "before|order|charg|fail|after"
+    - id: missing-intent
+      on: [c3]
+      words: "intent|why|what.*for"
+    - id: removes-cache
+      on: [c4]
+      words: "cache|browse|product|scope|unrelated|journey"
+  # Fine as drawn: a risk or question here is a false alarm.
+  sound: [c1]

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -154,5 +154,52 @@ describe("view --detach", () => {
     const r = await detached(tmp);
     expect(r.code).toBe(1);
     expect(r.err).toContain("No ArchDoc model at .");
+  });
+});
+
+describe("view server plans", () => {
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+    fetch(`${server?.url}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+
+  it("starts a plan and applies the person's edits, as unread for the agent", async () => {
+    server = await startViewServer({ target: ".", cwd: repo, webDir: web });
+    const payload = (await (await fetch(`${server.url}/api/model`)).json()) as {
+      editable: boolean;
+    };
+    expect(payload.editable).toBe(true);
+    const started = await post("/api/plans", { title: "Add search", goal: "Let people search" });
+    expect(started.status).toBe(200);
+    const { id } = (await started.json()) as { id: string };
+    expect(id).toBe("add-search");
+    const edited = await post(`/api/plans/${id}`, {
+      ops: [{ op: "put", list: "notes", item: { text: "Start small" } }],
+    });
+    expect(await edited.json()).toMatchObject({ ids: ["n1"] });
+    const text = await readFile(join(repo, ".archdoc", "plans", `${id}.yaml`), "utf8");
+    expect(text).toContain("what: added");
+    const plans = (await (await fetch(`${server.url}/api/model`)).json()) as {
+      plans: { path: string }[];
+    };
+    expect(plans.plans.map((p) => p.path)).toEqual([".archdoc/plans/add-search.yaml"]);
+  });
+
+  it("refuses another site, anything but JSON, and edits against a stale plan", async () => {
+    server = await startViewServer({ target: ".", cwd: repo, webDir: web });
+    const op = { ops: [{ op: "set", title: "Search" }] };
+    expect(
+      (await post("/api/plans/add-search", op, { origin: "https://evil.example" })).status,
+    ).toBe(403);
+    const form = await fetch(`${server.url}/api/plans/add-search`, {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify(op),
+    });
+    expect(form.status).toBe(415);
+    expect((await post("/api/plans/add-search", { ...op, base: "old text" })).status).toBe(409);
+    expect((await fetch(`${server.url}/api/plans/add-search`)).status).toBe(405);
   });
 });

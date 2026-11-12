@@ -31,12 +31,12 @@ const STACK = [
 ].join("\n");
 
 describe("archdoc triage list and show", () => {
-  it("lists Triage records, and still answers archdoc trace list", async () => {
+  it("lists Triage records, and archdoc trace is gone", async () => {
     const line =
       "report-false-data-changes · fixed (high) · The PR report says data changed when it didn't · review-ai-change#5 (.archdoc/triage/report-false-data-changes.yaml)";
     expect((await run(repo, "triage", "list")).out).toContain(line);
     expect((await run(repo, "triage", "list", "--status", "open-all")).out).not.toContain(line);
-    expect((await run(repo, "trace", "list")).out).toContain(line);
+    await expect(run(repo, "trace", "list")).rejects.toThrow(/unknown command/);
   });
 
   it("shows a trace through archdoc show", async () => {
