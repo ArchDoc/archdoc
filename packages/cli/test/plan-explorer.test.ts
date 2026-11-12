@@ -81,18 +81,27 @@ async function fitView() {
   }
 }
 
-/** Drags an arrow from one box's right edge to another's left edge. */
+/**
+ * Drags an arrow from one box's right edge to another's left edge, until the
+ * arrow's form opens: on a slow machine the map may still be settling.
+ */
 async function drawArrow(from: string, to: string) {
-  await fitView();
-  // hover checks nothing covers the handle, so the drag starts on it, not on the map.
-  await node(from).locator(".react-flow__handle-right").hover();
-  await page.mouse.down();
-  const target = node(to).locator(".react-flow__handle-left");
-  const b = await target.boundingBox();
-  if (!b) throw new Error(`No handle on ${to}`);
-  await page.mouse.move(b.x + b.width / 2 - 30, b.y + b.height / 2, { steps: 10 });
-  await target.hover();
-  await page.mouse.up();
+  const form = page.getByText("New arrow");
+  for (let attempt = 0; attempt < 4 && !(await form.isVisible()); attempt++) {
+    await fitView();
+    await page.waitForTimeout(300 * (attempt + 1));
+    // hover checks nothing covers the handle, so the drag starts on it, not on the map.
+    await node(from).locator(".react-flow__handle-right").hover();
+    await page.mouse.down();
+    const target = node(to).locator(".react-flow__handle-left");
+    const b = await target.boundingBox();
+    if (!b) throw new Error(`No handle on ${to}`);
+    await page.mouse.move(b.x + b.width / 2 - 30, b.y + b.height / 2, { steps: 10 });
+    await target.hover();
+    await page.waitForTimeout(100);
+    await page.mouse.up();
+    await form.waitFor({ timeout: 2_000 }).catch(() => undefined);
+  }
 }
 
 /** Clicks a box near its top right, clear of its handles and its label's links. */
@@ -132,6 +141,12 @@ beforeAll(async () => {
   server = await startViewServer({ target: ".", cwd, webDir: web, watch: true });
   browser = await chromium.launch({ executablePath, args: ["--no-sandbox"] });
   page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  // ARCHDOC_E2E_SLOW=4 runs the page as on a CPU four times slower, as CI's can be.
+  const slow = Number(process.env.ARCHDOC_E2E_SLOW ?? 0);
+  if (slow > 1)
+    await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", {
+      rate: slow,
+    });
 }, 180_000);
 
 afterAll(async () => {
