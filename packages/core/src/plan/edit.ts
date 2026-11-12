@@ -1,5 +1,6 @@
 import type {
   PlanChangeSpec,
+  PlanIntentSpec,
   PlanNoteKind,
   PlanNoteSpec,
   PlanSequenceSpec,
@@ -14,18 +15,20 @@ import { parseForEdit, patchYaml } from "../edit/patch.js";
 import { type Plan, parsePlan } from "./plan.js";
 
 /** A list of items in a plan. */
-export type PlanList = "changes" | "sequences" | "notes" | "tasks";
+export type PlanList = "intents" | "changes" | "sequences" | "notes" | "tasks";
 
 /**
  * One change to a plan file, by item ID, as the explorer and the agent make
  * them. Every op changes only its own lines.
  */
 export type PlanEditOp =
-  /** Adds an item, or replaces the one with its ID. Without an ID, it gets the next free one (c3, s2, n4, t1). */
+  /** Adds an item, or replaces the one with its ID. Without an ID, it gets the next free one (i1, c3, s2, n4, t1). */
   | {
       op: "put";
       list: PlanList;
-      item: Partial<PlanChangeSpec | PlanSequenceSpec | PlanNoteSpec | PlanTaskSpec> &
+      item: Partial<
+        PlanIntentSpec | PlanChangeSpec | PlanSequenceSpec | PlanNoteSpec | PlanTaskSpec
+      > &
         Record<string, unknown>;
     }
   /** Removes an item, or a step (s1#2). */
@@ -44,7 +47,7 @@ export type PlanEditOp =
   | { op: "dismiss"; id: string }
   /** Replies to a note. */
   | { op: "reply"; note: string; text: string; kind?: PlanNoteKind | undefined }
-  /** Resolves (or reopens) a note. */
+  /** Resolves (or reopens) a note, or settles an intent. */
   | { op: "resolve"; note: string; resolved?: boolean | undefined }
   /** Moves an item on the map. Not counted as a change to review. */
   | { op: "move"; id: string; at: { x: number; y: number } }
@@ -83,7 +86,13 @@ export interface EditPlanResult {
 
 class PlanEditError extends Error {}
 
-const PREFIX: Record<PlanList, string> = { changes: "c", sequences: "s", notes: "n", tasks: "t" };
+const PREFIX: Record<PlanList, string> = {
+  intents: "i",
+  changes: "c",
+  sequences: "s",
+  notes: "n",
+  tasks: "t",
+};
 
 /**
  * Applies edits to a plan file and returns its new text, changing only the
@@ -165,8 +174,8 @@ class PlanEditor {
         return `replied to ${op.note}`;
       }
       case "resolve": {
-        const note = this.find("notes", op.note);
-        if (!note) throw new PlanEditError(`No note ${op.note}.`);
+        const note = this.find("notes", op.note) ?? this.find("intents", op.note);
+        if (!note) throw new PlanEditError(`No note or intent ${op.note}.`);
         if (op.resolved === false) note.map.delete("resolved");
         else note.map.set("resolved", true);
         this.track(op.note, "edited");
@@ -175,6 +184,7 @@ class PlanEditor {
       case "move": {
         const [seqId] = op.id.split("#");
         const item =
+          this.find("intents", op.id) ??
           this.find("changes", op.id) ??
           this.find("notes", op.id) ??
           (seqId ? this.find("sequences", seqId) : undefined);
@@ -237,7 +247,8 @@ class PlanEditor {
   }
 
   private put(name: PlanList, item: Record<string, unknown>): string {
-    if (!PREFIX[name]) throw new PlanEditError(`list is one of changes, sequences, notes, tasks.`);
+    if (!PREFIX[name])
+      throw new PlanEditError(`list is one of intents, changes, sequences, notes, tasks.`);
     const given = typeof item.id === "string" && item.id ? item.id : undefined;
     const existing = given ? this.find(name, given) : undefined;
     const id = given ?? this.nextId(name);
@@ -272,7 +283,7 @@ class PlanEditor {
       this.track(id, "removed");
       return `removed ${id}`;
     }
-    for (const name of ["changes", "sequences", "notes", "tasks"] as const) {
+    for (const name of ["intents", "changes", "sequences", "notes", "tasks"] as const) {
       const found = this.find(name, id);
       if (!found) continue;
       (this.list(name) as YAMLSeq).items.splice(found.index, 1);

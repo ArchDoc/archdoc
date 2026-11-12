@@ -2428,6 +2428,22 @@
           "required": ["source"],
           "additionalProperties": false,
           "description": "Where a fact came from. Absent means declared by a person."
+        },
+        "sent": {
+          "description": "How many times the person has sent the record to the agent from the explorer",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "received": {
+          "description": "How many of those sends the agent has picked up (archdoc triage wait)",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "ask": {
+          "description": "What the person asked the agent the last time they sent it, such as fix it, or a question",
+          "type": "string"
         }
       },
       "required": ["triage", "title", "symptom"],
@@ -3273,6 +3289,22 @@
           "required": ["source"],
           "additionalProperties": false,
           "description": "Where a fact came from. Absent means declared by a person."
+        },
+        "sent": {
+          "description": "How many times the person has sent the record to the agent from the explorer",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "received": {
+          "description": "How many of those sends the agent has picked up (archdoc triage wait)",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "ask": {
+          "description": "What the person asked the agent the last time they sent it, such as fix it, or a question",
+          "type": "string"
         }
       },
       "required": ["trace", "title", "symptom"],
@@ -3343,6 +3375,54 @@
           "additionalProperties": false,
           "description": "The parts of the model the goal touches, as the plan started"
         },
+        "intents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+                "description": "The intent's ID in this plan, such as i1"
+              },
+              "on": {
+                "description": "The box the person clicked in: a model ID (web), or something the plan adds. Omit for the system as a whole.",
+                "type": "string"
+              },
+              "at": {
+                "description": "Where in that box, as percentages of its width and height (0-100), or on the map without on",
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y"],
+                "additionalProperties": false
+              },
+              "by": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Who wrote it: human:@handle, or agent:<name> such as agent:claude-code"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What the person wants there, in their words"
+              },
+              "resolved": {
+                "description": "Settled: the person is happy with how the plan carries it out, or dropped it",
+                "type": "boolean"
+              }
+            },
+            "required": ["id", "text"],
+            "additionalProperties": false,
+            "description": "What the person wants, pinned where they clicked on the map"
+          }
+        },
         "changes": {
           "type": "array",
           "items": {
@@ -3356,6 +3436,14 @@
               "intent": {
                 "type": "string",
                 "description": "Why: what the person means this to do. Every change and step needs one."
+              },
+              "for": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                },
+                "description": "The person's intents it carries out, by ID (i1): how the agent answers an intent"
               },
               "by": {
                 "type": "string",
@@ -3497,6 +3585,14 @@
               "intent": {
                 "type": "string",
                 "description": "Why: what the person means this to do. Every change and step needs one."
+              },
+              "for": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                },
+                "description": "The person's intents it carries out, by ID (i1): how the agent answers an intent"
               },
               "by": {
                 "type": "string",
@@ -3776,7 +3872,7 @@
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
               },
               "on": {
-                "description": "What it's about: a change or sequence ID (c1), a step (s1#2), or a model ID (web.journey-view). Omit for the canvas.",
+                "description": "What it's about: an intent (i1), a change or sequence ID (c1), a step (s1#2), or a model ID (web.journey-view). Omit for the canvas.",
                 "type": "string"
               },
               "at": {
@@ -3907,7 +4003,7 @@
               "id": {
                 "type": "string",
                 "minLength": 1,
-                "description": "The item: a change, sequence, step (s1#2), or note"
+                "description": "The item: an intent, change, sequence, step (s1#2), or note"
               },
               "what": {
                 "type": "string",

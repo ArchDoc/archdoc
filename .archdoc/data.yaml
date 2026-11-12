@@ -112,6 +112,9 @@ data:
       reported: { type: json, description: "by, at, link" }
       hypotheses: { type: json, description: "Leads followed: claim, verdict (open, ruled-out, confirmed), evidence, note" }
       root-cause: { type: json, description: "summary, step" }
+      sent: { type: int, description: How many times the person sent it to the agent from the explorer }
+      received: { type: int, description: How many of those the agent has picked up with archdoc triage wait }
+      ask: { type: string, description: "What the person asked the last time they sent it, such as fix it" }
 
 
   Seal:
@@ -165,7 +168,7 @@ data:
     provenance: { source: suggested, by: agent:claude-code }
   PlanFile:
     kind: entity
-    description: "A plan in .archdoc/plans/: a change designed with the agent before it's built, as changes to the model (archdoc edit ops), sequences of interactions, and notes, each with the person's intent, the agent's suggestions until the person accepts them, what the person changed since the agent last read it, and, once agreed, the tasks that carry it out. Started by archdoc plan start and archdoc_plan, drawn in the explorer's Plan tab, checked by archdoc check; never part of the model."
+    description: "A plan in .archdoc/plans/: a change designed with the agent before it's built. The person's intents (what they want, pinned in the box they clicked on the map), the agent's changes to the model (archdoc edit ops) and sequences of interactions that carry each intent out, and notes, each with its intent; the agent's suggestions until the person accepts them, what the person changed since the agent last read it, and, once agreed, the tasks that carry it out. Started by archdoc plan start and archdoc_plan, written in the explorer's Plan tab, checked by archdoc check; never part of the model."
     fields:
       plan: { type: string }
       title: { type: string }
@@ -173,12 +176,13 @@ data:
       goal: { type: string, description: "The idea, as the person put it" }
       by: { type: string }
       scope: { type: json, description: "The elements, journeys, data, and actors the goal touches, as the plan started" }
-      changes: { type: json, description: "Each one archdoc edit op (add, set, remove, rename, use) with id, intent, by, status (proposed, suggested, dismissed), and where it sits on the map" }
+      changes: { type: json, description: "Each one archdoc edit op (add, set, remove, rename, use) with id, intent, the intents it carries out (for), by, status (proposed, suggested, dismissed), and where it sits on the map" }
       sequences: { type: json, description: "New journeys, or new steps for one the model has, each step with its intent" }
       notes: { type: json, description: "Notes, insights, questions, risks, and answers pinned to an item, with replies" }
       tasks: { type: json, description: "title, from (the changes it carries out), files, tests, after, status" }
       unread: { type: json, description: "What the person changed since the agent last read it: id, what" }
       sent: { type: integer, description: How many times the person sent it to the agent }
+      intents: { type: json, description: "What the person wants, in their words: id (i1), the box it's on, where in it, text, and whether it's settled" }
     provenance: { source: suggested, by: agent:claude-code }
   PlanEdit:
     kind: message
@@ -187,4 +191,11 @@ data:
       ops: { type: json }
       base: { type: string, description: The plan's text as the page last read it; a different one on disk is refused as stale }
       by: { type: string }
+    provenance: { source: suggested, by: agent:claude-code }
+  BugSent:
+    kind: message
+    description: "A bug the person sends to the agent from the explorer's Triage tab: the pasted bug and what they want (find the root cause, fix it), or a record's ID to send again with what they ask now."
+    fields:
+      symptom: { type: string, description: "The bug as pasted, for a new record" }
+      ask: { type: string, description: What the person wants from the agent this time }
     provenance: { source: suggested, by: agent:claude-code }

@@ -161,7 +161,7 @@ export function ChangesList(props: {
   if (!c) {
     return (
       <nav className="side-list changes" aria-label="Changes">
-        <h2 className="side-title">Changes</h2>
+        <h2 className="side-title">Diff</h2>
         <p className="empty">{props.note ?? "Pick a branch to compare with."}</p>
       </nav>
     );
@@ -211,13 +211,7 @@ export function ChangesList(props: {
     ) : null;
   return (
     <nav className="side-list changes" aria-label="Changes">
-      <h2 className="side-title">
-        {c.head ?? "Working tree"} since {c.ref}
-      </h2>
-      <p className="muted change-scope">
-        Read from {c.code.files.length} changed file{c.code.files.length === 1 ? "" : "s"}, into{" "}
-        {c.head ?? "the working tree"}'s model.
-      </p>
+      <h2 className="side-title">Diff</h2>
       <p className={`verdict verdict-${summary.verdict}`}>{summary.headline.join(" · ")}</p>
       {blocking.length ? (
         <section className="change-group">

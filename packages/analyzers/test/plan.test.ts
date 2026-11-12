@@ -155,4 +155,51 @@ describe("archdoc plan", () => {
     await planTaskAnswer(where(), { id, task: "t1", status: "done" });
     expect((await spec(id)).status).toBe("done");
   });
+
+  it("takes the person's intents, and the agent's changes for them, never the agent's intents", async () => {
+    const started = await planStartAnswer(where(), {
+      goal: "Log receipts\nKeep a copy of each",
+      by: "human:@dana",
+    });
+    const pid = started.id ?? "";
+    expect((await spec(pid)).title).toBe("Log receipts");
+    await planEditAnswer(where(), {
+      id: pid,
+      by: "human:@dana",
+      track: true,
+      ops: [
+        {
+          op: "put",
+          list: "intents",
+          item: { on: "api", at: { x: 50, y: 50 }, text: "Keep a copy" },
+        },
+      ],
+    });
+    const refused = await planRespondAnswer(where(), {
+      id: pid,
+      by: "agent:claude",
+      ops: [{ op: "put", list: "intents", item: { text: "Mine" } }],
+    });
+    expect(refused.ok).toBe(false);
+    const ok = await planRespondAnswer(where(), {
+      id: pid,
+      by: "agent:claude",
+      ops: [
+        {
+          op: "put",
+          list: "changes",
+          item: {
+            intent: "Stores copies",
+            for: ["i1"],
+            add: { id: "receipts", kind: "datastore" },
+          },
+        },
+      ],
+    });
+    expect(ok.ok).toBe(true);
+    expect((await spec(pid)).changes[0]).toMatchObject({ for: ["i1"], status: "suggested" });
+    expect((await planReadAnswer(where(), { id: pid })).text).toMatch(
+      /i1 on api \(carried out by c1\)/,
+    );
+  });
 });

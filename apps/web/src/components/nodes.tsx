@@ -472,4 +472,34 @@ export function Others({ data }: NodeProps<OthersNode>) {
   );
 }
 
-export const nodeTypes = { card: Card, table: Table, rowtable: RowTable, others: Others };
+export interface PinData extends Record<string, unknown> {
+  id: string;
+  text: string;
+  /** Nothing in the plan carries it out yet. */
+  open: boolean;
+  resolved: boolean;
+  /** Its popover is open. */
+  active: boolean;
+}
+
+export type PinNode = Node<PinData, "pin">;
+
+/** One of the person's intents on the Plan tab's map: a numbered pin where they clicked. */
+export function Pin({ data }: NodeProps<PinNode>) {
+  return (
+    <div
+      className={`intent-pin${data.open ? " is-open" : ""}${data.resolved ? " is-resolved" : ""}${data.active ? " is-active" : ""}`}
+      title={`${data.id}: ${data.text}`}
+    >
+      {data.id.replace(/^i/, "")}
+    </div>
+  );
+}
+
+export const nodeTypes = {
+  card: Card,
+  table: Table,
+  rowtable: RowTable,
+  others: Others,
+  pin: Pin,
+};

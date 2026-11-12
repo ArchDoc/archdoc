@@ -25,11 +25,12 @@ import { Lanes } from "./components/Lanes.js";
 import { Overview } from "./components/Overview.js";
 import type { PayloadEntry } from "./components/Payload.js";
 import {
+  IntentPopover,
   NEW_PLAN,
-  type PlanDraft,
   PlanHead,
   PlanList,
   PlanPanel,
+  type PlanPop,
   PlanStart,
 } from "./components/Plan.js";
 import { ChangesList, DataList, dataGroups, JourneyList, SearchBox } from "./components/Sidebar.js";
@@ -56,7 +57,7 @@ import {
 } from "./graph/graph.js";
 import { type GroupBy, type Grouping, groupLandscape } from "./graph/groups.js";
 import { type Compare, compareCode } from "./model/compare.js";
-import { planMap, readPlans, refOf, writePlan } from "./model/plans.js";
+import { planMap, readPlans, writePlan } from "./model/plans.js";
 import { actorLabel, journeyLanes, journeysByImportance } from "./model/stories.js";
 import { landingTab, type Section, sectionOf, sections } from "./model/tabs.js";
 import {
@@ -286,7 +287,8 @@ function Explorer({
 
   // The open plan, what's being drawn on it, and the sequence stepped through on the map.
   const [planId, setPlanId] = useState<string | undefined>(initial.plan);
-  const [planDraft, setPlanDraft] = useState<PlanDraft>();
+  // The popover where the person clicked on the plan's map.
+  const [planPop, setPlanPop] = useState<PlanPop>();
   const [planSeq, setPlanSeq] = useState<string>();
   const [planAt, setPlanAt] = useState(0);
   const [planBusy, setPlanBusy] = useState(false);
@@ -334,7 +336,7 @@ function Explorer({
   }, [planView]);
   const openPlan = useCallback((id: string) => {
     setPlanId(id);
-    setPlanDraft(undefined);
+    setPlanPop(undefined);
     setPlanSeq(undefined);
     setPlanAt(0);
     setPlanError(undefined);
@@ -586,18 +588,6 @@ function Explorer({
   // A box clicked on the map is already in view: select it without moving the map.
   const selectHere = useCallback(
     (key: string | undefined) => {
-      // Drawing a sequence: each box clicked is the next hop.
-      if (tab === "plan" && planDraft?.kind === "sequence") {
-        const ref = key ? refOf(key) : undefined;
-        if (!ref) return;
-        if (!planDraft.cursor) return setPlanDraft({ ...planDraft, cursor: ref });
-        if (ref === planDraft.cursor) return;
-        return setPlanDraft({
-          ...planDraft,
-          cursor: ref,
-          steps: [...planDraft.steps, { from: planDraft.cursor, to: ref, action: "", intent: "" }],
-        });
-      }
       if (
         key?.startsWith("element:") ||
         key?.startsWith("actor:") ||
@@ -608,7 +598,7 @@ function Explorer({
       }
       select(key);
     },
-    [select, tab, planDraft],
+    [select],
   );
 
   const pick = useCallback(
@@ -692,7 +682,8 @@ function Explorer({
         e.preventDefault();
         search.current?.focus();
       } else if (!typing && e.key === "Escape") {
-        select(undefined);
+        if (planPop) setPlanPop(undefined);
+        else select(undefined);
       } else if (!typing && tab === "journeys" && journey && e.key === "ArrowRight") {
         go(at + 1);
       } else if (!typing && tab === "journeys" && journey && e.key === "ArrowLeft") {
@@ -704,7 +695,7 @@ function Explorer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tab, journey, at, go, select, traceCheck, traceStep]);
+  }, [tab, journey, at, go, select, traceCheck, traceStep, planPop]);
 
   const lanes = useMemo(
     () => (journey ? journeyLanes(model, journey, interactions, landscape) : undefined),
@@ -764,29 +755,54 @@ function Explorer({
       onShowAll={(id) => setShowAll((prev) => new Set([...prev, id]))}
       compare={compare ?? (planView ? { base: model, diff: planView.diff } : undefined)}
       edit={
-        planView && planning?.editable && !planDraft
+        planView
           ? {
-              onAdd: (parent) => {
-                setSelected(undefined);
-                setPlanDraft({ kind: "element", parent });
+              onPoint: (p) => {
+                // Read-only: a box only shows what the plan does there; a pin shows its intent.
+                if (!planning?.editable && !p.intent) return;
+                setPlanSeq(undefined);
+                setPlanError(undefined);
+                setPlanPop(
+                  p.intent
+                    ? { intent: p.intent, node: p.node, flow: p.flow }
+                    : { node: p.node, at: p.at, flow: p.flow },
+                );
               },
-              onConnect: (source, target) => {
-                setSelected(undefined);
-                setPlanDraft({ kind: "use", from: source, to: target });
-              },
+              popover: planPop
+                ? {
+                    anchor: {
+                      flow: planPop.flow,
+                      node: planPop.node,
+                      at: planPop.at ?? planView.pins.find((x) => x.id === planPop.intent)?.at,
+                      intent: planPop.intent,
+                    },
+                    content: (
+                      <IntentPopover
+                        key={`${planPop.intent ?? ""}${planPop.node ?? ""}${planPop.flow?.x ?? ""}`}
+                        map={planView}
+                        pop={planPop}
+                        editable={!!planning?.editable}
+                        busy={planBusy}
+                        onEdit={editPlan}
+                        onClose={() => setPlanPop(undefined)}
+                        onItem={(id) => {
+                          setPlanPop(undefined);
+                          if (planView.plan.spec.sequences.some((q) => q.id === id)) {
+                            setPlanSeq(id);
+                            setPlanAt(0);
+                          }
+                        }}
+                      />
+                    ),
+                  }
+                : undefined,
+              onDismiss: () => setPlanPop(undefined),
+              pins: planView.pins,
               suggested: planView.suggested,
               suggestedEdges: planView.suggestedEdges,
               notes: planView.notes,
             }
-          : planView
-            ? {
-                onAdd: () => undefined,
-                onConnect: () => undefined,
-                suggested: planView.suggested,
-                suggestedEdges: planView.suggestedEdges,
-                notes: planView.notes,
-              }
-            : undefined
+          : undefined
       }
       preview={tab === "overview" ? preview : undefined}
       recheck={seals?.facts}
@@ -933,9 +949,17 @@ function Explorer({
         map={triageJourney ? canvas : undefined}
         sequence={sequence}
         onSequence={setSequence}
+        editable={!!planning?.editable}
+        onSent={async () => {
+          await planning?.reload();
+        }}
       />
     ) : (
       <TriageStart
+        editable={!!planning?.editable}
+        onSent={(id) => {
+          void planning?.reload().then(() => openTrace(id));
+        }}
         model={model}
         files={files}
         checks={traceState.checks}
@@ -1066,19 +1090,14 @@ function Explorer({
         onPlan={openPlan}
       />
     );
-    const top = systemOf(model);
     main = planView ? (
       <section className="story plan-story" aria-label="Plan">
         <PlanHead
           map={planView}
           editable={!!planning?.editable}
           busy={planBusy}
-          onEdit={(ops) => void editPlan(ops)}
-          hint={
-            planDraft?.kind === "sequence"
-              ? "Click boxes on the map in order: each click is the next hop."
-              : planningHint(planView.plan.spec.unread?.length ?? 0, !!planning?.editable)
-          }
+          onEdit={editPlan}
+          hint={planningHint(planView.plan.spec.unread?.length ?? 0, !!planning?.editable)}
         />
         <div className="story-body">{canvas}</div>
       </section>
@@ -1097,11 +1116,6 @@ function Explorer({
         editable={!!planning?.editable}
         busy={planBusy}
         error={planError}
-        draft={planDraft}
-        onDraft={(d) => {
-          setPlanDraft(d);
-          setPlanError(undefined);
-        }}
         selected={selected}
         onSelect={(key) => {
           setSelected(key);
@@ -1117,10 +1131,50 @@ function Explorer({
         at={planAt}
         onAt={setPlanAt}
         onEdit={editPlan}
-        top={top}
+        onPop={(pop) => {
+          setPlanError(undefined);
+          setPlanPop(pop);
+          if (pop.node) setCenterOn(pop.node);
+          else {
+            const node = planView.pins.find((p) => p.id === pop.intent)?.node;
+            if (node) setCenterOn(node);
+          }
+        }}
       />
     ) : undefined;
   } else {
+    const c = changes?.compare;
+    // The same shape as Plan and Triage: a header with what it is, where it stands, and its
+    // controls, over the map.
+    main = (
+      <section className="story diff-story" aria-label="Diff">
+        <header className="story-head">
+          <div className="story-title">
+            <h1>{c ? `${c.head ?? "Working tree"} since ${c.ref}` : "Diff"}</h1>
+            <p className="muted">
+              {c ? (
+                <>
+                  <span className={`triage-status verdict-status-${c.summary.verdict}`}>
+                    {VERDICT_LABEL[c.summary.verdict]}
+                  </span>{" "}
+                  Read from {c.code.files.length} changed file
+                  {c.code.files.length === 1 ? "" : "s"} into {c.head ?? "the working tree"}'s model
+                  · your agent sees the same with archdoc check --base {c.ref}
+                </>
+              ) : (
+                (changes?.note ?? "Pick the branches to compare.")
+              )}
+            </p>
+          </div>
+          {changes ? (
+            <div className="plan-actions">
+              <PairPicker changes={changes} />
+            </div>
+          ) : null}
+        </header>
+        <div className="story-body">{canvas}</div>
+      </section>
+    );
     side = (
       <ChangesList
         compare={changes?.compare}
@@ -1196,7 +1250,6 @@ function Explorer({
               ))}
             </fieldset>
           ) : null}
-          {tab === "changes" && changes ? <PairPicker changes={changes} /> : null}
           <SearchBox ref={search} model={model} onPick={pick} />
           {watch ? (
             <span
@@ -1468,17 +1521,17 @@ function Splash({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** The system element new top-level parts of a plan go in, when the model has exactly one. */
-function systemOf(model: Model): string | undefined {
-  const systems = [...model.elements.values()].filter(
-    (e) => e.depth === 0 && e.spec.kind === "system",
-  );
-  return systems.length === 1 ? systems[0]?.id : undefined;
-}
+/** The Diff header's verdict, in the PR comment's terms. */
+const VERDICT_LABEL = {
+  blocking: "Blocking",
+  attention: "To check",
+  info: "Touches the model",
+  none: "Nothing to check",
+} as const;
 
 /** What the plan's header says to do next. */
 function planningHint(unread: number, editable: boolean): string | undefined {
-  if (!editable) return "Read-only here: plans are drawn in archdoc view.";
+  if (!editable) return "Read-only here: plans are made in archdoc view.";
   if (unread)
     return `${unread} edit${unread === 1 ? "" : "s"} your agent hasn't seen: Send to agent when you want its review.`;
   return undefined;

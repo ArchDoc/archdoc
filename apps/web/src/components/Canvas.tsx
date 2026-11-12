@@ -15,6 +15,8 @@ import {
   Panel,
   ReactFlow,
   useReactFlow,
+  useStore,
+  useViewport,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -46,6 +48,7 @@ import {
   type UntangledLayout,
 } from "../graph/layout.js";
 import { directRoute } from "../graph/route.js";
+import type { IntentPin } from "../model/plans.js";
 import { actorLabel } from "../model/stories.js";
 import { edgeTypes, type RoutedEdge } from "./edges.js";
 import { Legend, type LegendKind, toneOf } from "./Legend.js";
@@ -54,6 +57,7 @@ import {
   type Emphasis,
   nodeTypes,
   type OthersNode,
+  type PinNode,
   type RowTableNode,
   type Shape,
   type TableNode,
@@ -105,24 +109,86 @@ export interface CanvasProps {
   /** Facts whose code changed since they were sealed, marked on their boxes. */
   recheck?: readonly { element?: string | undefined }[] | undefined;
   /**
-   * The Plan tab draws on the map: double-click to add an element (inside
-   * an open box, or at the top), drag from one box's edge to another for an
-   * arrow. Boxes and arrows the agent suggested are drawn dashed.
+   * The Plan tab: clicking in a box says what the person wants there, in a
+   * popover where they clicked; their intents are pins in the boxes. Boxes
+   * and arrows the agent suggested are drawn dashed.
    */
   edit?: PlanEditing | undefined;
 }
 
+/** Where on the map a plan's popover opens: a point, or a place in a box. */
+export interface PlanAnchor {
+  /** The map's own coordinates. */
+  flow?: { x: number; y: number } | undefined;
+  /** A box (node ID), and where in it as percentages; its middle without them. */
+  node?: string | undefined;
+  at?: { x: number; y: number } | undefined;
+  /** The intent it's about, whose pin is marked. */
+  intent?: string | undefined;
+}
+
 export interface PlanEditing {
-  /** Add an element inside this open box (its node ID), or at the top. */
-  onAdd: (parent: string | undefined) => void;
-  /** An arrow drawn from one box to another, by node ID. */
-  onConnect: (source: string, target: string) => void;
+  /**
+   * A click in a box (its node ID, and where in it as percentages of its
+   * size) or on a pin. Undefined when the map can't be written.
+   */
+  onPoint?:
+    | ((point: {
+        node?: string | undefined;
+        at?: { x: number; y: number } | undefined;
+        flow: { x: number; y: number };
+        intent?: string | undefined;
+      }) => void)
+    | undefined;
+  /** The popover to show, and where. */
+  popover?: { anchor: PlanAnchor; content: React.ReactNode } | undefined;
+  /** Closes the popover: a click on the map outside it. */
+  onDismiss?: (() => void) | undefined;
+  /** The person's intents, pinned in their boxes. */
+  pins?: readonly IntentPin[] | undefined;
   /** Node IDs the agent suggested and the person hasn't accepted. */
   suggested?: ReadonlySet<string> | undefined;
   /** Arrows the agent suggested, as "source|target" node IDs. */
   suggestedEdges?: ReadonlySet<string> | undefined;
   /** Node IDs with notes on them, and how many. */
   notes?: ReadonlyMap<string, number> | undefined;
+}
+
+/** How big an intent's pin is drawn, in map units. */
+const PIN = 22;
+
+/**
+ * A plan's popover, where the person clicked: it follows the map as it pans
+ * and zooms, and stays inside it.
+ */
+function PopoverAt(props: { anchor: PlanAnchor; children: React.ReactNode }) {
+  const { x, y, zoom } = useViewport();
+  const width = useStore((s) => s.width);
+  const height = useStore((s) => s.height);
+  const flow = useReactFlow();
+  const { anchor } = props;
+  let point = anchor.flow;
+  if (!point && anchor.node) {
+    const n = flow.getInternalNode(anchor.node);
+    if (n) {
+      const w = n.width ?? n.measured.width ?? 0;
+      const h = n.height ?? n.measured.height ?? 0;
+      const at = anchor.at ?? { x: 50, y: 50 };
+      point = {
+        x: n.internals.positionAbsolute.x + (at.x / 100) * w,
+        y: n.internals.positionAbsolute.y + (at.y / 100) * h,
+      };
+    }
+  }
+  if (!point) return null;
+  const W = 300;
+  const left = Math.max(8, Math.min(point.x * zoom + x + 10, width - W - 8));
+  const top = Math.max(8, Math.min(point.y * zoom + y + 10, height - 220));
+  return (
+    <div className="intent-popover-at nodrag nopan nowheel" style={{ left, top, width: W }}>
+      {props.children}
+    </div>
+  );
 }
 
 export function Canvas(props: CanvasProps) {
@@ -905,20 +971,50 @@ export function Canvas(props: CanvasProps) {
   }, [steps, at, flow, written]);
 
   const edit = props.edit;
-  const shownNodes = useMemo(
-    () =>
-      edit
-        ? nodes.map((n) => {
-            const classes = [
-              n.className,
-              edit.suggested?.has(n.id) ? "is-suggested" : undefined,
-              edit.notes?.get(n.id) ? "has-plan-notes" : undefined,
-            ].filter(Boolean);
-            return classes.length ? { ...n, className: classes.join(" ") } : n;
-          })
-        : nodes,
-    [nodes, edit],
-  );
+  const shownNodes = useMemo(() => {
+    if (!edit) return nodes;
+    const marked = nodes.map((n) => {
+      const classes = [
+        n.className,
+        edit.suggested?.has(n.id) ? "is-suggested" : undefined,
+        edit.notes?.get(n.id) ? "has-plan-notes" : undefined,
+      ].filter(Boolean);
+      return classes.length ? { ...n, className: classes.join(" ") } : n;
+    });
+    // The person's intents: a pin where they clicked in each box that's drawn.
+    const boxes = new Map(marked.map((n) => [n.id, n]));
+    const active = edit.popover?.anchor.intent;
+    const pins: PinNode[] = [];
+    for (const p of edit.pins ?? []) {
+      const box = p.node ? boxes.get(p.node) : undefined;
+      if (!box) continue;
+      const w = box.width ?? 0;
+      const h = box.height ?? 0;
+      const at = p.at ?? { x: 92, y: 12 };
+      pins.push({
+        id: `pin:${p.id}`,
+        type: "pin",
+        parentId: box.id,
+        position: {
+          x: Math.min(Math.max((at.x / 100) * w, PIN / 2), w - PIN / 2) - PIN / 2,
+          y: Math.min(Math.max((at.y / 100) * h, PIN / 2), h - PIN / 2) - PIN / 2,
+        },
+        width: PIN,
+        height: PIN,
+        selectable: false,
+        draggable: false,
+        zIndex: 1000,
+        data: {
+          id: p.id,
+          text: p.text,
+          open: p.open,
+          resolved: p.resolved,
+          active: active === p.id,
+        },
+      });
+    }
+    return pins.length ? [...marked, ...pins] : marked;
+  }, [nodes, edit]);
   const shownEdges = useMemo(
     () =>
       edit?.suggestedEdges?.size
@@ -938,7 +1034,32 @@ export function Canvas(props: CanvasProps) {
       edges={shownEdges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
-      onNodeClick={(_, node) => {
+      onNodeClick={(e, node) => {
+        // Planning: a click in a box, or on a pin, opens the popover there.
+        if (edit?.onPoint) {
+          const flowAt = flow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+          if (node.type === "pin") {
+            return edit.onPoint({
+              intent: (node as PinNode).data.id,
+              node: node.parentId,
+              flow: flowAt,
+            });
+          }
+          const onControl = (e.target as HTMLElement).closest("button, a, input, select, textarea");
+          if (node.type === "card" && /^(element|actor):/.test(node.id) && !onControl) {
+            const abs = flow.getInternalNode(node.id)?.internals.positionAbsolute;
+            const w = node.width ?? node.measured?.width ?? 0;
+            const h = node.height ?? node.measured?.height ?? 0;
+            const pct = (v: number, size: number) =>
+              size > 0 ? Math.round(Math.min(100, Math.max(0, (v / size) * 100))) : 50;
+            props.onSelect(node.id);
+            return edit.onPoint({
+              node: node.id,
+              at: abs ? { x: pct(flowAt.x - abs.x, w), y: pct(flowAt.y - abs.y, h) } : undefined,
+              flow: flowAt,
+            });
+          }
+        }
         if (node.type === "table") {
           return props.onSelect(`data:${(node as TableNode).data.table.entry}`);
         }
@@ -949,9 +1070,6 @@ export function Canvas(props: CanvasProps) {
         if (g?.id) props.onSelect(g.by === "team" ? `actor:${g.id}` : `domain:${g.id}`);
       }}
       onNodeDoubleClick={(_, node) => {
-        // Planning: double-clicking inside an open box adds an element there.
-        if (edit && node.id.startsWith("element:") && view.expanded.has(node.id.slice(8)))
-          return edit.onAdd(node.id.slice(8));
         // The box a model without a system is drawn as opens to its containers.
         if (node.id.startsWith("system:")) return props.level?.onLevel("containers");
         if (!node.id.startsWith("element:")) return;
@@ -961,33 +1079,23 @@ export function Canvas(props: CanvasProps) {
           props.onTables(el.id);
         } else props.onToggle(node.id.slice(8));
       }}
-      onPaneClick={() => props.onSelect(undefined)}
+      onPaneClick={() =>
+        edit?.popover && edit.onDismiss ? edit.onDismiss() : props.onSelect(undefined)
+      }
       onEdgeMouseEnter={(_, edge) => setHoverEdge(edge.id)}
       onEdgeMouseLeave={() => setHoverEdge(undefined)}
       onNodeMouseEnter={(_, node) => setHoverNode(node.id)}
       onNodeMouseLeave={() => setHoverNode(undefined)}
-      nodesConnectable={!!edit}
-      onConnect={
-        edit ? (c) => c.source !== c.target && edit.onConnect(c.source, c.target) : undefined
-      }
-      zoomOnDoubleClick={!edit}
-      onDoubleClick={
-        edit
-          ? (e) => {
-              // Double-click on the empty map: an element at the top.
-              const on = (e.target as HTMLElement).closest(
-                ".react-flow__node, .react-flow__edge, .react-flow__panel, .react-flow__controls, .react-flow__minimap",
-              );
-              if (!on) edit.onAdd(undefined);
-            }
-          : undefined
-      }
+      nodesConnectable={false}
       elementsSelectable={false}
       colorMode="system"
       minZoom={0.1}
       proOptions={{ hideAttribution: true }}
     >
       <Background gap={24} size={1} />
+      {edit?.popover ? (
+        <PopoverAt anchor={edit.popover.anchor}>{edit.popover.content}</PopoverAt>
+      ) : null}
       <Controls showInteractive={false} position="bottom-left" />
       <Panel position="top-center">
         <MapControls

@@ -1,7 +1,14 @@
 import type { PlanUnreadSpec } from "@archdoc/spec";
 import { formatDiagnostic } from "../diagnostics.js";
 import type { PlanCheck } from "../plan/check.js";
-import { changeOp, describeChange, isAgreed, type Plan, planStatusOf } from "../plan/plan.js";
+import {
+  changeOp,
+  describeChange,
+  isAgreed,
+  openIntents,
+  type Plan,
+  planStatusOf,
+} from "../plan/plan.js";
 
 // Plans as text, shared by `archdoc plan` and the archdoc_plan MCP tool.
 
@@ -20,9 +27,11 @@ export function formatPlanList(checks: readonly PlanCheck[]): string {
       const o = c.open;
       const parts = [
         c.status,
+        ...(c.plan.spec.intents.length ? [plural(c.plan.spec.intents.length, "intent")] : []),
         plural(c.plan.spec.changes.length, "change"),
         plural(c.plan.spec.sequences.length, "sequence"),
       ];
+      if (o.intents) parts.push(`${plural(o.intents, "intent")} to work out`);
       if (o.questions) parts.push(plural(o.questions, "open question"));
       if (o.suggestions) parts.push(plural(o.suggestions, "suggestion"));
       if (o.unread) parts.push(`${o.unread} unread`);
@@ -67,12 +76,30 @@ export function formatPlan(
     for (const u of unread) out.push(`  ${u.what} ${u.id}${describeItem(plan, u.id)}`);
   }
 
+  if (s.intents.length) {
+    const open = new Set(openIds(check));
+    out.push("", "Intents (what the person wants, where they clicked):");
+    for (const n of s.intents) {
+      const carried = [...s.changes, ...s.sequences]
+        .filter((x) => x.status !== "dismissed" && x.for?.includes(n.id))
+        .map((x) => x.id);
+      const state = n.resolved
+        ? "settled"
+        : open.has(n.id)
+          ? "to work out"
+          : `carried out by ${carried.join(", ")}`;
+      out.push(`  ${n.id}${n.on ? ` on ${n.on}` : " on the system"} (${state}): ${n.text.trim()}`);
+    }
+  }
+
   // Once it's agreed, each change as the archdoc edit op that makes it.
   const building = ["ready", "executing"].includes(planStatusOf(s));
   if (s.changes.length) {
     out.push("", "Changes:");
     for (const c of s.changes) {
-      out.push(`  ${c.id} ${describeChange(c)}${mark(c)}${c.by ? ` · ${c.by}` : ""}`);
+      out.push(
+        `  ${c.id} ${describeChange(c)}${mark(c)}${c.by ? ` · ${c.by}` : ""}${c.for?.length ? ` · for ${c.for.join(", ")}` : ""}`,
+      );
       out.push(`      intent: ${c.intent?.trim() || "(none yet)"}`);
       const fields = c.add ?? c.set;
       if (building && isAgreed(c)) out.push(`      archdoc edit: ${JSON.stringify(changeOp(c))}`);
@@ -86,7 +113,7 @@ export function formatPlan(
     out.push("", "Sequences:");
     for (const q of s.sequences) {
       out.push(
-        `  ${q.id} journey ${q.journey}${q.name ? ` (${q.name})` : ""}${mark(q)}${q.actor ? ` · ${q.actor}` : ""}${q.goal ? `: ${q.goal}` : ""}`,
+        `  ${q.id} journey ${q.journey}${q.name ? ` (${q.name})` : ""}${mark(q)}${q.actor ? ` · ${q.actor}` : ""}${q.for?.length ? ` · for ${q.for.join(", ")}` : ""}${q.goal ? `: ${q.goal}` : ""}`,
       );
       for (const [i, st] of q.steps.entries()) {
         out.push(
@@ -153,18 +180,19 @@ export function nextStep(check: PlanCheck): string {
   const o = check.open;
   switch (check.status) {
     case "drafting":
-      return "Next: the person is sketching in the explorer's Plan tab. Wait for them to send it (archdoc plan wait), or review what's there now.";
+      return "Next: the person is writing what they want on the map in the explorer's Plan tab. Wait for them to send it (archdoc plan wait), or read what's there now.";
     case "reviewing": {
       const breaks = check.findings.filter(
         (f) => f.code === "plan/would-break" || f.code === "plan/cannot-apply",
       ).length;
       const left = [
+        o.intents && `${plural(o.intents, "intent")} to work out`,
         o.missingIntent && `${plural(o.missingIntent, "item")} without intent`,
         o.questions && plural(o.questions, "open question"),
         o.suggestions && `${plural(o.suggestions, "suggestion")} waiting`,
         breaks && `${plural(breaks, "check finding")} the plan would add`,
       ].filter(Boolean);
-      return `Next: review it against the code (archdoc_context on each element), and answer with archdoc plan respond: notes (insight, question, risk) and suggested changes, never edits to the person's items.${left.length ? ` Still open: ${left.join(", ")}.` : " Nothing is open: tell the person it can be marked ready."}`;
+      return `Next: work out the architecture for each intent against the code (archdoc_context on what it touches), and answer with archdoc plan respond: suggested changes and sequences, each with for: [the intent it carries out], and notes (insight, question, risk), never edits to the person's items.${left.length ? ` Still open: ${left.join(", ")}.` : " Nothing is open: tell the person it can be marked ready."}`;
     }
     case "ready":
       return check.plan.spec.tasks.length
@@ -177,8 +205,14 @@ export function nextStep(check: PlanCheck): string {
   }
 }
 
+function openIds(check: PlanCheck): string[] {
+  return openIntents(check.plan.spec).map((n) => n.id);
+}
+
 function describeItem(plan: Plan, id: string): string {
   const s = plan.spec;
+  const intent = s.intents.find((x) => x.id === id);
+  if (intent) return `: ${intent.on ? `on ${intent.on}: ` : ""}${intent.text.trim()}`;
   const c = s.changes.find((x) => x.id === id);
   if (c) return `: ${describeChange(c)}${c.intent ? ` (${c.intent.trim().split("\n")[0]})` : ""}`;
   const [seq, step] = id.split("#");

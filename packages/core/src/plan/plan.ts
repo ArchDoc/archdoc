@@ -14,8 +14,9 @@ import { parseYaml, type YamlPath } from "../load/yaml.js";
 /** A plan as written, without the editor fields, with its lists always there. */
 export type PlanSpec = Omit<
   PlanFile,
-  "$schema" | "archdoc" | "changes" | "sequences" | "notes" | "tasks"
+  "$schema" | "archdoc" | "intents" | "changes" | "sequences" | "notes" | "tasks"
 > & {
+  intents: NonNullable<PlanFile["intents"]>;
   changes: NonNullable<PlanFile["changes"]>;
   sequences: NonNullable<PlanFile["sequences"]>;
   notes: NonNullable<PlanFile["notes"]>;
@@ -66,9 +67,19 @@ export function parsePlan(
   if (!result.success) {
     return { diagnostics: [...diagnostics, ...schemaDiagnostics(result.error, parsed)] };
   }
-  const { $schema: _s, archdoc: _a, changes, sequences, notes, tasks, ...rest } = result.data;
+  const {
+    $schema: _s,
+    archdoc: _a,
+    intents,
+    changes,
+    sequences,
+    notes,
+    tasks,
+    ...rest
+  } = result.data;
   const spec: PlanSpec = {
     ...rest,
+    intents: intents ?? [],
     changes: changes ?? [],
     sequences: sequences ?? [],
     notes: notes ?? [],
@@ -79,6 +90,7 @@ export function parsePlan(
     locations[path.join(".")] = parsed.locate(path);
   };
   for (const key of ["plan", "title", "status"]) at([key]);
+  for (const [i] of spec.intents.entries()) at(["intents", i]);
   for (const [i] of spec.changes.entries()) at(["changes", i]);
   for (const [i, s] of spec.sequences.entries()) {
     at(["sequences", i]);
@@ -232,9 +244,10 @@ export function sequenceOp(seq: PlanSequenceSpec, existing: boolean): EditOp {
   };
 }
 
-/** Every item ID in a plan: changes, sequences, steps (s1#2), notes, and tasks. */
+/** Every item ID in a plan: intents, changes, sequences, steps (s1#2), notes, and tasks. */
 export function planItemIds(spec: PlanSpec): Set<string> {
   const ids = new Set<string>();
+  for (const i of spec.intents) ids.add(i.id);
   for (const c of spec.changes) ids.add(c.id);
   for (const s of spec.sequences) {
     ids.add(s.id);
@@ -254,4 +267,17 @@ export function planId(text: string): string {
     .filter(Boolean)
     .slice(0, 6);
   return words.join("-") || "plan";
+}
+
+/**
+ * The person's intents nothing in the plan carries out yet: not settled, and
+ * no change or sequence (other than a dismissed one) names them in `for`.
+ */
+export function openIntents(spec: PlanSpec): PlanSpec["intents"] {
+  const answered = new Set<string>();
+  for (const item of [...spec.changes, ...spec.sequences]) {
+    if (item.status === "dismissed") continue;
+    for (const f of item.for ?? []) answered.add(f);
+  }
+  return spec.intents.filter((i) => !i.resolved && !answered.has(i.id));
 }

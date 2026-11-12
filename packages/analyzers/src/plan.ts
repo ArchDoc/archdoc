@@ -70,19 +70,26 @@ export interface PlanStartInput {
 /**
  * Starts a plan from the person's idea: writes `.archdoc/plans/<id>.yaml`
  * as drafting, with the goal and the parts of the model it touches (from
- * archdoc context) as its scope. Says how the person sketches it.
+ * archdoc context) as its scope. Says how the person adds what they want on the map.
  */
 export async function planStartAnswer(
   where: Where,
   input: PlanStartInput,
 ): Promise<Answer & { id?: string | undefined }> {
-  const goal = input.goal.trim();
+  let goal = input.goal.trim();
   if (!goal) return { ok: false, text: "Give the idea: what the change should do, in a sentence." };
+  // A title on a line of its own, then the idea: the first line is the title.
+  let title = input.title?.trim();
+  const rest = goal.split("\n").slice(1).join("\n").trim();
+  if (!title && rest) {
+    title = firstLine(goal);
+    goal = rest;
+  }
   const l = await load(where);
   if (!l) return { ok: false, text: NO_MODEL };
   const index = await indexRepository(l.model.baseDir).catch(() => undefined);
   const brief = context(l.model, goal, { index, paths: input.paths });
-  const base = input.id ?? planId(input.title ?? goal);
+  const base = input.id ?? planId(title ?? firstLine(goal));
   const taken = new Set(l.plans.map((p) => p.id));
   let id = base;
   for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
@@ -93,7 +100,7 @@ export async function planStartAnswer(
   if (brief.data.length) scope.data = brief.data.map((d) => d.id).slice(0, 6);
   const spec: Record<string, unknown> = {
     plan: id,
-    title: input.title?.trim() || firstLine(goal),
+    title: title || firstLine(goal),
     status: "drafting",
     goal,
   };
@@ -116,9 +123,9 @@ export async function planStartAnswer(
   out.push(
     "",
     "Next (this is the whole workflow):",
-    "  1. Open the explorer for the person yourself, now: run archdoc view --detach --watch --open (it starts in the background, opens their browser, and prints the URL), and give them the URL and the Plan tab under Build. Don't leave the command for them to run. Tell them to sketch the change on the map (double-click to add an element, drag between elements for an arrow, New sequence for a flow) with the intent of each, and to press Send to agent when they want your review. The sketch is theirs: don't draw changes or sequences before they send it. A note with what you found in the code is fine.",
-    `  2. Wait for it: archdoc plan wait ${id} (or archdoc_plan with action wait). It returns what they changed.`,
-    "  3. Review every item against the code (archdoc_context on what it touches). Answer with archdoc plan respond: notes (insight, question, risk) pinned to items, and suggested changes for what's missing or wrong. Never edit the person's items: suggest, and they accept or dismiss.",
+    "  1. Open the explorer for the person yourself, now: run archdoc view --detach --watch --open (it starts in the background, opens their browser, and prints the URL), and give them the URL and the Plan tab under Build. Don't leave the command for them to run. Tell them to click in the box where they want something to change and write what they want there, in their own words (an intent), as many as they like, then press Send to agent. They don't draw the architecture: you do. Don't add changes or sequences before they send it. A note with what you found in the code is fine.",
+    `  2. Wait for it: archdoc plan wait ${id} (or archdoc_plan with action wait). It returns their intents and what they changed.`,
+    "  3. Work out the architecture for each intent against the code (archdoc_context on what it touches): the elements, arrows, data, and sequences that carry it out, as suggested changes and sequences, each with for: [the intent's ID] and its own intent. Ask a question on an intent (a note on i1) when it can be read more than one way. Answer with archdoc plan respond. Never edit the person's items: suggest, and they accept or dismiss.",
     "  4. Repeat 2 and 3 until nothing's open and they mark it ready. Then write the tasks that carry it out, each with the changes it makes, files, and tests, and carry them out in order.",
   );
   return { ok: true, text: out.join("\n"), id };
@@ -173,12 +180,12 @@ export async function planReadAnswer(where: Where, input: PlanReadInput): Promis
 
 /** How to answer, shown with a plan to review: the respond ops, one line each. */
 const RESPOND_OPS = [
-  "Respond with these ops (archdoc plan respond <id> '<ops as JSON>', or archdoc_plan with action respond):",
+  "Respond with these ops (archdoc plan respond <id> '<ops as JSON>', or archdoc_plan with action respond). Each intent (i1) is what the person wants: carry it out with suggested changes and sequences that name it in for.",
   '  {"op":"put","list":"notes","item":{"on":"c1","kind":"question","text":"…"}}  kind: insight, question, risk, or note; on: a change, s1, s1#2, or a model ID',
   '  {"op":"reply","note":"n1","text":"…","kind":"answer"}',
-  '  {"op":"put","list":"changes","item":{"intent":"…","add":{"id":"web.pdf-export","kind":"component","description":"…"}}}  or set, remove, rename, use: {"from":"a","to":"b","description":"…"}',
+  '  {"op":"put","list":"changes","item":{"for":["i1"],"intent":"…","add":{"id":"web.pdf-export","kind":"component","description":"…"}}}  or set, remove, rename, use: {"from":"a","to":"b","description":"…"}; for: the intents it carries out',
   '  {"op":"step","sequence":"s1","at":2,"insert":true,"step":{"from":"a","to":"b","action":"…","sends":"Entry","intent":"…"}}',
-  '  {"op":"put","list":"sequences","item":{"journey":"export-a-journey","actor":"developer","goal":"…","intent":"…","steps":[…]}}',
+  '  {"op":"put","list":"sequences","item":{"for":["i1"],"journey":"export-a-journey","actor":"developer","goal":"…","intent":"…","steps":[…]}}',
   '  {"op":"put","list":"tasks","item":{"title":"…","from":["c1","s1"],"files":["…"],"tests":["…"],"after":["t1"]}}',
   '  {"op":"resolve","note":"n1"}  {"op":"drop","id":"c3"}  (only your own items)',
 ].join("\n");
@@ -257,6 +264,16 @@ export async function planRespondAnswer(where: Where, input: PlanRespondInput): 
       );
       continue;
     }
+    if (op.op === "put" && op.list === "intents") {
+      refused.push(
+        "put intents: intents are the person's. Carry one out with suggested changes and sequences (for: [i1]), or ask about it with a note on it.",
+      );
+      continue;
+    }
+    if (op.op === "resolve" && plan.spec.intents.some((n) => n.id === op.note)) {
+      refused.push(`resolve ${op.note}: only the person settles an intent.`);
+      continue;
+    }
     if (op.op === "put" && (op.list === "changes" || op.list === "sequences")) {
       const id = typeof op.item.id === "string" ? op.item.id : undefined;
       const list = op.list === "changes" ? plan.spec.changes : plan.spec.sequences;
@@ -288,6 +305,7 @@ export async function planRespondAnswer(where: Where, input: PlanRespondInput): 
     if (op.op === "drop") {
       const [head] = op.id.split("#");
       const owner =
+        plan.spec.intents.find((n) => n.id === op.id)?.by ??
         plan.spec.changes.find((c) => c.id === op.id)?.by ??
         plan.spec.sequences.find((s) => s.id === head)?.by ??
         plan.spec.notes.find((n) => n.id === op.id)?.by;
@@ -316,7 +334,7 @@ export async function planRespondAnswer(where: Where, input: PlanRespondInput): 
       ...(check
         ? [
             "",
-            `Open: ${check.open.questions} question${check.open.questions === 1 ? "" : "s"}, ${check.open.suggestions} suggestion${check.open.suggestions === 1 ? "" : "s"}, ${check.open.missingIntent} without intent.`,
+            `Open: ${check.open.intents} intent${check.open.intents === 1 ? "" : "s"} to work out, ${check.open.questions} question${check.open.questions === 1 ? "" : "s"}, ${check.open.suggestions} suggestion${check.open.suggestions === 1 ? "" : "s"}, ${check.open.missingIntent} without intent.`,
             "Tell the person what you found in a sentence or two; the detail is on the map.",
           ]
         : []),

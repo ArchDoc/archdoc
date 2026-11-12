@@ -1,0 +1,66 @@
+triage: container-outside-system
+title: A container sits outside the system after modeling a repository
+status: fixed
+severity: normal
+reported:
+  by: developer
+  at: 2026-11-12
+symptom: |
+  The context view in Overview showed one container (ui) outside the top-level system element after "map out the system architecture for this project", though Infrastructure showed it in the dev environment.
+reproduce: "archdoc init in a repo with web/ and api/ packages, then archdoc edit '[{\"op\":\"rename\",\"id\":\"<ns>.web\",\"to\":\"<ns>.ui\"}]': find --outline shows ui at the top, beside the system"
+expands: start-a-model#8
+hypotheses:
+  - claim: init left ui outside the system
+    element: toolchain.analyzers
+    verdict: ruled-out
+    evidence: read
+    note: "init wraps every container, datastore, and queue in one system named for the namespace (modelDoc in packages/analyzers/src/init.ts), so ui started inside it."
+  - claim: the context view draws a container in the system beside it
+    element: toolchain.web.graph
+    verdict: ruled-out
+    evidence: read
+    note: "The context view draws each top-level element as its own box (levelExpansion and systemBox in apps/web/src/graph/graph.ts); a container is drawn beside the system only when the model puts it at the top."
+  - claim: an archdoc edit op moved ui out of the system
+    element: toolchain.core.editor
+    verdict: confirmed
+    evidence: reproduced
+    note: "Renaming shop.web to shop.ui, with the system named shop like the namespace, moved the container to the top of the model."
+steps:
+  - from: coding-agent
+    to: mcp
+    action: Renames the web container to ui, by its full ID
+    description: "The agent reshaping init's model renames the container, writing the target the way the system's own ID reads: <ns>.ui, where the system is <ns> (init names it after the namespace)."
+    code: packages/mcp/src/server.ts
+    sends: ModelEdit
+    observed: { ModelEdit.ops: "[{ op: rename, id: shop.web, to: shop.ui }]" }
+    evidence: reproduced
+  - from: mcp
+    to: analyzers
+    action: Applies the op
+    description: The op reaches the editor unchanged.
+    code: packages/analyzers/src/model-edit.ts#editAnswer
+    sends: ModelEdit
+    evidence: read
+  - from: analyzers
+    to: toolchain.core.editor
+    action: Reads the target as an ID in the namespace and moves the element to the top
+    description: "moveElement stripped the namespace from shop.ui (it isn't an element yet), saw no dot left, and took it as absolute: parent none. add already checks whether the prefix names an element (the system shop) and puts it there; moveElement didn't, so ui left the system. Nothing warned: validate is clean, and only check --done's outside-system gap names it."
+    code: packages/core/src/edit/edit.ts#Editor.moveElement
+    sends: ModelEdit
+    observed: { ModelEdit.ops: "rename to ui, parent none" }
+    expected: { ModelEdit.ops: "rename to shop.ui, inside the system shop" }
+    role: cause
+    evidence: reproduced
+  - from: toolchain.core.editor
+    to: model-files
+    action: Writes ui under elements at the top, beside the system
+    description: The model now has the container outside the system, which the context view draws beside it; its deploy entries are untouched, so Infrastructure still shows it in dev.
+    changes: { ModelFile.files: "elements.shop.elements.web -> elements.ui" }
+    role: symptom
+    evidence: reproduced
+root-cause:
+  summary: "archdoc edit's rename read <namespace>.<key> as a top-level ID even when the system element is named for the namespace, as init names it, so a container renamed by its full ID moved out of the system."
+  step: 3
+fix:
+  summary: "A rename to <prefix>.<key> goes inside the element the prefix names, as add does, and a system part moved to the top goes inside the only system: only externals and systems sit beside it."
+  test: packages/core/test/edit.test.ts

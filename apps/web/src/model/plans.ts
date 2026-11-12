@@ -8,6 +8,7 @@ import {
   type Model,
   type ModelDiff,
   type ModelSource,
+  openIntents,
   type Plan,
   type PlanCheck,
   type PlanEditOp,
@@ -41,6 +42,23 @@ export interface PlanMap {
   notes: Map<string, number>;
   /** Plan item IDs by the node they're about, for the details panel. */
   items: Map<string, string[]>;
+  /** The person's intents, each with the box it's pinned in. */
+  pins: IntentPin[];
+}
+
+/** An intent on the map: the box it's in (none for the map itself), and where in it. */
+export interface IntentPin {
+  id: string;
+  /** Node ID (element:…, actor:…) of the box it's in. */
+  node?: string | undefined;
+  /** Where in that box, as percentages of its width and height. */
+  at?: { x: number; y: number } | undefined;
+  text: string;
+  /** Nothing in the plan carries it out yet. */
+  open: boolean;
+  resolved: boolean;
+  /** The changes and sequences that carry it out. */
+  carried: string[];
 }
 
 /**
@@ -87,10 +105,28 @@ export function planMap(
   for (const n of plan.spec.notes) {
     if (!n.on || n.resolved) continue;
     const change = plan.spec.changes.find((c) => c.id === n.on);
-    const key = change ? node(changeTarget(change)) : node(n.on);
+    const intent = plan.spec.intents.find((i) => i.id === n.on);
+    const key = change
+      ? node(changeTarget(change))
+      : intent
+        ? intent.on && node(intent.on)
+        : node(n.on);
     if (key) notes.set(key, (notes.get(key) ?? 0) + 1);
   }
-  return { plan, check, after, diff, suggested, suggestedEdges, notes, items };
+  const open = new Set(openIntents(plan.spec).map((n) => n.id));
+  const pins = plan.spec.intents.map((n) => ({
+    id: n.id,
+    node: n.on ? node(n.on) : undefined,
+    at: n.at,
+    text: n.text,
+    open: open.has(n.id),
+    resolved: n.resolved === true,
+    carried: [...plan.spec.changes, ...plan.spec.sequences]
+      .filter((x) => x.status !== "dismissed" && x.for?.includes(n.id))
+      .map((x) => x.id),
+  }));
+  for (const p of pins) about(p.node, p.id);
+  return { plan, check, after, diff, suggested, suggestedEdges, notes, items, pins };
 }
 
 /** The map's node ID for a model reference: element:<full id> or actor:<id>. */
@@ -138,48 +174,20 @@ export async function writePlan(
   }
 }
 
-/** Starts a plan from the explorer: its title and the idea. */
+/** Starts a plan from the explorer: the idea (its first line is the title). */
 export async function startPlan(
-  title: string,
   goal: string,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   try {
     const res = await fetch("api/plans", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title, goal }),
+      body: JSON.stringify({ goal }),
     });
     const body = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
     if (!res.ok || !body.id) return { ok: false, error: body.error ?? "Couldn't start the plan." };
     return { ok: true, id: body.id };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-/** An ID for a new element from its name: lowercase words joined with dashes. */
-export function slug(name: string): string {
-  return (
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "new"
-  );
-}
-
-/** The kind a new element gets inside a parent of this kind. */
-export function childKind(parentKind: string | undefined): string {
-  switch (parentKind) {
-    case undefined:
-      return "container";
-    case "system":
-      return "container";
-    case "container":
-      return "component";
-    case "component":
-      return "code";
-    default:
-      return "component";
   }
 }

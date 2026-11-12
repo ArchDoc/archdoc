@@ -12,7 +12,7 @@ export const PLAN_DIR = "plans";
 export const PlanStatusSchema = z
   .enum(["drafting", "reviewing", "ready", "executing", "done", "abandoned"])
   .describe(
-    "drafting: the person is sketching it. reviewing: sent to the agent to review. ready: agreed, with tasks to carry it out. executing: being carried out. done: carried out. abandoned: dropped, kept for why.",
+    "drafting: the person is saying what they want. reviewing: sent to the agent to review. ready: agreed, with tasks to carry it out. executing: being carried out. done: carried out. abandoned: dropped, kept for why.",
   );
 
 /** Whose an item is, and whether it's agreed. */
@@ -37,13 +37,46 @@ const Intent = z
   .string()
   .describe("Why: what the person means this to do. Every change and step needs one.");
 
+/** The person's intents an item carries out. */
+const For = z
+  .array(IdSchema)
+  .describe("The person's intents it carries out, by ID (i1): how the agent answers an intent");
+
 const itemShape = {
   id: IdSchema.describe("The item's ID in this plan, such as c1"),
   intent: Intent.optional(),
+  for: For.optional(),
   by: PlanAuthorSchema.optional(),
   status: PlanItemStatusSchema.optional(),
   at: PlanPositionSchema.optional(),
 };
+
+/**
+ * What the person wants, in their words, pinned where they clicked on the
+ * map. The person writes intents; the agent works out the architecture that
+ * carries each one out, as suggested changes and sequences that name it in
+ * `for`.
+ */
+export const PlanIntentSchema = z
+  .strictObject({
+    id: IdSchema.describe("The intent's ID in this plan, such as i1"),
+    on: z
+      .string()
+      .optional()
+      .describe(
+        "The box the person clicked in: a model ID (web), or something the plan adds. Omit for the system as a whole.",
+      ),
+    at: PlanPositionSchema.optional().describe(
+      "Where in that box, as percentages of its width and height (0-100), or on the map without on",
+    ),
+    by: PlanAuthorSchema.optional(),
+    text: z.string().min(1).describe("What the person wants there, in their words"),
+    resolved: z
+      .boolean()
+      .optional()
+      .describe("Settled: the person is happy with how the plan carries it out, or dropped it"),
+  })
+  .describe("What the person wants, pinned where they clicked on the map");
 
 /** A new element, actor, data entry, or journey: its ID and, beside it, its spec. */
 const AddSchema = z
@@ -152,7 +185,7 @@ export const PlanNoteSchema = z
       .string()
       .optional()
       .describe(
-        "What it's about: a change or sequence ID (c1), a step (s1#2), or a model ID (web.journey-view). Omit for the canvas.",
+        "What it's about: an intent (i1), a change or sequence ID (c1), a step (s1#2), or a model ID (web.journey-view). Omit for the canvas.",
       ),
     at: PlanPositionSchema.optional(),
     by: PlanAuthorSchema.optional(),
@@ -185,7 +218,7 @@ export const PlanTaskSchema = z
 
 /** What the person changed since the agent last read the plan. */
 export const PlanUnreadSchema = z.strictObject({
-  id: z.string().min(1).describe("The item: a change, sequence, step (s1#2), or note"),
+  id: z.string().min(1).describe("The item: an intent, change, sequence, step (s1#2), or note"),
   what: z.enum(["added", "edited", "removed", "accepted", "dismissed", "replied"]),
 });
 
@@ -217,6 +250,7 @@ export const PlanFileSchema = z.strictObject({
   goal: z.string().optional().describe("The idea, as the person put it"),
   by: PlanAuthorSchema.optional(),
   scope: PlanScopeSchema.optional(),
+  intents: z.array(PlanIntentSchema).optional(),
   changes: z.array(PlanChangeSchema).optional(),
   sequences: z.array(PlanSequenceSchema).optional(),
   notes: z.array(PlanNoteSchema).optional(),
@@ -234,6 +268,7 @@ export const PlanFileSchema = z.strictObject({
 
 export type PlanStatus = z.infer<typeof PlanStatusSchema>;
 export type PlanItemStatus = z.infer<typeof PlanItemStatusSchema>;
+export type PlanIntentSpec = z.infer<typeof PlanIntentSchema>;
 export type PlanChangeSpec = z.infer<typeof PlanChangeSchema>;
 export type PlanStepSpec = z.infer<typeof PlanStepSchema>;
 export type PlanSequenceSpec = z.infer<typeof PlanSequenceSchema>;

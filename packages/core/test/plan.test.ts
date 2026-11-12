@@ -8,6 +8,7 @@ import {
   loadPlans,
   type ModelSource,
   nextStep,
+  openIntents,
   type Plan,
   parsePlan,
   planId,
@@ -255,6 +256,55 @@ describe("checkPlan", () => {
     `);
     const c = checkPlan(model, sources, p, { root: "archdoc.yaml" });
     expect(nextStep(c)).toMatch(/1 suggestion waiting/);
+  });
+});
+
+describe("intents", () => {
+  const text = dedent(BASE);
+  const edit = (t: string, ops: Parameters<typeof editPlan>[2], by = "human:@dana") =>
+    editPlan(FILE, t, ops, { by, track: true });
+
+  it("numbers an intent i1, keeps it open until something carries it out, and blocks ready", () => {
+    const r = edit(text, [
+      {
+        op: "put",
+        list: "intents",
+        item: { on: "shop.api", at: { x: 40, y: 60 }, text: "Send receipts" },
+      },
+    ]);
+    expect(r.problems).toEqual([]);
+    expect(r.ids).toEqual(["i1"]);
+    const p = r.plan as Plan;
+    expect(openIntents(p.spec).map((n) => n.id)).toEqual(["i1"]);
+    const c = checkPlan(model, sources, p, { root: "archdoc.yaml" });
+    expect(c.open.intents).toBe(1);
+    expect(codes(c)).toContain("plan/open-intent");
+  });
+
+  it("clears an intent once a change is for it, or it's settled", () => {
+    const yaml = `
+      status: reviewing
+      intents:
+        - { id: i1, on: shop.api, text: Send receipts }
+        - { id: i2, text: Log them }
+      changes:
+        - { id: c1, intent: Mails receipts, for: [i1], status: suggested, add: { id: shop.mailer, kind: container } }
+    `;
+    expect(openIntents(plan(yaml).spec).map((n) => n.id)).toEqual(["i2"]);
+    const settled = edit(`${dedent(BASE)}\n${dedent(yaml)}`, [{ op: "resolve", note: "i2" }]);
+    expect(settled.problems).toEqual([]);
+    expect(openIntents((settled.plan as Plan).spec)).toEqual([]);
+  });
+
+  it("flags an intent on a box that isn't there, and a for that names nothing", () => {
+    const p = plan(`
+      intents:
+        - { id: i1, on: shop.nowhere, text: Send receipts }
+      changes:
+        - { id: c1, intent: x, for: [i9], add: { id: shop.mailer, kind: container } }
+    `);
+    const c = checkPlan(model, sources, p, { root: "archdoc.yaml" });
+    expect(codes(c).filter((x) => x === "plan/unknown-item").length).toBe(2);
   });
 });
 

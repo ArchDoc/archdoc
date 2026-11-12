@@ -5,6 +5,7 @@ import {
   triageListAnswer,
   triageMigrateAnswer,
   triageStartAnswer,
+  triageWaitAnswer,
 } from "@archdoc/analyzers";
 import type { Io } from "../io.js";
 import { readStdin } from "./stdin.js";
@@ -72,6 +73,22 @@ export async function triageList(
     { model: options.model, cwd: io.cwd },
     { status: status as TriageListInput["status"], element: options.element },
   );
+  (r.ok ? io.out : io.err)(r.text);
+  return r.ok ? 0 : 2;
+}
+
+/** `archdoc triage wait [id]`: blocks until the person sends a bug from the explorer. */
+export async function triageWait(
+  id: string | undefined,
+  options: { model?: string; timeout?: string },
+  io: Io,
+): Promise<number> {
+  const timeout = options.timeout === undefined ? undefined : Number(options.timeout);
+  if (timeout !== undefined && !(timeout > 0)) {
+    io.err("--timeout is a number of seconds.");
+    return 2;
+  }
+  const r = await triageWaitAnswer({ model: options.model, cwd: io.cwd }, { id, timeout });
   (r.ok ? io.out : io.err)(r.text);
   return r.ok ? 0 : 2;
 }

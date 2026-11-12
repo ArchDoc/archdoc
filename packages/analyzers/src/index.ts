@@ -123,11 +123,15 @@ export {
   modelDir,
   type TriageListInput,
   type TriageMigrateInput,
+  type TriageSendInput,
   type TriageStartInput,
+  type TriageWaitInput,
   triageCheckAnswer,
   triageListAnswer,
   triageMigrateAnswer,
+  triageSendAnswer,
   triageStartAnswer,
+  triageWaitAnswer,
 } from "./triage.js";
 export { resolveSpecifier, tsImports } from "./ts-imports.js";
 export { packageNameOf, type WorkspacePackage, workspacePackages } from "./workspace.js";
