@@ -1,5 +1,14 @@
 # @archdoc/federation
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [693c11a]
+  - @archdoc/spec@0.8.1
+  - @archdoc/core@0.8.1
+  - @archdoc/analyzers@0.8.1
+
 ## 0.8.0
 
 ### Patch Changes
