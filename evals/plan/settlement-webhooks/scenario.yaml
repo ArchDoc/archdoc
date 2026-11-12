@@ -2,6 +2,7 @@
 # the webhook from the API, which only creates postings (settling happens in
 # the worker), has the webhooks component query Postgres directly instead of
 # through the store, and a step with no intent.
+stage: review
 fixture: go-service
 goal: Call a client's webhook when one of its postings settles
 expected:

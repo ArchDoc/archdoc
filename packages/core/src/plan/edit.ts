@@ -365,7 +365,8 @@ class PlanEditor {
       if (!list.items.length) this.doc.delete("unread");
       return;
     }
-    if (was === "added" && what === "edited") return;
+    // An edit after an add or a reply doesn't hide it: the agent still sees what's new.
+    if ((was === "added" || was === "replied") && what === "edited") return;
     const entry = this.doc.createNode({ id, what });
     if (at >= 0) list.items[at] = entry;
     else list.add(entry);

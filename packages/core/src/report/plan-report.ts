@@ -1,7 +1,7 @@
 import type { PlanUnreadSpec } from "@archdoc/spec";
 import { formatDiagnostic } from "../diagnostics.js";
 import type { PlanCheck } from "../plan/check.js";
-import { describeChange, isAgreed, type Plan, planStatusOf } from "../plan/plan.js";
+import { changeOp, describeChange, isAgreed, type Plan, planStatusOf } from "../plan/plan.js";
 
 // Plans as text, shared by `archdoc plan` and the archdoc_plan MCP tool.
 
@@ -67,13 +67,16 @@ export function formatPlan(
     for (const u of unread) out.push(`  ${u.what} ${u.id}${describeItem(plan, u.id)}`);
   }
 
+  // Once it's agreed, each change as the archdoc edit op that makes it.
+  const building = ["ready", "executing"].includes(planStatusOf(s));
   if (s.changes.length) {
     out.push("", "Changes:");
     for (const c of s.changes) {
       out.push(`  ${c.id} ${describeChange(c)}${mark(c)}${c.by ? ` · ${c.by}` : ""}`);
       out.push(`      intent: ${c.intent?.trim() || "(none yet)"}`);
       const fields = c.add ?? c.set;
-      if (fields) {
+      if (building && isAgreed(c)) out.push(`      archdoc edit: ${JSON.stringify(changeOp(c))}`);
+      else if (fields) {
         const { id: _i, type: _t, ...rest } = fields;
         if (Object.keys(rest).length) out.push(`      ${JSON.stringify(rest)}`);
       }

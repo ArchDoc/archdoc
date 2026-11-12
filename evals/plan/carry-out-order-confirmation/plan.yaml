@@ -1,0 +1,47 @@
+plan: carry-out-order-confirmation
+title: Email an order confirmation
+status: ready
+goal: Email the shopper an order confirmation after checkout
+by: human:@dana
+changes:
+  - id: c1
+    by: human:@dana
+    intent: Sends transactional email through our email provider's HTTP API
+    add: { id: mailer, kind: external, name: Email Provider, description: Sends transactional email over HTTP }
+  - id: c2
+    by: human:@dana
+    intent: Keeps the provider's API and its key in one place in the API, never in the browser
+    add: { id: shop.api.notify, kind: component, description: Emails shoppers about their orders., code: apps/api/src/notify/** }
+  - id: c3
+    by: agent:claude-code
+    intent: Once the order is charged and saved, the API asks notify to email the confirmation
+    use: { from: shop.api.orders, to: shop.api.notify, description: Emails the order confirmation }
+  - id: c4
+    by: human:@dana
+    intent: Notify POSTs the email to the provider, with the key from MAIL_API_KEY
+    use: { from: shop.api.notify, to: mailer, description: Sends the email }
+sequences:
+  - id: s1
+    by: human:@dana
+    journey: checkout
+    intent: Checkout ends with the confirmation in the shopper's inbox, only once they've paid
+    steps:
+      - { from: shopper, to: shop.web, action: Checks out the cart, intent: As today }
+      - { from: shop.web, to: shop.api, action: POSTs the order, intent: As today }
+      - { from: shop.api.routes, to: shop.api.orders, action: Creates the order, intent: As today }
+      - { from: shop.api.orders, to: shop.api.payments, action: Charges for it, intent: As today }
+      - { from: shop.api.payments, to: shop.api.storage, action: Records the charge, intent: As today }
+      - { from: shop.api.orders, to: shop.api.storage, action: Saves the order, intent: As today }
+      - { from: shop.api.storage, to: shop.db, action: Inserts the order and the charge, intent: As today }
+      - { from: shop.api.orders, to: shop.api.notify, action: Emails the confirmation, intent: "Last, so a failed charge never sends one" }
+      - { from: shop.api.notify, to: mailer, action: POSTs the email, intent: The provider delivers it }
+notes:
+  - id: n1
+    on: c3
+    by: agent:claude-code
+    kind: question
+    text: Should a failed email fail the checkout? The order is already charged by then.
+    resolved: true
+    replies:
+      - { by: human:@dana, kind: answer, text: "No: log it and return the order." }
+sent: 2

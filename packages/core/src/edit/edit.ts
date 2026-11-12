@@ -200,7 +200,7 @@ function describe(op: EditOp): string {
     case "rename":
       return `rename ${op.id} -> ${op.to}`;
     case "add":
-      return `add ${op.type} ${op.id}`;
+      return `add ${op.type ?? "element"} ${op.id}`;
     default:
       return `${op.op} ${op.id}`;
   }

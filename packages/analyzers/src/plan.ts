@@ -116,7 +116,7 @@ export async function planStartAnswer(
   out.push(
     "",
     "Next (this is the whole workflow):",
-    "  1. Open the explorer's Plan tab for the person: archdoc view --detach --watch --open, then the Plan tab under Build. Tell them to sketch the change on the map (double-click to add an element, drag between elements for an arrow, New sequence for a flow) with the intent of each, and to press Send to agent when they want your review.",
+    "  1. Open the explorer for the person yourself, now: run archdoc view --detach --watch --open (it starts in the background, opens their browser, and prints the URL), and give them the URL and the Plan tab under Build. Don't leave the command for them to run. Tell them to sketch the change on the map (double-click to add an element, drag between elements for an arrow, New sequence for a flow) with the intent of each, and to press Send to agent when they want your review. The sketch is theirs: don't draw changes or sequences before they send it. A note with what you found in the code is fine.",
     `  2. Wait for it: archdoc plan wait ${id} (or archdoc_plan with action wait). It returns what they changed.`,
     "  3. Review every item against the code (archdoc_context on what it touches). Answer with archdoc plan respond: notes (insight, question, risk) pinned to items, and suggested changes for what's missing or wrong. Never edit the person's items: suggest, and they accept or dismiss.",
     "  4. Repeat 2 and 3 until nothing's open and they mark it ready. Then write the tasks that carry it out, each with the changes it makes, files, and tests, and carry them out in order.",

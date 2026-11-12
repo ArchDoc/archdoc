@@ -31,6 +31,8 @@ export interface ApplyPlanOptions {
   journeyFile?: ((id: string) => string) | undefined;
   /** Apply the agent's suggestions too, as if accepted. */
   suggestions?: boolean | undefined;
+  /** Changes to leave out: those the model already shows, once the plan is carried out. */
+  skip?: ((id: string) => boolean) | undefined;
 }
 
 export interface AppliedPlan {
@@ -56,7 +58,8 @@ export function applyPlan(
   const take = (s: { status?: string | undefined }) =>
     isAgreed(s) || (options.suggestions === true && s.status === "suggested");
   const items: { item: string; op: EditOp }[] = [];
-  for (const c of plan.spec.changes) if (take(c)) items.push({ item: c.id, op: changeOp(c) });
+  for (const c of plan.spec.changes)
+    if (take(c) && !options.skip?.(c.id)) items.push({ item: c.id, op: changeOp(c) });
   for (const s of plan.spec.sequences) {
     if (!take(s) || !s.steps.some(isAgreed)) continue;
     items.push({ item: s.id, op: sequenceOp(s, model.journeys.has(s.journey)) });
@@ -270,7 +273,12 @@ export function checkPlan(
   }
 
   // Make the plan on a copy of the model, and see what that would newly fail.
-  const applied = applyPlan(sources, model, plan, options);
+  // Once it's agreed, a change the model already shows has been made: making it again would fail.
+  const shown = settled ? shownIn(model, spec) : undefined;
+  const applied = applyPlan(sources, model, plan, {
+    ...options,
+    skip: shown && ((id) => shown(id) === true),
+  });
   let after: Model | undefined;
   if (!closed) {
     for (const p of applied.problems) {
@@ -342,7 +350,7 @@ export function checkPlan(
     push(
       "warning",
       "plan/no-tasks",
-      `${plan.id} is ${status} but has no tasks: write the tasks that carry it out (archdoc plan tasks).`,
+      `${plan.id} is ${status} but has no tasks: write the tasks that carry it out (archdoc plan respond, putting them in tasks).`,
     );
   }
   if (status === "executing" || status === "done") {
@@ -395,9 +403,12 @@ export function itemLocation(plan: Plan, item: string): SourceLocation | undefin
  * While a plan is carried out: the tasks marked done whose changes the model
  * doesn't show yet. A done plan whose tasks aren't all done.
  */
-function drift(model: Model, plan: Plan, status: PlanStatus): PlanFinding[] {
-  const out: PlanFinding[] = [];
-  const spec = plan.spec;
+/**
+ * Whether the model already shows a plan item: an add whose target is there,
+ * a removal whose target is gone, a use that's declared, a sequence whose
+ * journey has its steps. Undefined for items it can't tell, or not agreed.
+ */
+function shownIn(model: Model, spec: Plan["spec"]): (id: string) => boolean | undefined {
   const resolver = new Resolver(
     model.namespace,
     new Set(Object.keys(model.imports)),
@@ -449,6 +460,13 @@ function drift(model: Model, plan: Plan, status: PlanStatus): PlanFinding[] {
     }
     return undefined;
   };
+  return inModel;
+}
+
+function drift(model: Model, plan: Plan, status: PlanStatus): PlanFinding[] {
+  const out: PlanFinding[] = [];
+  const spec = plan.spec;
+  const inModel = shownIn(model, spec);
   for (const [i, t] of spec.tasks.entries()) {
     if (t.status !== "done") continue;
     const missing = (t.from ?? []).filter((f) => inModel(f) === false);

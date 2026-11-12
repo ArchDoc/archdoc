@@ -2,6 +2,7 @@
 # browser send it (the API should, once the order is saved and charged), a
 # sequence that sends it before the charge, an arrow with no intent, and an
 # unrelated removal of the product cache that the browse journey needs.
+stage: review
 fixture: ts-monorepo
 goal: Email the shopper an order confirmation after checkout
 expected:

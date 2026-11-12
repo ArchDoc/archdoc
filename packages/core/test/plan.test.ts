@@ -212,6 +212,32 @@ describe("checkPlan", () => {
     expect(c.findings.filter((f) => f.code === "plan/open-question")[0]?.severity).toBe("error");
   });
 
+  it("counts a change the model already shows as made, once the plan is agreed", () => {
+    const landed = ROOT.replace(
+      /^( +)db: \{ kind: datastore \}$/m,
+      "$1db: { kind: datastore }\n$1mailer: { kind: container }",
+    );
+    expect(landed).toContain("mailer");
+    const after: ModelSource[] = [{ path: "archdoc.yaml", text: landed }];
+    const now = buildModel(after, { root: "archdoc.yaml" });
+    const p = (status: string) =>
+      plan(`
+        status: ${status}
+        changes:
+          - { id: c1, intent: Sends mail, add: { id: shop.mailer, kind: container } }
+        tasks:
+          - { id: t1, title: Add the mailer, from: [c1], status: done }
+      `);
+    expect(codes(checkPlan(now, after, p("executing"), { root: "archdoc.yaml" }))).toEqual([]);
+    expect(codes(checkPlan(now, after, p("ready"), { root: "archdoc.yaml" }))).not.toContain(
+      "plan/cannot-apply",
+    );
+    // While it's drafted, adding what's there is a mistake to point out.
+    expect(codes(checkPlan(now, after, p("drafting"), { root: "archdoc.yaml" }))).toContain(
+      "plan/cannot-apply",
+    );
+  });
+
   it("doesn't check a done plan", () => {
     const p = plan(`
       status: done
@@ -327,5 +353,8 @@ describe("editPlan", () => {
       { by: "human:@dana", kind: "answer", text: "A provider" },
     ]);
     expect(two.plan?.spec.unread).toEqual([{ id: "n1", what: "replied" }]);
+    // Resolving it after doesn't hide the reply from the agent.
+    const three = edit(two.text ?? "", [{ op: "resolve", note: "n1" }]);
+    expect(three.plan?.spec.unread).toEqual([{ id: "n1", what: "replied" }]);
   });
 });
