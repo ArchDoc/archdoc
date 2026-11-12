@@ -155,6 +155,9 @@ describe.skipIf(!executablePath)("the explorer's Build tabs", () => {
     await node("Orders API").waitFor();
     await fitView();
 
+    // The person drives the design: nothing to send until they've said what they want.
+    expect(await page.getByRole("button", { name: /^Send to agent/ }).isDisabled()).toBe(true);
+
     // Click in the API's box: a popover opens there for what they want. No form, no kinds.
     await clickNode("Orders API");
     const popover = page.getByRole("dialog", { name: "What you want in Orders API" });
@@ -251,8 +254,7 @@ describe.skipIf(!executablePath)("the explorer's Build tabs", () => {
     await page
       .locator(".triage-paste textarea")
       .fill("Error: receipt never sent\n    at placeOrder (api/orders.ts:42:7)");
-    await page.getByRole("button", { name: "Send to agent" }).click();
-    await page.getByRole("button", { name: "Find the root cause" }).click();
+    await page.getByRole("button", { name: "Send to agent: find the root cause" }).click();
     await expect.poll(record).toMatchObject({ sent: 1, ask: "Find the root cause" });
 
     // The agent waiting with archdoc triage wait picks it up.
@@ -261,9 +263,8 @@ describe.skipIf(!executablePath)("the explorer's Build tabs", () => {
 
     // The record opens; send it again from its header, asking for a fix.
     await page.getByText(/Sent to your agent/).waitFor();
-    await page.getByRole("button", { name: "Send to agent" }).click();
-    await page.getByRole("button", { name: "Fix it" }).click();
-    await expect.poll(record).toMatchObject({ sent: 2, ask: "Fix it" });
+    await page.getByRole("button", { name: "Find and fix it" }).click();
+    await expect.poll(record).toMatchObject({ sent: 2, ask: "Find the root cause and fix it" });
     expect(errors).toEqual([]);
   }, 60_000);
 });

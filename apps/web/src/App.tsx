@@ -1097,7 +1097,7 @@ function Explorer({
           editable={!!planning?.editable}
           busy={planBusy}
           onEdit={editPlan}
-          hint={planningHint(planView.plan.spec.unread?.length ?? 0, !!planning?.editable)}
+          hint={planningHint(planView.plan.spec, !!planning?.editable)}
         />
         <div className="story-body">{canvas}</div>
       </section>
@@ -1530,8 +1530,17 @@ const VERDICT_LABEL = {
 } as const;
 
 /** What the plan's header says to do next. */
-function planningHint(unread: number, editable: boolean): string | undefined {
+function planningHint(
+  spec: {
+    unread?: readonly unknown[] | undefined;
+    intents: readonly { by?: string | undefined }[];
+  },
+  editable: boolean,
+): string | undefined {
   if (!editable) return "Read-only here: plans are made in archdoc view.";
+  if (!spec.intents.some((n) => !n.by?.startsWith("agent:")))
+    return "Click in a box on the map and say what you want there. Your agent answers once you send it.";
+  const unread = spec.unread?.length ?? 0;
   if (unread)
     return `${unread} edit${unread === 1 ? "" : "s"} your agent hasn't seen: Send to agent when you want its review.`;
   return undefined;

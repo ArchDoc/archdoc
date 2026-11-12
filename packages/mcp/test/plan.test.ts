@@ -91,6 +91,7 @@ describe("archdoc_plan, stage by stage", () => {
 
   it("wait: returns once the person sends, with what they changed first", async () => {
     await person([
+      { op: "put", list: "intents", item: { on: "api", text: "Email a receipt once it's paid" } },
       {
         op: "put",
         list: "changes",
@@ -100,7 +101,7 @@ describe("archdoc_plan, stage by stage", () => {
     expect((await plan({ action: "wait", id: ID, timeout: 0.1 })).text).toMatch(/Still waiting/);
     await person([{ op: "send" }]);
     const r = await plan({ action: "wait", id: ID, timeout: 1 });
-    expect(r.text).toMatch(/Changed by the person since your last read \(1\)/);
+    expect(r.text).toMatch(/Changed by the person since your last read \(2\)/);
     expect(r.text).toMatch(/Respond with these ops/);
     expect((await spec()).unread ?? []).toEqual([]);
     // Sent again with nothing new: read says so rather than waiting.
@@ -130,7 +131,11 @@ describe("archdoc_plan, stage by stage", () => {
         {
           op: "put",
           list: "changes",
-          item: { intent: "The API sends it after the charge", use: { from: "api", to: "mailer" } },
+          item: {
+            intent: "The API sends it after the charge",
+            for: ["i1"],
+            use: { from: "api", to: "mailer" },
+          },
         },
         { op: "put", list: "notes", item: { on: "c1", kind: "question", text: "Which provider?" } },
       ],

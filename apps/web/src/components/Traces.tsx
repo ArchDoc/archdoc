@@ -14,7 +14,7 @@ import {
   traceLanes,
 } from "../model/traces.js";
 import type { LandscapeInfo } from "../model/useModel.js";
-import { SendToAgent } from "./Agent.js";
+import { type AgentAsk, SendToAgent } from "./Agent.js";
 import { type CodeContext, linkTarget, PathLinks } from "./code.js";
 import { Lanes } from "./Lanes.js";
 import { Payload } from "./Payload.js";
@@ -170,13 +170,7 @@ export function TraceStory(props: {
             {props.editable ? (
               <SendToAgent
                 title="Hand the bug to your agent again, with what you want now"
-                asks={
-                  v.status === "root-caused"
-                    ? ["Fix it", "Look again"]
-                    : v.status === "fixed"
-                      ? ["It's back: look again"]
-                      : ["Find the root cause", "Fix it"]
-                }
+                asks={sendAsks(v.status)}
                 onSend={async (ask) => {
                   setError(undefined);
                   const r = await sendToAgent({ id: v.id, ask });
@@ -300,6 +294,18 @@ export function TriageStart(props: {
       (c) => on.has(c.view.id) || (c.view.anchor && steps.has(c.view.anchor.written)),
     );
   }, [result, props.checks, props.model]);
+  const send = async (ask?: string): Promise<boolean> => {
+    if (!text.trim()) return false;
+    setError(undefined);
+    const r = await sendToAgent({ symptom: text, ask });
+    if (!r.ok) {
+      setError(r.error);
+      return false;
+    }
+    setText("");
+    props.onSent?.(r.id);
+    return true;
+  };
   const hand = startPrompt(text);
   const copy = (what: string, value: string) => {
     void navigator.clipboard?.writeText(value).then(() => setCopied(what));
@@ -315,26 +321,6 @@ export function TriageStart(props: {
             the record.
           </p>
         </div>
-        {props.editable ? (
-          <div className="plan-actions">
-            <SendToAgent
-              disabled={!text.trim()}
-              title="Write the record and hand the bug to your agent"
-              asks={["Find the root cause", "Fix it"]}
-              onSend={async (ask) => {
-                setError(undefined);
-                const r = await sendToAgent({ symptom: text, ask });
-                if (!r.ok) {
-                  setError(r.error);
-                  return false;
-                }
-                setText("");
-                props.onSent?.(r.id);
-                return true;
-              }}
-            />
-          </div>
-        ) : null}
       </header>
       {error ? <p className="form-error">{error}</p> : null}
       <div className="triage-start-body">
@@ -351,8 +337,28 @@ export function TriageStart(props: {
             }
             rows={8}
             spellCheck={false}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && props.editable) {
+                e.preventDefault();
+                void send(sendAsks()[0]?.ask);
+              }
+            }}
           />
         </label>
+        {props.editable ? (
+          <div className="form-actions">
+            <SendToAgent
+              disabled={!text.trim()}
+              title="Write the record and hand the bug to your agent"
+              asks={sendAsks()}
+              onSend={send}
+            />
+            <span className="muted small">
+              Writes the record; your agent picks it up with archdoc triage wait.
+            </span>
+          </div>
+        ) : null}
+        {error ? <p className="form-error">{error}</p> : null}
         {result ? (
           <div className="triage-placed">
             <section className="block">
@@ -446,6 +452,21 @@ export function TriageStart(props: {
       </div>
     </section>
   );
+}
+
+/** What to ask the agent about a bug, by where it stands: the main ask first. */
+function sendAsks(status?: string): AgentAsk[] {
+  if (status === "root-caused")
+    return [
+      { label: "Send to agent: fix it", ask: "Fix it" },
+      { label: "Look again", ask: "Look again" },
+    ];
+  if (status === "fixed")
+    return [{ label: "Send to agent: it's back", ask: "It's back: look again" }];
+  return [
+    { label: "Send to agent: find the root cause", ask: "Find the root cause" },
+    { label: "Find and fix it", ask: "Find the root cause and fix it" },
+  ];
 }
 
 function localOf(model: Model, id: string): string {

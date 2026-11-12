@@ -64,7 +64,7 @@ export function PlanList(props: {
         <span className="side-item-label">
           + Start a plan
           <span className="side-item-sub">
-            Say what you want where you click on the map; your agent works out the rest
+            Say what you want where you click on the map; your agent turns it into the model
           </span>
         </span>
       </button>
@@ -135,8 +135,9 @@ export function PlanStart(props: { editable: boolean; onStarted: (id: string) =>
           <h1>Start a plan</h1>
           <p className="muted">
             Say what you want to change. Then click in the boxes on the map where it should happen
-            and say what you want there. Your agent works out the elements, arrows, and flows
-            against the code, and asks when it's unsure. When you agree, it builds it.
+            and say what you want there. You drive the design: your agent turns what you say into
+            elements, arrows, and flows, checks them against the code, and asks where you've left a
+            choice open. When you agree, it builds it.
           </p>
         </div>
       </header>
@@ -210,6 +211,8 @@ export function PlanHead(props: {
   const blocked = blockers(check);
   const unread = plan.spec.unread?.length ?? 0;
   const designing = status === "drafting" || status === "reviewing";
+  // The person drives the design: nothing to send until they've said what they want.
+  const wrote = plan.spec.intents.some((n) => !n.by?.startsWith("agent:"));
   return (
     <header className="story-head plan-head">
       <div className="story-title">
@@ -239,11 +242,13 @@ export function PlanHead(props: {
           </button>
           <SendToAgent
             count={unread}
-            disabled={props.busy}
+            disabled={props.busy || !wrote}
             title={
-              unread
-                ? `Hand your ${unread} edit${unread === 1 ? "" : "s"} to the agent: it works out the architecture for what you want`
-                : "Ask the agent to work out the plan"
+              !wrote
+                ? "Click in a box on the map and say what you want there first: you drive the design"
+                : unread
+                  ? `Hand your ${unread} edit${unread === 1 ? "" : "s"} to the agent: it turns what you want into the model`
+                  : "Ask the agent to look again"
             }
             onSend={() => props.onEdit([{ op: "send" }])}
           />
@@ -721,8 +726,9 @@ function PlanOverview(props: PanelProps) {
       {s.goal ? <p className="lede">{s.goal}</p> : null}
       {props.editable && (status === "drafting" || status === "reviewing") ? (
         <p className="plan-hint">
-          Click in a box on the map where you want something to change, and say what you want there.
-          Your agent works out the elements, arrows, and flows, and you accept or dismiss what it
+          Click in a box on the map where you want something to change, and say what you want there:
+          the more you say about how, the closer it follows. Your agent turns it into elements,
+          arrows, and flows, asks where you've left a choice open, and you accept or dismiss what it
           proposes.
         </p>
       ) : null}
@@ -752,7 +758,8 @@ function PlanOverview(props: PanelProps) {
           </ul>
         ) : (
           <p className="muted small">
-            None yet. Send the plan to your agent, and it proposes them here and on the map.
+            None yet. Once you've said what you want and sent it, your agent proposes the changes
+            that carry it out, here and on the map.
           </p>
         )}
       </section>

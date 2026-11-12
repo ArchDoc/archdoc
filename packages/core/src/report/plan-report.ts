@@ -192,7 +192,7 @@ export function nextStep(check: PlanCheck): string {
         o.suggestions && `${plural(o.suggestions, "suggestion")} waiting`,
         breaks && `${plural(breaks, "check finding")} the plan would add`,
       ].filter(Boolean);
-      return `Next: work out the architecture for each intent against the code (archdoc_context on what it touches), and answer with archdoc plan respond: suggested changes and sequences, each with for: [the intent it carries out], and notes (insight, question, risk), never edits to the person's items.${left.length ? ` Still open: ${left.join(", ")}.` : " Nothing is open: tell the person it can be marked ready."}`;
+      return `Next: check each intent against the code (archdoc_context on what it touches) and carry out what it says, no more, with archdoc plan respond: suggested changes and sequences, each with for: [the intent it carries out]. Where an intent leaves a design choice open, ask with a question on it naming the options instead of choosing; add insights and risks as notes; never edit the person's items.${left.length ? ` Still open: ${left.join(", ")}.` : " Nothing is open: tell the person it can be marked ready."}`;
     }
     case "ready":
       return check.plan.spec.tasks.length

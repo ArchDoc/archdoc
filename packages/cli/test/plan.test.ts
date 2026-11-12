@@ -78,6 +78,7 @@ describe("archdoc plan, stage by stage", () => {
 
   it("wait: returns what the person drew once they send it", async () => {
     await person([
+      { op: "put", list: "intents", item: { on: "api", text: "Email a receipt once it's paid" } },
       {
         op: "put",
         list: "changes",
@@ -142,7 +143,11 @@ describe("archdoc plan, stage by stage", () => {
         {
           op: "put",
           list: "changes",
-          item: { intent: "Shoppers see it was sent", use: { from: "mailer", to: "web" } },
+          item: {
+            intent: "Shoppers see it was sent",
+            for: ["i1"],
+            use: { from: "mailer", to: "web" },
+          },
         },
       ]),
     );

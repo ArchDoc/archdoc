@@ -1483,11 +1483,12 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-a8ba1cc210e78dea
+    hash: fnv-d541fcfe88a62be6
     files:
       apps/web/src/App.tsx:
         - App
       apps/web/src/components/Agent.tsx:
+        - AgentAsk
         - SendToAgent
       apps/web/src/components/Canvas.tsx:
         - Canvas

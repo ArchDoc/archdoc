@@ -123,9 +123,9 @@ export async function planStartAnswer(
   out.push(
     "",
     "Next (this is the whole workflow):",
-    "  1. Open the explorer for the person yourself, now: run archdoc view --detach --watch --open (it starts in the background, opens their browser, and prints the URL), and give them the URL and the Plan tab under Build. Don't leave the command for them to run. Tell them to click in the box where they want something to change and write what they want there, in their own words (an intent), as many as they like, then press Send to agent. They don't draw the architecture: you do. Don't add changes or sequences before they send it. A note with what you found in the code is fine.",
+    "  1. Open the explorer for the person yourself, now: run archdoc view --detach --watch --open (it starts in the background, opens their browser, and prints the URL), and give them the URL and the Plan tab under Build. Don't leave the command for them to run. Tell them to click in the box where they want something to change and write what they want there, in their own words (an intent), as many as they like, then press Send to agent. They drive the design: you turn what they wrote into the model. Don't suggest changes or sequences before they've written and sent an intent (respond refuses them); a note with what you found in the code is fine.",
     `  2. Wait for it: archdoc plan wait ${id} (or archdoc_plan with action wait). It returns their intents and what they changed.`,
-    "  3. Work out the architecture for each intent against the code (archdoc_context on what it touches): the elements, arrows, data, and sequences that carry it out, as suggested changes and sequences, each with for: [the intent's ID] and its own intent. Ask a question on an intent (a note on i1) when it can be read more than one way. Answer with archdoc plan respond. Never edit the person's items: suggest, and they accept or dismiss.",
+    "  3. For each intent, check it against the code (archdoc_context on what it touches) and carry out what it says, no more: the elements, arrows, data, and sequences it asks for, as suggested changes and sequences, each with for: [the intent's ID] and its own intent. Where it leaves a design choice open (which store, sync or queued, a new element or an existing one), don't choose for them: ask with a question on the intent (a note on i1) that names the options and what each costs, and suggest once they answer. Add insights and risks you find in the code as notes. Answer with archdoc plan respond. Never edit the person's items: suggest, and they accept or dismiss.",
     "  4. Repeat 2 and 3 until nothing's open and they mark it ready. Then write the tasks that carry it out, each with the changes it makes, files, and tests, and carry them out in order.",
   );
   return { ok: true, text: out.join("\n"), id };
@@ -247,6 +247,24 @@ export interface PlanRespondInput {
  * suggestion until the person accepts it, and the agent can't change or
  * accept the person's items, only suggest beside them.
  */
+/**
+ * Why the agent can't suggest a change or sequence yet: the person drives
+ * the design, so a suggestion answers an intent they wrote and sent (`for`),
+ * never stands on its own.
+ */
+function unanswerable(spec: Plan["spec"], wanted: unknown): string | undefined {
+  const mine = spec.intents.filter((n) => !n.by?.startsWith("agent:"));
+  if (!mine.length || !spec.sent)
+    return "the person hasn't said what they want yet. They drive the design: wait for them to click in a box, write what they want there, and send it (archdoc plan wait). Until then, only a note with what you found in the code.";
+  const ids = Array.isArray(wanted) ? wanted.filter((x): x is string => typeof x === "string") : [];
+  if (!ids.length)
+    return `say which of the person's intents it carries out, with for: [${mine[0]?.id}]. A suggestion only answers what they asked for; if you think something else is needed, say so in a note.`;
+  const unknown = ids.filter((x) => !mine.some((n) => n.id === x));
+  if (unknown.length)
+    return `for: ${unknown.join(", ")} isn't an intent the person wrote (they have ${mine.map((n) => n.id).join(", ")}).`;
+  return undefined;
+}
+
 export async function planRespondAnswer(where: Where, input: PlanRespondInput): Promise<Answer> {
   if (!input.ops?.length) return { ok: false, text: "Give at least one op." };
   const l = await load(where);
@@ -282,6 +300,11 @@ export async function planRespondAnswer(where: Where, input: PlanRespondInput): 
         refused.push(
           `put ${id}: that's the person's. Suggest a change beside it (a new item with status suggested), or add a note on ${id}.`,
         );
+        continue;
+      }
+      const why = unanswerable(plan.spec, op.item.for ?? existing?.for);
+      if (why) {
+        refused.push(`put ${id ?? op.list}: ${why}`);
         continue;
       }
       ops.push({

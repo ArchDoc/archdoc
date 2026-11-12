@@ -2,19 +2,19 @@ journeys:
   plan-a-change:
     name: Plan a change
     actor: developer
-    goal: "Design a change with the coding agent on the map: the person says what they want where, and the agent works out the architecture, until it's solid enough to build"
+    goal: "Design a change with the coding agent on the map: the person drives it, saying what they want where, and the agent turns that into the model, asking where they left a choice open, until it's solid enough to build"
     importance: high
     steps:
       - { from: coding-agent, to: agent-skills, action: Reads how to plan a change with the person, code: integrations/claude-plugin/skills/archdoc/SKILL.md }
       - { from: coding-agent, to: mcp, action: Calls archdoc_plan with the person's idea, code: packages/mcp/src/server.ts, sends: ToolCall }
       - { from: mcp, to: analyzers, action: "Starts the plan, with the parts of the model the idea touches as its scope", code: packages/analyzers/src/plan.ts#planStartAnswer, sends: ToolCall }
       - { from: analyzers, to: model-files, action: Writes .archdoc/plans/<id>.yaml as drafting, creates: PlanFile }
-      - { from: developer, to: web, action: "Clicks in a box on the Plan tab's map and says what they want there, in a popover where they clicked (an intent, pinned in the box), as many as they like, then presses Send to agent", code: apps/web/src/components/Plan.tsx, sends: ExplorerAction }
+      - { from: developer, to: web, action: "Clicks in a box on the Plan tab's map and says what they want there, in a popover where they clicked (an intent, pinned in the box), as many as they like, then presses Send to agent, which waits for their first intent", code: apps/web/src/components/Plan.tsx, sends: ExplorerAction }
       - { from: web.model-loader, to: cli.view-server, action: Posts each edit with the plan's text as the page last read it, code: apps/web/src/model/plans.ts#writePlan, sends: PlanEdit }
       - { from: cli.view-server, to: analyzers, action: "Refuses another site's request or a stale plan, then applies the edits and records them as unread for the agent", code: packages/cli/src/server.ts#planRoute, sends: PlanEdit }
       - { from: analyzers, to: model-files, action: Writes the plan with what the person changed, code: packages/core/src/plan/edit.ts#editPlan, changes: { PlanFile.status: drafting -> reviewing } }
       - { from: coding-agent, to: mcp, action: "Waits for the plan to be sent, then reads it: what the person changed first, each item's intent, what it reaches, and its check", code: packages/analyzers/src/plan.ts#planWaitAnswer, sends: ToolCall }
       - { from: mcp, to: analyzers, action: Reads the plan and checks it, code: packages/analyzers/src/plan.ts#planReadAnswer, sends: ToolCall }
       - { from: analyzers, to: core, action: "Makes the plan on a copy of the model and checks it: missing intent, what can't be made, what it would break, and the journeys and actors it reaches", code: packages/core/src/plan/check.ts#checkPlan, sends: ModelSources }
-      - { from: coding-agent, to: mcp, action: "Works out the architecture for each intent against the code: suggested changes and sequences that carry it out (for: [i1]), with notes and questions, which the person accepts, dismisses, or answers on the map; they go back and forth until it's ready", code: packages/analyzers/src/plan.ts#planRespondAnswer, sends: ToolCall }
+      - { from: coding-agent, to: mcp, action: "Carries out what each intent says, checked against the code: suggested changes and sequences for it (for: [i1]), refused before the person has sent an intent or without one, and a question naming the options where the intent leaves a choice open; the person accepts, dismisses, or answers on the map until it's ready", code: packages/analyzers/src/plan.ts#planRespondAnswer, sends: ToolCall }
       - { from: coding-agent, to: mcp, action: "Writes the tasks, carries them out with archdoc_edit as the code lands, and marks each done", code: packages/analyzers/src/plan.ts#planTaskAnswer, sends: ToolCall }
