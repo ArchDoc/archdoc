@@ -17,4 +17,6 @@ expected:
     - id: missing-intent
       on: ["s1#3", s1]
       words: "intent|why"
-  sound: [c1]
+  # c1 says it handles registration and retries without saying how, so
+  # questions on it are fair: no item here is held as sound.
+  sound: []
