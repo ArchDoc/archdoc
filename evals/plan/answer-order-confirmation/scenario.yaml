@@ -1,0 +1,19 @@
+# The conversation: the person drew on the map and sent it (plan.yaml, status
+# reviewing, round 1): an intent in a box (i1), a box of their own with what
+# it's for (c1 and i2), an intent between two boxes that leaves a choice open
+# (i3: how the email gets to the mailer without holding up checkout), and an
+# intent on the storefront (i4). The agent should answer every intent in one
+# short turn: carry out the clear ones with suggestions that name them in
+# for, ask one question with options on the open one instead of picking,
+# keep the person's box and its ID, and wait again. Then the person taps the
+# first option and sends it (round 2), and the agent should pick it up and
+# carry out what they chose.
+stage: answer
+fixture: ts-monorepo
+expected:
+  # Intents clear enough to carry out in the first turn.
+  clear: [i1, i2, i4]
+  # The intent that leaves a design choice open: a question with options, not a pick.
+  open: i3
+  # The person's own box, kept as they drew it.
+  box: { change: c1, id: shop.mailer }

@@ -1389,7 +1389,7 @@ seals:
     by: agent:claude
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-e6b013532c0fb1b3
+    hash: fnv-990a5b5b4085ac3f
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
@@ -1401,13 +1401,22 @@ seals:
       apps/web/src/model/plans.ts:
         - IntentPin
         - PlanMap
+        - PlanTurn
         - PlanWrite
         - Plans
+        - Turn
+        - changeLine
+        - nameOf
+        - newElementId
+        - newElementPlace
         - nodeOf
+        - openQuestion
         - planMap
+        - planTurn
         - readPlans
         - refOf
         - startPlan
+        - turnsOf
         - writePlan
       apps/web/src/model/stories.ts:
         - IMPORTANCE
@@ -1487,7 +1496,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-6daed9e0c5bcacf4
+    hash: fnv-4cfadcfe78bcab0a
     files:
       apps/web/src/App.tsx:
         - App
@@ -1547,10 +1556,6 @@ seals:
         - PlanPanel
         - PlanPop
         - PlanStart
-        - PlanTurn
-        - newElementId
-        - newElementPlace
-        - planTurn
       apps/web/src/components/Sidebar.tsx:
         - ChangesList
         - DataList
@@ -1969,7 +1974,7 @@ seals:
     by: agent:claude-code
   step:plan-a-change#5:
     kind: structure
-    hash: fnv-f8c337c2ed299a88
+    hash: fnv-1eb14bac1251e31e
     files:
       apps/web/src/components/Plan.tsx:
         - IntentPopover
@@ -1980,25 +1985,30 @@ seals:
         - PlanPanel
         - PlanPop
         - PlanStart
-        - PlanTurn
-        - newElementId
-        - newElementPlace
-        - planTurn
     by: agent:claude-code
   step:plan-a-change#6:
     kind: structure
-    hash: fnv-57fb6f64a44399a4
+    hash: fnv-450def30a21e0290
     files:
       apps/web/src/model/plans.ts:
         - IntentPin
         - PlanMap
+        - PlanTurn
         - PlanWrite
         - Plans
+        - Turn
+        - changeLine
+        - nameOf
+        - newElementId
+        - newElementPlace
         - nodeOf
+        - openQuestion
         - planMap
+        - planTurn
         - readPlans
         - refOf
         - startPlan
+        - turnsOf
         - writePlan
     by: agent:claude-code
   step:plan-a-change#7:

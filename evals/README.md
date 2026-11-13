@@ -202,16 +202,18 @@ its own state, so it runs on its own:
   `archdoc_plan`, with a scope that reaches the part of the model the idea
   touches, opened the explorer, told the person to sketch it in the Plan tab,
   and left the sketch, the code, and the model alone, with no markdown plan.
-- **review**: the person sketched a plan and sent it (`plan.yaml`, status
-  `reviewing`), with flaws seeded in it and named in `scenario.yaml`: in
-  `order-confirmation` (ts-monorepo), the browser sends the email, the
-  sequence emails before charging, an arrow has no intent, and the product
-  cache is removed out of scope; in `settlement-webhooks` (go-service), the
-  API calls the webhook though settling happens in the worker, the webhooks
-  component queries Postgres instead of going through the store, and a step
-  has no intent. A flaw is caught when the agent pinned a note to the item or
-  suggested the fix, a risk or question on a sound item is a false alarm, and
-  the person's items, the code, and the model must be left as they were.
+- **answer** (`answer-order-confirmation`): the person drew on the map and
+  sent it (`plan.yaml`, status `reviewing`, round 1): an intent in a box, a box
+  of their own with what it's for, an intent between two boxes that leaves a
+  choice open (how the email reaches the mailer without holding up checkout),
+  and one on the storefront. Scored on the first answer: every intent answered
+  (a suggestion for it, or a note on it), the clear ones carried out, a
+  question with options on the open one rather than a pick, the person's box
+  kept with its ID, at most one question, notes kept short, and waiting again.
+  A scripted person then taps the first option and sends it, through the
+  explorer's own edit path, and the second answer is scored on whether the
+  agent picked it up and suggested what they chose. Minutes to each answer
+  are reported; the person marks the plan ready to end the run.
 - **carry** (`carry-out-order-confirmation`): the plan is agreed and ready,
   with no tasks. Scored on whether the agent wrote tasks (each with the
   changes it carries out and its files), built the code, changed the model
@@ -223,15 +225,17 @@ its own state, so it runs on its own:
 pnpm build
 pnpm eval:plan                          # every scenario, once
 pnpm eval:plan --stage carry            # one stage
-node scripts/eval-plan.mjs order-confirmation --runs 3
+node scripts/eval-plan.mjs answer-order-confirmation --runs 3
 ```
 
 It runs Claude Code headless with the skill, the MCP server, and the CLI from
 this checkout. Only the carry stage may edit files. An explorer the agent
-starts opens no browser and is stopped when the run ends. The free half (each
-scenario starts where its stage does: a review's check finds the missing
-intent and nothing else, and a plan to carry out is clean but for its tasks)
-runs in `pnpm test` (`packages/analyzers/test/plan-evals.test.ts`).
+starts opens no browser and is stopped when the run ends. The free half
+(each scenario starts where its stage does: a plan to answer is the person's
+alone, sent once and unread, and a plan to carry out is clean but for its
+tasks) runs in `pnpm test` (`packages/analyzers/test/plan-evals.test.ts`), with
+unit tests of the explorer's conversation logic (whose turn it is, each
+intent with its answer, a box the person drew) in `apps/web/test/plans.test.ts`.
 
 ## The branch diff
 

@@ -5,11 +5,14 @@
 //   start   The person has an idea and asks to plan it. The agent should start
 //           a plan with its scope, open the explorer, and leave the sketch to
 //           the person: no markdown plan, no code, no model edits.
-//   review  The person sketched a plan with flaws seeded in it and sent it
-//           (plan.yaml, status reviewing). Each flaw is caught when the agent
-//           pinned a note to the item (or suggested the fix); a sound item
-//           drawing a risk or question is a false alarm; the person's items,
-//           the code, and the model must be left as they were.
+//   answer  The person drew on the map and sent it (plan.yaml, status
+//           reviewing): intents in a box, between two boxes, on a box of
+//           their own, and one that leaves a choice open. The agent should
+//           answer every intent in one short turn, ask (with options) where
+//           the choice is open instead of picking, keep the person's box, and
+//           wait again. A scripted person then taps the first option and
+//           sends it, and the agent should pick the turn up and carry out
+//           what they chose. Rule-scored, with minutes per turn.
 //   carry   The plan is agreed and ready (plan.yaml). The agent should write
 //           the tasks, build them, edit the model as each lands, and mark
 //           them, so the plan ends done and the model shows every change.
@@ -19,8 +22,8 @@
 //
 //   pnpm build
 //   pnpm eval:plan                         # every scenario, once
-//   pnpm eval:plan --stage carry           # one stage
-//   node scripts/eval-plan.mjs [scenario...] [--stage start,review,carry] [--runs 1]
+//   pnpm eval:plan --stage answer          # one stage
+//   node scripts/eval-plan.mjs [scenario...] [--stage start,answer,carry] [--runs 1]
 //        [--parallel 2] [--model <id>] [--max-turns n] [--max-budget-usd n]
 //        [--claude claude] [--keep]
 //
@@ -49,7 +52,7 @@ const parseYaml = (text) =>
   createRequire(join(here, "packages/cli/package.json"))("yaml").parse(text);
 const stringifyYaml = (value) =>
   createRequire(join(here, "packages/cli/package.json"))("yaml").stringify(value);
-const STAGES = ["start", "review", "carry"];
+const STAGES = ["start", "answer", "carry"];
 const BUILTIN = ["Read", "Glob", "Grep", "Bash", "Skill", "Edit", "Write"];
 // The shell is open, as a person at their computer would allow it: a denied
 // `cat` or `env` reads to an agent as "commands are blocked", and it stops
@@ -58,13 +61,13 @@ const READ_TOOLS = ["Skill", "Read", "Glob", "Grep", "mcp__archdoc", "Bash"];
 /** What each stage may do without asking: only carrying a plan out edits files. */
 const TOOLS = {
   start: READ_TOOLS,
-  review: READ_TOOLS,
+  answer: READ_TOOLS,
   carry: [...READ_TOOLS, "Edit", "Write"],
 };
-/** Carrying a plan out takes longer than starting or reviewing one. */
+/** Carrying a plan out takes longer than starting one or answering it. */
 const LIMITS = {
   start: { turns: "30", budget: "1" },
-  review: { turns: "40", budget: "1" },
+  answer: { turns: "60", budget: "2" },
   carry: { turns: "80", budget: "3" },
 };
 
@@ -89,7 +92,7 @@ const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const out = resolve(flag("--out", join(here, "evals/results", `plan-${stamp}`)));
 const readScenario = (name) =>
   parseYaml(readFileSync(join(SCENARIOS, name, "scenario.yaml"), "utf8"));
-const stageOf = (name) => readScenario(name).stage ?? "review";
+const stageOf = (name) => readScenario(name).stage;
 const all = readdirSync(SCENARIOS, { withFileTypes: true })
   .filter((d) => d.isDirectory() && existsSync(join(SCENARIOS, d.name, "scenario.yaml")))
   .map((d) => d.name)
@@ -110,11 +113,11 @@ const prompts = {
       "",
       "(This is an automated run: nobody will answer questions or sketch during it, so don't ask, and don't wait for my sketch. Set everything up for me as you would for a person at their computer, then stop.)",
     ].join("\n"),
-  review: (_scenario, id) =>
+  answer: (_scenario, id) =>
     [
-      `I sketched a change in ArchDoc's Plan tab and pressed Send to agent: the plan is ${id}. Review it and answer on the plan.`,
+      `I drew a change on ArchDoc's Plan tab and sent it to you: the plan is ${id}. Answer me there, and keep going as I answer in the Plan tab.`,
       "",
-      `${AUTOMATED} Don't build anything yet.)`,
+      "(This is an automated run: I answer in the Plan tab, not in this chat, so don't ask me here. Don't build anything; once I mark the plan ready, stop.)",
     ].join("\n"),
   carry: (_scenario, id) =>
     [
@@ -188,7 +191,7 @@ function stopExplorers(tmp) {
 const { CLAUDE_CODE_REMOTE: _r, SSH_CONNECTION: _c, SSH_TTY: _t, ...local } = process.env;
 
 /** Claude Code, headless, in `cwd`; resolves with the result line and the tools it called. */
-function runAgent(cwd, stage, prompt, transcript) {
+function runAgent(cwd, stage, prompt, transcript, during) {
   const limits = LIMITS[stage];
   const tmp = mkdtempSync(join(tmpdir(), "archdoc-plan-eval-tmp-"));
   const args = [
@@ -231,6 +234,7 @@ function runAgent(cwd, stage, prompt, transcript) {
       err += d;
     });
     child.on("error", (e) => done({ error: String(e), calls: [] }));
+    during?.(child);
     child.on("close", (code) => {
       stopExplorers(tmp);
       rmSync(tmp, { recursive: true, force: true });
@@ -335,50 +339,161 @@ export function scoreStart({ dir, calls, answer, scenario, added }) {
   };
 }
 
-/** Scores the review against the scenario's seeded flaws. */
-export function scorePlan(before, after, scenario) {
-  const notes = (after.notes ?? []).filter((n) => isAgent(n.by));
-  const replies = (after.notes ?? []).flatMap((n) =>
-    (n.replies ?? []).filter((r) => isAgent(r.by)).map((r) => ({ ...r, on: n.on })),
+/** How long the person waits on each of the agent's turns before giving up. */
+const TURN_MS = 10 * 60_000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const words = (text) =>
+  String(text ?? "")
+    .split(/\s+/)
+    .filter(Boolean).length;
+const openQuestions = (plan) =>
+  (plan.notes ?? []).filter(
+    (n) =>
+      isAgent(n.by) &&
+      n.kind === "question" &&
+      !n.resolved &&
+      !(n.replies ?? []).some((r) => r.kind === "answer"),
   );
-  const said = [...notes, ...replies];
-  const suggested = (after.changes ?? []).filter((c) => isAgent(c.by));
-  const caught = scenario.expected.flaws.map((f) => {
-    const pinned = said.some(
-      (n) => n.on && f.on.some((o) => n.on === o || n.on.startsWith(`${o}#`)),
-    );
-    const worded = f.words
-      ? said.some(
-          (n) =>
-            n.on &&
-            f.on.some((o) => n.on.split("#")[0] === o.split("#")[0]) &&
-            new RegExp(f.words, "i").test(n.text),
-        )
-      : pinned;
-    const fixed =
-      !!f.fix?.use &&
-      suggested.some(
-        (c) =>
-          c.use &&
-          f.fix.use.from.some((x) => names_(c.use.from, x)) &&
-          f.fix.use.to.some((x) => names_(c.use.to, x)),
-      );
-    return { id: f.id, caught: pinned || fixed, worded: worded || fixed, fixed };
+
+/**
+ * The person, in the Plan tab: waits for the agent's first answer, taps the
+ * first option on its open question (or, with none, says what they want on
+ * the open intent) and sends it, waits for the second answer, then marks the
+ * plan ready. Edits go through the explorer's own path (tracked as unread).
+ */
+async function playPerson({ dir, name, scenario, child, started }) {
+  const file = join(dir, `.archdoc/plans/${name}.yaml`);
+  const log = {};
+  let exited = false;
+  child.on("close", () => {
+    exited = true;
   });
-  const falseAlarms = said.filter(
-    (n) => (scenario.expected.sound ?? []).includes(n.on) && /risk|question/.test(n.kind ?? ""),
-  ).length;
-  const recall = caught.filter((c) => c.caught).length / caught.length;
+  const read = () => {
+    try {
+      return parseYaml(readFileSync(file, "utf8"));
+    } catch {
+      return undefined; // Mid-write: look again.
+    }
+  };
+  const until = async (ok) => {
+    const end = Date.now() + TURN_MS;
+    while (Date.now() < end && !exited) {
+      const p = read();
+      if (p && ok(p)) return p;
+      await sleep(2000);
+    }
+    return undefined;
+  };
+  const { planEditAnswer } = await import(join(here, "packages/analyzers/dist/index.js"));
+  const edit = (ops) =>
+    planEditAnswer({ cwd: dir }, { id: name, ops, by: "human:@dana", track: true });
+
+  const first = await until((p) => (p.answered ?? 0) >= 1);
+  if (!first) return log;
+  log.first = first;
+  log.turn1 = (Date.now() - started) / 60000;
+  const q = openQuestions(first).at(-1);
+  log.tapped = q?.options?.[0];
+  const said = await edit([
+    ...(q
+      ? [
+          { op: "reply", note: q.id, text: q.options?.[0] ?? "Queue it", kind: "answer" },
+          { op: "resolve", note: q.id },
+        ]
+      : [
+          {
+            op: "put",
+            list: "notes",
+            item: {
+              on: scenario.expected.open,
+              text: "Queue it, so checkout never waits on email",
+            },
+          },
+        ]),
+    { op: "send" },
+  ]);
+  if (!said.ok) {
+    log.error = said.text;
+    return log;
+  }
+  const sentAt = Date.now();
+  const second = await until((p) => (p.answered ?? 0) >= 2);
+  if (second) {
+    log.second = second;
+    log.turn2 = (Date.now() - sentAt) / 60000;
+  }
+  // Done talking: the person marks it ready, which ends the agent's wait.
+  await edit([{ op: "set", status: "ready" }]);
+  const end = Date.now() + 120_000;
+  while (!exited && Date.now() < end) await sleep(1000);
+  if (!exited) {
+    log.stopped = true;
+    child.kill("SIGTERM");
+  }
+  return log;
+}
+
+/**
+ * Scores the conversation: the first answer (every intent answered, the
+ * clear ones carried out, a question with options on the open one, the
+ * person's box kept, brief) and the second (picked up, and what the person
+ * chose carried out).
+ */
+export function scoreAnswer({ before, after, scenario, person, calls }) {
+  const first = person.first ?? after;
+  const { clear = [], open, box } = scenario.expected;
+  const live = (x) => isAgent(x.by) && x.status !== "dismissed";
+  const forIt = (plan, id) =>
+    [...(plan.changes ?? []), ...(plan.sequences ?? [])].filter(
+      (x) => live(x) && x.for?.includes(id),
+    );
+  const notesOn = (plan, id) => {
+    const intent = (plan.intents ?? []).find((i) => i.id === id);
+    const drew = (plan.changes ?? []).find((c) => !isAgent(c.by) && c.add?.id === intent?.on);
+    const about = new Set([id, ...forIt(plan, id).map((x) => x.id), ...(drew ? [drew.id] : [])]);
+    return (plan.notes ?? []).filter((n) => isAgent(n.by) && n.on && about.has(n.on.split("#")[0]));
+  };
+  const mine = (before.intents ?? []).map((i) => i.id);
+  const answered = mine.filter((id) => forIt(first, id).length || notesOn(first, id).length);
+  const asked = notesOn(first, open).some(
+    (n) => n.kind === "question" && (n.options?.length ?? 0) >= 2,
+  );
+  const said = (first.notes ?? []).filter((n) => isAgent(n.by));
+  const touchedBox = [...(after.changes ?? [])].some(
+    (c) =>
+      isAgent(c.by) &&
+      ((c.add && c.add.id === box.id) ||
+        (c.rename && c.rename.id === box.id) ||
+        c.remove === box.id ||
+        c.remove?.id === box.id),
+  );
+  const ownBox = (after.changes ?? []).find((c) => c.id === box.change);
+  const order = calls.map(
+    (c) =>
+      (c.name === "mcp__archdoc__archdoc_plan" && c.input.action) ||
+      (c.name === "Bash" && /archdoc\s+plan\s+(\w+)/.exec(c.input.command)?.[1]) ||
+      undefined,
+  );
+  const responded = order.indexOf("respond");
   return {
-    caught,
-    recall,
-    worded: caught.filter((c) => c.worded).length / caught.length,
-    falseAlarms,
-    kept: keptOwn(before, after),
-    notes: notes.length,
-    suggestions: suggested.length,
-    statusLeft: after.status,
-    unreadCleared: !(after.unread ?? []).length,
+    answered: answered.length / (mine.length || 1),
+    carried: clear.filter((id) => forIt(first, id).length).length / (clear.length || 1),
+    asked,
+    picked: !asked && forIt(first, open).length > 0,
+    kept: keptOwn(before, after) && !touchedBox && ownBox?.add?.id === box.id,
+    questions: said.filter((n) => n.kind === "question").length,
+    words: mean(said.map((n) => words(n.text))) ?? 0,
+    read: (first.seen ?? 0) >= 1,
+    used: responded >= 0,
+    waited: responded >= 0 && order.slice(responded + 1).includes("wait"),
+    tapped: person.tapped,
+    pickedUp: (after.seen ?? 0) >= 2,
+    secondAnswered: !!person.second,
+    carriedChoice: !!person.second && forIt(person.second, open).length > 0,
+    turn1: person.turn1,
+    turn2: person.turn2,
+    stopped: person.stopped === true,
+    error: person.error,
   };
 }
 
@@ -483,7 +598,7 @@ function mean(xs) {
 
 async function oneRun(name, i) {
   const scenario = readScenario(name);
-  const stage = scenario.stage ?? "review";
+  const stage = scenario.stage;
   const dir = planRepo(name, scenario);
   const had = new Set(planFiles(dir));
   const file = join(dir, `.archdoc/plans/${name}.yaml`);
@@ -491,12 +606,20 @@ async function oneRun(name, i) {
   const runDir = join(out, name, `run-${i + 1}`);
   mkdirSync(runDir, { recursive: true });
   const started = Date.now();
+  let playing;
   const { result, calls, error } = await runAgent(
     dir,
     stage,
     prompts[stage](scenario, name),
     join(runDir, "transcript.jsonl"),
+    stage === "answer"
+      ? (child) => {
+          playing = playPerson({ dir, name, scenario, child, started });
+        }
+      : undefined,
   );
+  const person = (await playing) ?? {};
+  if (person.first) writeFileSync(join(runDir, "first-answer.yaml"), stringifyYaml(person.first));
   const answer = String(result?.result ?? "");
   writeFileSync(join(runDir, "answer.md"), `${answer}\n`);
   const added = planFiles(dir).filter((f) => !had.has(f));
@@ -507,7 +630,7 @@ async function oneRun(name, i) {
   const touched = touchedIn(dir);
   let score;
   if (stage === "start") score = scoreStart({ dir, calls, answer, scenario, added });
-  else if (stage === "review") score = scorePlan(before, after, scenario);
+  else if (stage === "answer") score = scoreAnswer({ before, after, scenario, person, calls });
   else score = scoreCarry({ dir, calls, before, after, scenario });
   writeFileSync(join(runDir, "score.json"), `${JSON.stringify(score, null, 2)}\n`);
   if (!keep) rmSync(dirname(dir), { recursive: true, force: true });
@@ -518,16 +641,18 @@ async function oneRun(name, i) {
     ms: Date.now() - started,
     turns: result?.num_turns,
     cost: result?.total_cost_usd,
-    used: stage === "review" ? calledPlan(calls, "respond") : undefined,
     touched,
     score,
-    error: error ?? (result?.is_error ? (result.subtype ?? "error") : undefined),
+    // Stopped by the person once the conversation was over: not an error.
+    error: person.stopped
+      ? undefined
+      : (person.error ?? error ?? (result?.is_error ? (result.subtype ?? "error") : undefined)),
   };
   const headline =
     stage === "start"
       ? `started ${score.started ? "yes" : "no"}`
-      : stage === "review"
-        ? `caught ${pct(score.recall)}`
+      : stage === "answer"
+        ? `answered ${pct(score.answered)}, picked up ${score.pickedUp ? "yes" : "no"}`
         : `built ${pct(score.built)}, ${score.status}`;
   console.log(`${name} #${i + 1}: ${headline}${run.error ? ` (${run.error})` : ""}`);
   return run;
@@ -559,20 +684,24 @@ const TABLES = {
       ["Clean", (_m, s) => pct(s((r) => r.score.clean))],
     ],
   },
-  review: {
-    title: "Review",
+  answer: {
+    title: "Answer",
     legend:
-      "Caught: the share of seeded flaws with a note from the agent pinned to the item, or the fix suggested. Worded: and the note says what's wrong. False alarms: risks or questions on items that are sound. Kept: the person's items left as they were. Clean: no code or model changed. Used: answered through archdoc_plan respond. Read: what the person changed is marked read.",
+      "First turn: Answered: the share of the person's intents with a suggestion for it (for) or a note on it. Carried: the clear intents with a suggestion for each. Asked: a question with options on the intent that leaves a choice open; Picked: suggestions for it with no question (choosing for the person). Kept: the person's box kept, with its ID. Questions: how many the agent asked (one at a time is best). Words: per note. Waited: waited again after answering. Second turn, after the person taps the first option and sends it: Picked up: the agent read it; Carried choice: a suggestion for the open intent. Minutes: to the first answer, and from the person's send to the second.",
     cols: [
-      ["Caught", (m) => `**${pct(mean(m.map((r) => r.score.recall)))}**`],
-      ["Worded", (m) => pct(mean(m.map((r) => r.score.worded)))],
-      ["False alarms", (m) => num(mean(m.map((r) => r.score.falseAlarms)))],
+      ["Answered", (m) => `**${pct(mean(m.map((r) => r.score.answered)))}**`],
+      ["Carried", (m) => pct(mean(m.map((r) => r.score.carried)))],
+      ["Asked", (_m, s) => pct(s((r) => r.score.asked))],
+      ["Picked", (_m, s) => pct(s((r) => r.score.picked))],
       ["Kept", (_m, s) => pct(s((r) => r.score.kept))],
+      ["Questions", (m) => num(mean(m.map((r) => r.score.questions)))],
+      ["Words", (m) => num(mean(m.map((r) => r.score.words)))],
       ["Clean", (_m, s) => pct(s((r) => !r.touched.length))],
-      ["Used", (_m, s) => pct(s((r) => r.used))],
-      ["Read", (_m, s) => pct(s((r) => r.score.unreadCleared))],
-      ["Notes", (m) => num(mean(m.map((r) => r.score.notes)))],
-      ["Suggestions", (m) => num(mean(m.map((r) => r.score.suggestions)))],
+      ["Waited", (_m, s) => pct(s((r) => r.score.waited))],
+      ["Picked up", (_m, s) => `**${pct(s((r) => r.score.pickedUp))}**`],
+      ["Carried choice", (_m, s) => pct(s((r) => r.score.carriedChoice))],
+      ["Turn 1 min", (m) => num(mean(m.map((r) => r.score.turn1).filter((x) => x !== undefined)))],
+      ["Turn 2 min", (m) => num(mean(m.map((r) => r.score.turn2).filter((x) => x !== undefined)))],
     ],
   },
   carry: {

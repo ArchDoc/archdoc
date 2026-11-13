@@ -1,0 +1,22 @@
+plan: answer-order-confirmation
+title: Email an order confirmation
+status: reviewing
+goal: Email the shopper an order confirmation after checkout
+by: human:@dana
+intents:
+  - { id: i1, on: shop.api.orders, at: { x: 30, y: 40 }, by: "human:@dana", text: Email the shopper an order confirmation once the order is charged }
+  - { id: i2, on: shop.mailer, at: { x: 90, y: 80 }, by: "human:@dana", text: Sends the shopper's emails through our email provider }
+  - { id: i3, on: shop.api.orders, to: shop.mailer, by: "human:@dana", text: "Hand the email to the mailer so a slow email provider can't hold up checkout" }
+  - { id: i4, on: shop.web, at: { x: 50, y: 50 }, by: "human:@dana", text: Show on the order page that the confirmation was sent }
+changes:
+  - id: c1
+    by: human:@dana
+    intent: Sends the shopper's emails through our email provider
+    add: { id: shop.mailer, kind: container, name: Mailer }
+unread:
+  - { id: i1, what: added }
+  - { id: c1, what: added }
+  - { id: i2, what: added }
+  - { id: i3, what: added }
+  - { id: i4, what: added }
+sent: 1
