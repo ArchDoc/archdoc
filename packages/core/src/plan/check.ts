@@ -271,6 +271,15 @@ export function checkPlan(
         loc(`intents.${i}`),
       );
     }
+    if (n.to && !known(n.to)) {
+      push(
+        "warning",
+        "plan/unknown-item",
+        `Intent ${n.id} is about ${n.on ?? "the system"} → ${n.to}, and ${n.to} isn't in the plan or the model.`,
+        n.id,
+        loc(`intents.${i}`),
+      );
+    }
   }
   const intentIds = new Set(spec.intents.map((n) => n.id));
   for (const [list, items] of [

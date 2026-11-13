@@ -11,6 +11,7 @@ import {
   openIntents,
   type Plan,
   parsePlan,
+  planFocus,
   planId,
 } from "../src/index.js";
 import { dedent } from "./helpers.js";
@@ -305,6 +306,61 @@ describe("intents", () => {
     `);
     const c = checkPlan(model, sources, p, { root: "archdoc.yaml" });
     expect(codes(c).filter((x) => x === "plan/unknown-item").length).toBe(2);
+  });
+
+  it("takes an intent about how two boxes connect, and flags an end that isn't there", () => {
+    const p = plan(`
+      intents:
+        - { id: i1, on: shop.web, to: shop.db, text: Read orders straight from the db }
+        - { id: i2, on: shop.web, to: shop.nowhere, text: Cache them }
+    `);
+    expect(p.spec.intents[0]?.to).toBe("shop.db");
+    expect(formatPlan(checkPlan(model, sources, p, { root: "archdoc.yaml" }))).toContain(
+      "i1 on shop.web → shop.db (how they connect)",
+    );
+    const c = checkPlan(model, sources, p, { root: "archdoc.yaml" });
+    expect(c.findings.filter((f) => f.code === "plan/unknown-item").map((f) => f.message)).toEqual([
+      expect.stringContaining("shop.nowhere"),
+    ]);
+  });
+
+  it("keeps a question's options", () => {
+    const p = plan(`
+      notes:
+        - { id: n1, kind: question, text: Which provider?, options: [SES, Postmark] }
+    `);
+    expect(p.spec.notes[0]?.options).toEqual(["SES", "Postmark"]);
+    expect(formatPlan(checkPlan(model, sources, p, { root: "archdoc.yaml" }))).toContain(
+      "options: SES | Postmark",
+    );
+  });
+});
+
+describe("planFocus", () => {
+  it("is what the intents, changes, and sequences touch, and the scope apart", () => {
+    const p = plan(`
+      scope: { elements: [shop.api, shop.web] }
+      intents:
+        - { id: i1, on: shop.web, to: shop.db, text: Read orders straight from the db }
+      changes:
+        - { id: c1, intent: Mails, for: [i1], add: { id: shop.mailer, kind: container } }
+        - { id: c2, intent: Calls it, for: [i1], use: { from: shop.api, to: shop.mailer } }
+        - { id: c3, intent: Gone, for: [i1], status: dismissed, remove: shop.db }
+      sequences:
+        - id: s1
+          journey: checkout
+          for: [i1]
+          steps:
+            - { from: shopper, to: shop.web, action: Pays }
+    `);
+    expect(planFocus(p.spec)).toEqual({
+      touched: ["shop.web", "shop.db", "shop.mailer", "shop.api", "shopper"],
+      scope: [],
+    });
+    expect(planFocus(plan("scope: { elements: [shop.api] }").spec)).toEqual({
+      touched: [],
+      scope: ["shop.api"],
+    });
   });
 });
 

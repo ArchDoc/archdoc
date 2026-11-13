@@ -19,6 +19,12 @@ export interface ViewState {
   expanded: ReadonlySet<string>;
   /** Node key (`actor:x`, `element:y`) whose neighborhood is the only thing shown. */
   focus?: string | undefined;
+  /**
+   * What a plan touches, as node keys: only `keep`, what the `around` keys
+   * connect to directly, and the boxes they sit in are shown. Keys not
+   * drawn are ignored.
+   */
+  only?: { keep: ReadonlySet<string>; around: ReadonlySet<string> } | undefined;
   /** For a landscape: the team or domain boxes elements are drawn in. */
   grouping?: Grouping | undefined;
   /**
@@ -460,7 +466,33 @@ export function buildGraph(model: Model, state: ViewState): Graph {
   }
 
   const graph = { nodes: [...nodes.values()], edges: [...edges.values(), ...tableEdges] };
-  return state.focus ? focusGraph(model, graph, state.focus) : graph;
+  const focused = state.focus ? focusGraph(model, graph, state.focus) : graph;
+  return state.only?.keep.size ? onlyGraph(focused, state.only) : focused;
+}
+
+/**
+ * Keeps what a plan touches: those nodes, the nodes they share an arrow
+ * with, and the boxes around them. With none of them drawn, everything.
+ */
+export function onlyGraph(
+  graph: Graph,
+  only: { keep: ReadonlySet<string>; around: ReadonlySet<string> },
+): Graph {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const seed = [...only.keep].filter((k) => byId.has(k));
+  if (!seed.length) return graph;
+  const keep = new Set<string>(seed);
+  for (const e of graph.edges) {
+    if (only.around.has(e.source) && byId.has(e.target)) keep.add(e.target);
+    if (only.around.has(e.target) && byId.has(e.source)) keep.add(e.source);
+  }
+  for (const id of [...keep]) {
+    for (let p = byId.get(id)?.parentId; p; p = byId.get(p)?.parentId) keep.add(p);
+  }
+  return {
+    nodes: graph.nodes.filter((n) => keep.has(n.id)),
+    edges: graph.edges.filter((e) => keep.has(e.source) && keep.has(e.target)),
+  };
 }
 
 /** Keeps the focused node, its direct neighbors, what it owns (for actors), and their groups. */

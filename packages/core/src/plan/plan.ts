@@ -281,3 +281,34 @@ export function openIntents(spec: PlanSpec): PlanSpec["intents"] {
   }
   return spec.intents.filter((i) => !i.resolved && !answered.has(i.id));
 }
+
+/**
+ * What a plan touches, for a map that shows only that. `touched`: where the
+ * person put intents (both ends of one about a connection), and what each
+ * change and sequence is about. `scope`: what the idea landed on when the
+ * plan started. Model IDs and actor IDs, as the plan writes them, each once.
+ */
+export function planFocus(spec: PlanSpec): { touched: string[]; scope: string[] } {
+  const out = new Set<string>();
+  for (const n of spec.intents) {
+    if (n.on) out.add(n.on);
+    if (n.to) out.add(n.to);
+  }
+  for (const c of spec.changes) {
+    if (c.status === "dismissed") continue;
+    if (c.use) {
+      out.add(c.use.from);
+      out.add(c.use.to);
+    } else if (changeTarget(c)) out.add(changeTarget(c));
+    if (c.rename) out.add(c.rename.to);
+  }
+  for (const q of spec.sequences) {
+    if (q.status === "dismissed") continue;
+    for (const st of q.steps) {
+      out.add(st.from);
+      out.add(st.to);
+    }
+  }
+  const touched = [...out].filter(Boolean);
+  return { touched, scope: (spec.scope?.elements ?? []).filter((x) => !out.has(x)) };
+}

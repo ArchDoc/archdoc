@@ -5,6 +5,7 @@ import {
   lineage,
   type Model,
   type PlanEditOp,
+  planFocus,
   resolveCodeMap,
   type Simulation,
   type SnippetPlace,
@@ -57,7 +58,7 @@ import {
 } from "./graph/graph.js";
 import { type GroupBy, type Grouping, groupLandscape } from "./graph/groups.js";
 import { type Compare, compareCode } from "./model/compare.js";
-import { planMap, readPlans, writePlan } from "./model/plans.js";
+import { nodeOf, planMap, readPlans, writePlan } from "./model/plans.js";
 import { actorLabel, journeyLanes, journeysByImportance } from "./model/stories.js";
 import { landingTab, type Section, sectionOf, sections } from "./model/tabs.js";
 import {
@@ -293,6 +294,8 @@ function Explorer({
   const [planAt, setPlanAt] = useState(0);
   const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState<string>();
+  // The plan's map shows what it touches, unless the person asks for the whole system.
+  const [planWhole, setPlanWhole] = useState(false);
   const planState = useMemo(() => readPlans(planning?.plans ?? []), [planning?.plans]);
   const plan =
     planId === NEW_PLAN
@@ -306,6 +309,23 @@ function Explorer({
     [tab, plan, planning, model],
   );
   const planSequence = planView?.plan.spec.sequences.find((q) => q.id === planSeq);
+  // What the plan touches, as drawn boxes: the map shows only these and their neighbors.
+  const planOnly = useMemo(() => {
+    if (!planView || planWhole || planSeq) return undefined;
+    const after = planView.after;
+    const keys = (refs: string[]) =>
+      refs.flatMap((ref) => {
+        const key = nodeOf(after, ref);
+        if (!key) return [];
+        return [key.startsWith("element:") ? `element:${shownId(after, key.slice(8))}` : key];
+      });
+    const { touched, scope } = planFocus(planView.plan.spec);
+    // What the person and the agent touched shows with what it connects to; until there's
+    // any, the scope the idea landed on shows alone.
+    const around = new Set(keys(touched));
+    const keep = around.size ? around : new Set(keys(scope));
+    return keep.size ? { keep, around } : undefined;
+  }, [planView, planWhole, planSeq]);
   const planJourney =
     planView && planSequence ? planView.after.journeys.get(planSequence.journey) : undefined;
   const planInteractions = useMemo(
@@ -331,6 +351,9 @@ function Explorer({
   useEffect(() => {
     if (!planView || planOpened.current === planView.plan.id) return;
     planOpened.current = planView.plan.id;
+    // With a focus the map fits it; without one, it moves to the first thing the plan is about.
+    const { touched, scope } = planFocus(planView.plan.spec);
+    if (touched.length || scope.length) return;
     const first = [...planView.items.keys()][0];
     if (first) setCenterOn(first);
   }, [planView]);
@@ -341,6 +364,7 @@ function Explorer({
     setPlanAt(0);
     setPlanError(undefined);
     setSelected(undefined);
+    setPlanWhole(false);
   }, []);
   // The map on the Plan tab is the model with the plan made.
   const mapModel = planView?.after ?? model;
@@ -455,6 +479,11 @@ function Explorer({
         const id = c.kind === "removed" ? undefined : c.id;
         if (id) for (const a of ancestorsOf(mapModel, id)) out.expanded.add(a);
       }
+      // And the boxes around what it touches, at whatever level each lives.
+      for (const key of planOnly?.keep ?? []) {
+        if (key.startsWith("element:"))
+          for (const a of ancestorsOf(mapModel, key.slice(8))) out.expanded.add(a);
+      }
     } else if (
       tab === "data" &&
       (selected?.startsWith("data:") || selected?.startsWith("field:"))
@@ -474,7 +503,7 @@ function Explorer({
       if (selected.startsWith("field:")) for (const e of entries) out.fields.add(e);
     }
     return out;
-  }, [model, mapModel, journeyOnMap, tab, selected, planView]);
+  }, [model, mapModel, journeyOnMap, tab, selected, planView, planOnly]);
   const shut = closed?.context === context ? closed.ids : undefined;
   const effective = useMemo(() => {
     const merge = (mine: ReadonlySet<string>, theirs: ReadonlySet<string>, prefix: string) =>
@@ -503,6 +532,7 @@ function Explorer({
     () => ({
       expanded: effective.expanded,
       focus: focused && !journeyOnMap ? selected : undefined,
+      only: journeyOnMap ? undefined : planOnly,
       grouping,
       system: journeyOnMap || tab === "data" || effective.expanded.size ? undefined : box,
       tables: effective.tables,
@@ -516,6 +546,7 @@ function Explorer({
       effective,
       focused,
       journeyOnMap,
+      planOnly,
       selected,
       grouping,
       tab,
@@ -655,6 +686,8 @@ function Explorer({
       setBoxed(level === "context");
       setClosed(undefined);
       setFocused(false);
+      // A level is a view of the whole system.
+      setPlanWhole(true);
     },
     [model],
   );
@@ -765,7 +798,7 @@ function Explorer({
                 setPlanPop(
                   p.intent
                     ? { intent: p.intent, node: p.node, flow: p.flow }
-                    : { node: p.node, at: p.at, flow: p.flow },
+                    : { node: p.node, at: p.to ? undefined : p.at, flow: p.flow, to: p.to },
                 );
               },
               popover: planPop
@@ -1098,6 +1131,18 @@ function Explorer({
           busy={planBusy}
           onEdit={editPlan}
           hint={planningHint(planView.plan.spec, !!planning?.editable)}
+          focus={
+            planSeq
+              ? undefined
+              : {
+                  whole: planWhole || !planOnly,
+                  available: planWhole || !!planOnly,
+                  onWhole: (whole: boolean) => {
+                    setPlanWhole(whole);
+                    if (!whole) setExpanded(new Set());
+                  },
+                }
+          }
         />
         <div className="story-body">{canvas}</div>
       </section>

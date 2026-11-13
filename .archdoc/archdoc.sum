@@ -679,7 +679,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.plans:
     kind: structure
-    hash: fnv-eb894c3ac8f1796e
+    hash: fnv-233fc87b1dced0c9
     files:
       packages/core/src/plan/check.ts:
         - AppliedPlan
@@ -715,11 +715,12 @@ seals:
         - loadPlans
         - openIntents
         - parsePlan
+        - planFocus
         - planId
         - planItemIds
         - planStatusOf
         - sequenceOp
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.core.plans#packages/core/src/plan/check.ts:applyPlan:
     kind: content
     hash: fnv-4fd7bad96b35beb9
@@ -727,7 +728,7 @@ seals:
       packages/core/src/plan/check.ts (applyPlan):
         hash: fnv-b09bee1c4c27ede6
         lines: 6
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.core.plans#packages/core/src/plan/check.ts:checkPlan:
     kind: content
     hash: fnv-a1cdb27df19e1df9
@@ -735,7 +736,7 @@ seals:
       packages/core/src/plan/check.ts (checkPlan):
         hash: fnv-589ad40785f09d9d
         lines: 6
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.core.plans#packages/core/src/plan/edit.ts:editPlan:
     kind: content
     hash: fnv-ba074e95ef90a423
@@ -743,7 +744,7 @@ seals:
       packages/core/src/plan/edit.ts (editPlan):
         hash: fnv-7d805df5f56e97a1
         lines: 6
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.core.query:
     kind: structure
     hash: fnv-8658ee421d14a642
@@ -1269,7 +1270,7 @@ seals:
         - default
   element:toolchain.web.graph:
     kind: structure
-    hash: fnv-e9d76747cb02658d
+    hash: fnv-cc5a4869f69859ad
     files:
       apps/web/src/graph/catalog.ts:
         - EntryMove
@@ -1333,6 +1334,7 @@ seals:
         - levelExpansion
         - levelOf
         - liftKey
+        - onlyGraph
         - reorderRows
         - rowColumnWidths
         - rowColumns
@@ -1384,7 +1386,7 @@ seals:
         - pointAlong
         - polylineLength
         - roundedPath
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.web.model-loader:
     kind: structure
     hash: fnv-ae2650f462d37220

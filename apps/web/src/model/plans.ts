@@ -53,6 +53,8 @@ export interface IntentPin {
   node?: string | undefined;
   /** Where in that box, as percentages of its width and height. */
   at?: { x: number; y: number } | undefined;
+  /** For how two boxes connect: the other box's node ID; the pin sits between them. */
+  to?: string | undefined;
   text: string;
   /** Nothing in the plan carries it out yet. */
   open: boolean;
@@ -117,6 +119,7 @@ export function planMap(
   const pins = plan.spec.intents.map((n) => ({
     id: n.id,
     node: n.on ? node(n.on) : undefined,
+    to: n.to ? node(n.to) : undefined,
     at: n.at,
     text: n.text,
     open: open.has(n.id),
@@ -125,7 +128,10 @@ export function planMap(
       .filter((x) => x.status !== "dismissed" && x.for?.includes(n.id))
       .map((x) => x.id),
   }));
-  for (const p of pins) about(p.node, p.id);
+  for (const p of pins) {
+    about(p.node, p.id);
+    if (p.to) about(p.to, p.id);
+  }
   return { plan, check, after, diff, suggested, suggestedEdges, notes, items, pins };
 }
 

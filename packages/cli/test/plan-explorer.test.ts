@@ -235,6 +235,79 @@ describe.skipIf(!executablePath)("the explorer's Build tabs", () => {
         { id: "n1", what: "replied" },
       ]),
     );
+
+    // Picking a level showed the whole system; the map can show only what the plan touches.
+    await page.getByText("Showing the whole system").waitFor();
+    await node("Shopper").waitFor();
+    await page.getByRole("button", { name: "Show only what it touches" }).click();
+    await page.getByText("Showing what the plan touches").waitFor();
+    await expect.poll(() => node("Shopper").count()).toBe(0);
+
+    // Drag from one box to another: what should change between them.
+    await page.waitForTimeout(800); // the map fits what's shown
+    await fitView();
+    const from = await node("Orders API").boundingBox();
+    const to = await node("Mailer").boundingBox();
+    if (!from || !to) throw new Error("No boxes");
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 });
+    await page.mouse.up();
+    const between = page.getByRole("dialog", { name: /between Orders API → Mailer/ });
+    await between.waitFor();
+    await between.getByRole("textbox").fill("Hand the receipt over on a queue");
+    await between.getByRole("textbox").press("Enter");
+    await expect
+      .poll(async () => (await spec())?.intents?.[1])
+      .toMatchObject({
+        id: "i2",
+        on: "api",
+        to: "mailer",
+        text: "Hand the receipt over on a queue",
+      });
+
+    // Click an arrow, or its label: the same, for the two boxes it joins. (The map refits
+    // as the plan grows, so it clicks once the map has settled.)
+    const onArrow = page.getByRole("dialog", { name: /between Storefront → Orders API/ });
+    await expect
+      .poll(
+        async () => {
+          if (await onArrow.isVisible()) return true;
+          await page.locator(".edge-note", { hasText: "Places orders" }).click();
+          return onArrow
+            .waitFor({ timeout: 2000 })
+            .then(() => true)
+            .catch(() => false);
+        },
+        { interval: 1000, timeout: 15_000 },
+      )
+      .toBe(true);
+    await page.keyboard.press("Escape");
+
+    // A question with choices: one tap answers it, settles it, and sends it.
+    await planRespondAnswer(
+      { cwd },
+      {
+        id: ID,
+        by: "agent:claude",
+        ops: [
+          {
+            op: "put",
+            list: "notes",
+            item: { on: "i2", kind: "question", text: "Which queue?", options: ["SQS", "Redis"] },
+          },
+        ],
+      },
+    );
+    const choice = page.getByRole("group", { name: "Answer n2" }).first();
+    await choice.getByRole("button", { name: "SQS" }).click();
+    await expect
+      .poll(async () => (await spec())?.notes?.[1])
+      .toMatchObject({
+        resolved: true,
+        replies: [{ kind: "answer", text: "SQS" }],
+      });
+    await expect.poll(async () => (await spec())?.sent).toBe(2);
     expect(errors).toEqual([]);
   }, 120_000);
 
