@@ -266,22 +266,10 @@ describe.skipIf(!executablePath)("the explorer's Build tabs", () => {
         text: "Hand the receipt over on a queue",
       });
 
-    // Click an arrow, or its label: the same, for the two boxes it joins. (The map refits
-    // as the plan grows, so it clicks once the map has settled.)
-    const onArrow = page.getByRole("dialog", { name: /between Storefront → Orders API/ });
-    await expect
-      .poll(
-        async () => {
-          if (await onArrow.isVisible()) return true;
-          await page.locator(".edge-note", { hasText: "Places orders" }).click();
-          return onArrow
-            .waitFor({ timeout: 2000 })
-            .then(() => true)
-            .catch(() => false);
-        },
-        { interval: 1000, timeout: 15_000 },
-      )
-      .toBe(true);
+    // Click an arrow, or its label: the same, for the two boxes it joins. The map keeps
+    // drawing its arrows as the plan changes.
+    await page.locator(".edge-note", { hasText: "Places orders" }).click();
+    await page.getByRole("dialog", { name: /between Storefront → Orders API/ }).waitFor();
     await page.keyboard.press("Escape");
 
     // A question with choices: one tap answers it, settles it, and sends it.

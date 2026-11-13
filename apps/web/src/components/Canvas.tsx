@@ -1080,6 +1080,17 @@ export function Canvas(props: CanvasProps) {
     }
     return pins.length ? [...marked, ...pins] : marked;
   }, [nodes, edit]);
+  // Each box comes with the size the layout gave it, as React Flow measured it: a box passed
+  // again without its measurements is measured again, and until it is, its arrows aren't drawn.
+  const measuredNodes = useMemo(
+    () =>
+      shownNodes.map((n) =>
+        n.width !== undefined && n.height !== undefined && !n.measured
+          ? { ...n, measured: { width: n.width, height: n.height } }
+          : n,
+      ),
+    [shownNodes],
+  );
   const shownEdges = useMemo(() => {
     const marked = edit?.suggestedEdges?.size
       ? edges.map((e) =>
@@ -1127,7 +1138,7 @@ export function Canvas(props: CanvasProps) {
   return (
     <ReactFlow
       ref={pane_}
-      nodes={shownNodes}
+      nodes={measuredNodes}
       edges={shownEdges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
