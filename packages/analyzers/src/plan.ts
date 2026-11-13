@@ -211,9 +211,12 @@ export async function planWaitAnswer(where: Where, input: PlanWaitInput): Promis
   if (!plan) return unknownPlan(l, input.id);
   const startSent = plan.spec.sent ?? 0;
   const startStatus = planStatusOf(plan.spec);
-  // Sent before the agent started waiting: what changed is already there to read.
+  // Sent before the agent started waiting: what changed is already there to
+  // read. Past the conversation (marked ready, or further), there's nothing
+  // to wait for.
   const behind = startSent > (plan.spec.seen ?? 0);
-  if (startStatus !== "drafting" && (plan.spec.unread?.length || behind)) {
+  const talking = startStatus === "drafting" || startStatus === "reviewing";
+  if (!talking || (startStatus !== "drafting" && (plan.spec.unread?.length || behind))) {
     const read = await planReadAnswer(where, { id: input.id });
     return { ...read, text: `The person sent ${input.id} (${startStatus}).\n\n${read.text}` };
   }

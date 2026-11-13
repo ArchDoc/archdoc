@@ -335,7 +335,8 @@ export function scoreStart({ dir, calls, answer, scenario, added }) {
     drew: (plan?.changes?.length ?? 0) + (plan?.sequences?.length ?? 0),
     clean: !touched.length,
     markdown: touched.filter((f) => f.endsWith(".md")).length,
-    toldHow: /plan tab|send to agent/i.test(answer),
+    // Where the person says what they want: the Plan tab (Build → Plan).
+    toldHow: /plan tab|build\W+plan\b|send to agent/i.test(answer),
   };
 }
 
@@ -673,7 +674,7 @@ const TABLES = {
   start: {
     title: "Start",
     legend:
-      "Started: one plan written, drafting. Used: through archdoc_plan start. Scoped: its scope reaches the part of the model the idea touches. Opened: the explorer started. Told how: the answer tells the person to sketch it in the Plan tab and send it. Drew: items the agent sketched itself (the sketch is the person's). Clean: no code, model, or markdown plan written.",
+      "Started: one plan written, drafting. Used: through archdoc_plan start. Scoped: its scope reaches the part of the model the idea touches. Opened: the explorer started. Told how: the answer tells the person to say what they want in the Plan tab. Drew: items the agent sketched itself (the sketch is the person's). Clean: no code, model, or markdown plan written.",
     cols: [
       ["Started", (_m, s) => pct(s((r) => r.score.started))],
       ["Used", (_m, s) => pct(s((r) => r.score.used))],

@@ -151,6 +151,26 @@ describe("archdoc plan", () => {
     expect((await spec(id)).seen).toBe(s.sent);
   });
 
+  it("returns from wait at once when the person already marked the plan ready", async () => {
+    await planEditAnswer(where(), {
+      id,
+      by: "human:@dana",
+      track: true,
+      ops: [{ op: "set", status: "ready" }],
+    });
+    // The agent reads it first, so nothing is unread or behind: only the status says stop.
+    await planEditAnswer(where(), { id, by: "agent:claude", ops: [{ op: "read" }] });
+    const started = Date.now();
+    const r = await planWaitAnswer(where(), { id, timeout: 5 });
+    expect(r.text).toMatch(/^The person sent .*\(ready\)/);
+    expect(Date.now() - started).toBeLessThan(2000);
+    await planEditAnswer(where(), {
+      id,
+      by: "human:@dana",
+      ops: [{ op: "set", status: "reviewing" }],
+    });
+  });
+
   it("lists plans with what's open", async () => {
     const r = await planListAnswer(where(), {});
     expect(r.text).toMatch(/1 open question/);
