@@ -1,5 +1,15 @@
 # @archdoc/mcp
 
+## 0.9.2
+
+### Patch Changes
+
+- 7f3ff90: `archdoc_plan` `wait` returns at once when the person has already marked the plan ready, instead of waiting out its timeout, and a wait through MCP (plans and Triage) holds a call at most 50 seconds, under the minute MCP clients give a tool call, then says to wait again.
+- Updated dependencies [a59fd90]
+- Updated dependencies [7f3ff90]
+  - @archdoc/core@0.9.2
+  - @archdoc/analyzers@0.9.2
+
 ## 0.9.1
 
 ### Patch Changes
