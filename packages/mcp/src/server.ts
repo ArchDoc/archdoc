@@ -20,6 +20,7 @@ import {
   triageCheckAnswer,
   triageListAnswer,
   triageStartAnswer,
+  triageWaitAnswer,
   type Where,
 } from "@archdoc/analyzers";
 import { type EditOp, FIND_GAPS, type PlanEditOp } from "@archdoc/core";
@@ -40,7 +41,7 @@ export const INSTRUCTIONS = `This repository's architecture is modeled in .archd
 - archdoc_paths: where flows start (routes, consumers, jobs, commands) and the calls each makes, to trace a flow.
 - archdoc_show: one thing by ID (element, actor, journey, data entry, Entry.field, Triage record, or a fact like element:<id>).
 - archdoc_triage: handed a bug, even to fix? Start here, before the code; its answer says how to fill the record in. Keep it through the fix.
-- archdoc_plan: asked to plan or design a change? Start a plan; the person sketches it on the explorer's map, you review and suggest, then carry out its tasks.
+- archdoc_plan: asked to plan or design a change? Start a plan; the person pins what they want on the explorer's map, you suggest the architecture, then build it.
 - archdoc_find, archdoc_edit: find parts of the model and change them by ID, many ops a call, instead of reading and editing its YAML. Pass by: agent:<name>.
 - archdoc_check: after you edit, with base "main". It lists what your change broke or made stale, each with its fix, and facts whose code changed.
 - archdoc_seal: once you've checked each changed fact against its code, seal it. Never seal a fact you haven't read.`;
@@ -243,7 +244,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "Triage a bug",
       description:
-        "Handed a bug, even to fix? Start here, before the code: pass it as symptom. Writes .archdoc/triage/<id>.yaml with the journey step it showed up in, leads, and steps from the stack. Fill it in as you follow the code: rule leads in or out, a step per hop with a description of what happened there, what it sends (observed/expected values), code, evidence; role: cause, root-cause, status (fixed, with fix, once fixed). Only id: what a record lacks. list: the records.",
+        "Handed a bug, even to fix? Start here, before the code: pass it as symptom. Writes .archdoc/triage/<id>.yaml with the journey step it showed up in, leads, and steps from the stack. Fill it in as you follow the code: rule leads in or out, a step per hop with a description of what happened there, what it sends (observed/expected values), code, evidence; role: cause, root-cause, status (fixed, with fix, once fixed). Only id: what a record lacks. list: the records. wait: until the person sends a bug from the explorer.",
       inputSchema: {
         symptom: z.string().optional().describe("The bug as given: error, log, or issue text"),
         title: z.string().optional().describe("The bug in one line"),
@@ -252,6 +253,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
         id: z.string().optional(),
         list: z.boolean().optional(),
         status: z.string().optional().describe("With list, such as open-all or fixed"),
+        wait: z.boolean().optional(),
       },
       annotations: {
         readOnlyHint: false,
@@ -261,6 +263,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
       },
     },
     (input) => {
+      if (input.wait) return respond(triageWaitAnswer(where, { id: input.id }));
       if (input.list || (!input.symptom && !input.id))
         return respond(
           triageListAnswer(where, {
@@ -285,7 +288,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "Plan a change with the person",
       description:
-        "Asked to plan or design a change? start: the idea; the person sketches it in the explorer. wait: until they send it. read: what changed, each item's intent, its reach, the check. respond: notes, replies, suggestions, tasks (never edits to the person's items). task: a task's status.",
+        "Plan a change. start: the idea; the person pins what they want (intents, i1) on the explorer's map. wait: until they send it. read: intents, changes, reach, check. respond: suggested changes and sequences for each intent (for: [i1]), notes, tasks; never edit theirs. task: a task's status.",
       inputSchema: {
         action: z.enum(["start", "wait", "read", "respond", "task", "list"]),
         id: z.string().optional(),

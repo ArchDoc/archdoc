@@ -1,20 +1,21 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planRespondAnswer } from "@archdoc/analyzers";
+import { planRespondAnswer, triageWaitAnswer } from "@archdoc/analyzers";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { startViewServer, type ViewServer } from "../src/index.js";
 
-// The person's side of a plan, end to end: archdoc view serves the built
-// explorer, a browser drives the Plan tab the way a person does (start a
-// plan, add an element, draw an arrow, record a sequence, each with its
-// intent; accept the agent's suggestion and answer its question; send it),
-// and the plan file on disk is checked after each step.
+// The person's side of the Build tabs, end to end: archdoc view serves the
+// built explorer, a browser drives the Plan tab the way a person does (start
+// a plan, click in a box and say what they want there, change it, send it,
+// accept what the agent proposes and answer its question) and the Triage tab
+// (paste a bug and send it to the agent, then send it again), and the files
+// on disk are checked after each step.
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const web = join(root, "apps/web/dist");
@@ -81,34 +82,11 @@ async function fitView() {
   }
 }
 
-/**
- * Drags an arrow from one box's right edge to another's left edge, until the
- * arrow's form opens: on a slow machine the map may still be settling.
- */
-async function drawArrow(from: string, to: string) {
-  const form = page.getByText("New arrow");
-  for (let attempt = 0; attempt < 4 && !(await form.isVisible()); attempt++) {
-    await fitView();
-    await page.waitForTimeout(300 * (attempt + 1));
-    // hover checks nothing covers the handle, so the drag starts on it, not on the map.
-    await node(from).locator(".react-flow__handle-right").hover();
-    await page.mouse.down();
-    const target = node(to).locator(".react-flow__handle-left");
-    const b = await target.boundingBox();
-    if (!b) throw new Error(`No handle on ${to}`);
-    await page.mouse.move(b.x + b.width / 2 - 30, b.y + b.height / 2, { steps: 10 });
-    await target.hover();
-    await page.waitForTimeout(100);
-    await page.mouse.up();
-    await form.waitFor({ timeout: 2_000 }).catch(() => undefined);
-  }
-}
-
-/** Clicks a box near its top right, clear of its handles and its label's links. */
+/** Clicks in a box, clear of its handles and its label's links. */
 async function clickNode(name: string) {
   const box = await node(name).boundingBox();
   if (!box) throw new Error(`No box for ${name}`);
-  await page.mouse.click(box.x + box.width - 20, box.y + 12);
+  await page.mouse.click(box.x + box.width - 24, box.y + box.height - 10);
   await page.waitForTimeout(200);
 }
 
@@ -155,81 +133,61 @@ afterAll(async () => {
   if (cwd) await rm(cwd, { recursive: true, force: true });
 });
 
-describe.skipIf(!executablePath)("the explorer's Plan tab", () => {
-  it("lets a person start, sketch, and send a plan, and answer the agent", async () => {
+describe.skipIf(!executablePath)("the explorer's Build tabs", () => {
+  it("lets a person say what they want on the map, send it, and answer the agent", async () => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(`${server.url}/#plan`);
 
-    // Start a plan from the list.
+    // Start a plan from the list: the idea, its first line the title.
     await page.getByRole("button", { name: "+ Start a plan" }).click();
-    await page.getByPlaceholder("Export a journey as a PDF").fill("Email a receipt");
     await page
-      .getByPlaceholder(/Reviewers want/)
-      .fill("Email the shopper a receipt once checkout charges the order");
+      .getByPlaceholder(/Email the shopper a receipt/)
+      .fill("Email a receipt\nEmail the shopper a receipt once checkout charges the order");
     await page.getByRole("button", { name: "Start the plan" }).click();
-    await expect.poll(spec).toMatchObject({ plan: ID, status: "drafting" });
+    await expect
+      .poll(spec)
+      .toMatchObject({ plan: ID, title: "Email a receipt", status: "drafting" });
 
     // The containers, so the storefront and the API are boxes of their own.
     await page.locator(".react-flow__node").first().waitFor();
     await page.getByRole("button", { name: "Containers", exact: true }).click();
     await node("Orders API").waitFor();
-
-    // Add an element: double-click an empty part of the map. It won't save without intent.
-    const pane = await page.locator(".react-flow__pane").boundingBox();
-    if (!pane) throw new Error("No map");
-    await page.mouse.dblclick(pane.x + 60, pane.y + 60);
-    await page.getByLabel("Name", { exact: true }).fill("Mailer");
-    const add = page.getByRole("button", { name: "Add to the plan" });
-    await expect(add.isDisabled()).resolves.toBe(true);
-    await page.getByPlaceholder("What this is for, and why it's needed").fill("Sends the receipt");
-    await add.click();
-    await expect.poll(spec).toMatchObject({
-      changes: [{ id: "c1", intent: "Sends the receipt", add: { id: "mailer", name: "Mailer" } }],
-      unread: [{ id: "c1", what: "added" }],
-    });
-
-    // Draw an arrow from the API to it, with what it does and why.
-    await node("Mailer").waitFor();
-    await drawArrow("Orders API", "Mailer");
-    await page.getByPlaceholder("Sends the journey's steps to render").fill("Emails the receipt");
-    await page
-      .getByPlaceholder("What this is for, and why it's needed")
-      .fill("Once the charge succeeds");
-    await page.getByRole("button", { name: "Add to the plan" }).click();
-    await expect
-      .poll(async () => (await spec())?.changes?.[1])
-      .toMatchObject({
-        id: "c2",
-        intent: "Once the charge succeeds",
-        use: { from: "api", to: "mailer", description: "Emails the receipt" },
-      });
-
-    // Record a sequence: who starts it, then each box it goes to.
     await fitView();
-    await page.getByRole("button", { name: "New sequence" }).click();
-    await clickNode("Shopper");
-    await clickNode("Storefront");
-    await page.getByLabel(/Their goal/).fill("Get a receipt");
-    await page.getByPlaceholder("What happens: Clicks Export").fill("Opens the order page");
-    const save = page.getByRole("button", { name: "Add to the plan" });
-    await expect(save.isDisabled()).resolves.toBe(true);
-    await page.getByPlaceholder(/Intent \(required\)/).fill("Where the shopper sees it was sent");
-    await save.click();
+
+    // The person drives the design: nothing to send until they've said what they want.
+    expect(await page.getByRole("button", { name: /^Send to agent/ }).isDisabled()).toBe(true);
+
+    // Click in the API's box: a popover opens there for what they want. No form, no kinds.
+    await clickNode("Orders API");
+    const popover = page.getByRole("dialog", { name: "What you want in Orders API" });
+    await popover.waitFor();
+    await popover.getByLabel("What you want here").fill("Email a receipt once the charge succeeds");
+    await popover.getByLabel("What you want here").press("Enter");
+    await expect.poll(spec).toMatchObject({
+      intents: [{ id: "i1", on: "api", text: "Email a receipt once the charge succeeds" }],
+      unread: [{ id: "i1", what: "added" }],
+    });
+    const at = (await spec())?.intents?.[0]?.at;
+    expect(at?.x).toBeGreaterThan(50);
+    expect(at?.y).toBeGreaterThan(50);
+
+    // It's a pin in the box; clicking it opens the popover to change it.
+    await page.locator(".intent-pin").first().click();
+    const edit = page.getByRole("dialog", { name: "Intent i1" });
+    await edit
+      .getByLabel("What you want here")
+      .fill("Email a receipt once the charge goes through");
+    await edit.getByRole("button", { name: "Save" }).click();
     await expect
-      .poll(async () => (await spec())?.sequences?.[0])
-      .toMatchObject({
-        id: "s1",
-        actor: "shopper",
-        goal: "Get a receipt",
-        steps: [{ from: "shopper", to: "web", intent: "Where the shopper sees it was sent" }],
-      });
+      .poll(async () => (await spec())?.intents?.[0]?.text)
+      .toBe("Email a receipt once the charge goes through");
 
     // Send it to the agent.
-    await page.getByRole("button", { name: /Send to agent \(3\)/ }).click();
+    await page.getByRole("button", { name: /Send to agent \(1\)/ }).click();
     await expect.poll(spec).toMatchObject({ status: "reviewing", sent: 1 });
 
-    // The agent answers: a suggestion and a question. The page picks them up.
+    // The agent works out the architecture for i1, and asks a question on it.
     const answer = await planRespondAnswer(
       { cwd },
       {
@@ -240,14 +198,15 @@ describe.skipIf(!executablePath)("the explorer's Plan tab", () => {
             op: "put",
             list: "changes",
             item: {
-              intent: "Records that it was sent",
-              use: { from: "mailer", to: "api", description: "Reports delivery" },
+              for: ["i1"],
+              intent: "Sends the receipt",
+              add: { id: "mailer", kind: "container", name: "Mailer" },
             },
           },
           {
             op: "put",
             list: "notes",
-            item: { on: "c1", kind: "question", text: "Which provider?" },
+            item: { on: "i1", kind: "question", text: "Which provider?" },
           },
         ],
       },
@@ -255,12 +214,11 @@ describe.skipIf(!executablePath)("the explorer's Plan tab", () => {
     expect(answer.ok).toBe(true);
     await page.getByRole("button", { name: "Accept" }).first().waitFor({ timeout: 10_000 });
     await page.getByRole("button", { name: "Accept" }).first().click();
-    await expect.poll(async () => (await spec())?.changes?.[2]?.status).toBeUndefined();
-    // The page has the accepted plan before it's edited again (on a slow machine the
-    // reload would otherwise clear the answer being typed).
+    await expect.poll(async () => (await spec())?.changes?.[0]?.status).toBeUndefined();
     await expect.poll(() => page.getByRole("button", { name: "Accept" }).count()).toBe(0);
+    await node("Mailer").waitFor();
 
-    // Answer the question (it's under c1 and in the notes), and resolve it.
+    // Answer the question, and resolve it.
     const form = page.locator("form", { has: page.getByLabel("Reply to n1") }).first();
     await form.getByLabel("Reply to n1").fill("Our usual one");
     const send = form.getByRole("button", { name: "Answer" });
@@ -268,18 +226,45 @@ describe.skipIf(!executablePath)("the explorer's Plan tab", () => {
     await send.click();
     await expect
       .poll(async () => (await spec())?.notes?.[0]?.replies?.[0])
-      .toMatchObject({
-        kind: "answer",
-        text: "Our usual one",
-      });
+      .toMatchObject({ kind: "answer", text: "Our usual one" });
     await page.getByRole("button", { name: "Resolve" }).first().click();
     await expect.poll(async () => (await spec())?.notes?.[0]?.resolved).toBe(true);
     expect((await spec())?.unread).toEqual(
       expect.arrayContaining([
-        { id: "c3", what: "accepted" },
+        { id: "c1", what: "accepted" },
         { id: "n1", what: "replied" },
       ]),
     );
     expect(errors).toEqual([]);
   }, 120_000);
+
+  it("sends a pasted bug to the agent, and sends it again with what to do", async () => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto(`${server.url}/#triage`);
+    await page.reload();
+    const dir = join(cwd, ".archdoc/triage");
+    const record = async () => {
+      const files = existsSync(dir) ? await readdir(dir) : [];
+      return files[0] ? parse(await readFile(join(dir, files[0]), "utf8")) : undefined;
+    };
+
+    // Paste the bug and send it: the record is written, marked sent, with the ask.
+    await page.getByRole("button", { name: "+ Start a triage" }).click();
+    await page
+      .locator(".triage-paste textarea")
+      .fill("Error: receipt never sent\n    at placeOrder (api/orders.ts:42:7)");
+    await page.getByRole("button", { name: "Send to agent: find the root cause" }).click();
+    await expect.poll(record).toMatchObject({ sent: 1, ask: "Find the root cause" });
+
+    // The agent waiting with archdoc triage wait picks it up.
+    const picked = await triageWaitAnswer({ cwd }, { timeout: 1, interval: 50 });
+    expect(picked.text).toMatch(/^The person sent .+, asking: Find the root cause\./);
+
+    // The record opens; send it again from its header, asking for a fix.
+    await page.getByText(/Sent to your agent/).waitFor();
+    await page.getByRole("button", { name: "Find and fix it" }).click();
+    await expect.poll(record).toMatchObject({ sent: 2, ask: "Find the root cause and fix it" });
+    expect(errors).toEqual([]);
+  }, 60_000);
 });

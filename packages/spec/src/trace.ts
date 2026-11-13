@@ -183,6 +183,22 @@ const recordShape = {
   fix: FixSchema.optional(),
   tags: z.array(z.string()).optional(),
   provenance: ProvenanceSchema.optional(),
+  sent: z
+    .number()
+    .int()
+    .optional()
+    .describe("How many times the person has sent the record to the agent from the explorer"),
+  received: z
+    .number()
+    .int()
+    .optional()
+    .describe("How many of those sends the agent has picked up (archdoc triage wait)"),
+  ask: z
+    .string()
+    .optional()
+    .describe(
+      "What the person asked the agent the last time they sent it, such as fix it, or a question",
+    ),
 };
 
 /**

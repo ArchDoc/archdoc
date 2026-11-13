@@ -277,6 +277,18 @@ describe("editModel", () => {
     expect(r.text(".archdoc/journeys/place-order.yaml")).toContain("to: shop.web.api");
   });
 
+  it("keeps a moved part inside the system named for the namespace", () => {
+    // shop.ui is the system's ui, not a top-level ui in namespace shop.
+    const r = edit({ op: "rename", id: "shop.web", to: "shop.ui" });
+    expect(errors(r.model)).toEqual([]);
+    expect(r.model.elements.has("shop.ui")).toBe(true);
+    expect(r.model.elements.has("ui")).toBe(false);
+    // Moving a component to the top leaves it in the system too.
+    const out = edit({ op: "rename", id: "shop.orders.store", to: "shop.store" });
+    expect(out.model.elements.has("shop.store")).toBe(true);
+    expect(out.model.elements.get("shop.store")?.parentId).toBe("shop");
+  });
+
   it("renames an actor and a data entry everywhere they're named", () => {
     const actor = edit({ op: "rename", id: "buyer", to: "customer" });
     expect(errors(actor.model)).toEqual([]);

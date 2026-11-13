@@ -9,8 +9,9 @@ import {
   type PlanEditOp,
   planStatusOf,
 } from "@archdoc/core/browser";
-import { useState } from "react";
-import { childKind, type PlanMap, refOf, slug, startPlan } from "../model/plans.js";
+import { useEffect, useRef, useState } from "react";
+import { type IntentPin, type PlanMap, refOf, startPlan } from "../model/plans.js";
+import { SendToAgent } from "./Agent.js";
 
 /** The ID that opens the start panel instead of a plan. */
 export const NEW_PLAN = "new";
@@ -29,25 +30,19 @@ const STATUS_LABEL: Record<PlanStatus, string> = {
 
 const ORDER: PlanStatus[] = ["reviewing", "drafting", "ready", "executing", "done", "abandoned"];
 
-/** What the person is drawing that isn't saved yet: it needs an intent first. */
-export type PlanDraft =
-  | { kind: "element"; parent?: string | undefined }
-  | { kind: "use"; from: string; to: string }
-  | { kind: "change"; element: string; how: "set" | "remove" }
-  | {
-      kind: "sequence";
-      /** An existing journey whose steps it replaces, or none for a new one. */
-      journey?: string | undefined;
-      steps: DraftStep[];
-      /** Where the next click starts from: the last box clicked. */
-      cursor?: string | undefined;
-    };
-
-export interface DraftStep {
-  from: string;
-  to: string;
-  action: string;
-  intent: string;
+/**
+ * Where the person clicked on the Plan tab's map, to say what they want
+ * there: a box (its node ID) and where in it, or an intent already pinned.
+ */
+export interface PlanPop {
+  /** Node ID of the box clicked in (element:…, actor:…). */
+  node?: string | undefined;
+  /** Where in that box, as percentages of its width and height. */
+  at?: { x: number; y: number } | undefined;
+  /** Where on the map, in its own coordinates, when the click gave it. */
+  flow?: { x: number; y: number } | undefined;
+  /** An intent already on the map, to read or change. */
+  intent?: string | undefined;
 }
 
 /** The plans, by where each stands. */
@@ -69,7 +64,7 @@ export function PlanList(props: {
         <span className="side-item-label">
           + Start a plan
           <span className="side-item-sub">
-            Sketch a change on the map, then refine it with your agent
+            Say what you want where you click on the map; your agent turns it into the model
           </span>
         </span>
       </button>
@@ -92,9 +87,9 @@ export function PlanList(props: {
                 <span className="side-item-label">
                   {p.spec.title}
                   <span className="side-item-sub">
-                    {p.spec.changes.length} change{p.spec.changes.length === 1 ? "" : "s"} ·{" "}
-                    {p.spec.sequences.length} sequence{p.spec.sequences.length === 1 ? "" : "s"}
-                    {p.spec.unread?.length ? " · unsent edits" : ""}
+                    {p.spec.intents.length} intent{p.spec.intents.length === 1 ? "" : "s"} ·{" "}
+                    {p.spec.changes.length + p.spec.sequences.length} proposed
+                    {p.spec.unread?.length ? " · not sent yet" : ""}
                   </span>
                 </span>
               </button>
@@ -118,21 +113,31 @@ export function PlanList(props: {
   );
 }
 
-/** Starting a plan: the idea in a sentence, then the map. */
+/** Starting a plan: the idea in a sentence or two, then the map. */
 export function PlanStart(props: { editable: boolean; onStarted: (id: string) => void }) {
-  const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const start = () => {
+    if (!goal.trim() || busy) return;
+    setBusy(true);
+    setError(undefined);
+    void startPlan(goal.trim()).then((r) => {
+      setBusy(false);
+      if (r.ok) props.onStarted(r.id);
+      else setError(r.error);
+    });
+  };
   return (
     <section className="story triage-start" aria-label="Start a plan">
       <header className="story-head">
         <div className="story-title">
           <h1>Start a plan</h1>
           <p className="muted">
-            Say what you want to change. You sketch it on the map, with what each part is for; your
-            agent reviews it against the code, asks, and suggests, until it's solid. Then it builds
-            it.
+            Say what you want to change. Then click in the boxes on the map where it should happen
+            and say what you want there. You drive the design: your agent turns what you say into
+            elements, arrows, and flows, checks them against the code, and asks where you've left a
+            choice open. When you agree, it builds it.
           </p>
         </div>
       </header>
@@ -142,43 +147,35 @@ export function PlanStart(props: { editable: boolean; onStarted: (id: string) =>
             className="plan-form"
             onSubmit={(e) => {
               e.preventDefault();
-              setBusy(true);
-              setError(undefined);
-              void startPlan(title.trim(), goal.trim()).then((r) => {
-                setBusy(false);
-                if (r.ok) props.onStarted(r.id);
-                else setError(r.error);
-              });
+              start();
             }}
           >
-            <label className="field">
-              <span>The change, in a line</span>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Export a journey as a PDF"
-                required
-              />
-            </label>
-            <label className="field">
-              <span>The idea</span>
+            <label className="triage-paste">
+              <span className="sr-only">The change</span>
               <textarea
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    start();
+                  }
+                }}
                 rows={4}
-                placeholder="Reviewers want to attach a journey to a design review, so…"
+                placeholder="Email the shopper a receipt once checkout charges the order"
               />
             </label>
             {error ? <p className="form-error">{error}</p> : null}
             <div className="form-actions">
-              <button type="submit" className="btn primary" disabled={busy || !title.trim()}>
+              <button type="submit" className="btn primary" disabled={busy || !goal.trim()}>
                 Start the plan
               </button>
+              <span className="muted small">The first line is its title.</span>
             </div>
           </form>
         ) : (
           <p className="muted">
-            This explorer is read-only. Plans are drawn in <code>archdoc view</code>, or started by
+            This explorer is read-only. Plans are made in <code>archdoc view</code>, or started by
             your agent with <code>archdoc plan start</code>.
           </p>
         )}
@@ -190,7 +187,10 @@ export function PlanStart(props: { editable: boolean; onStarted: (id: string) =>
 /** What blocks marking a plan ready. */
 function blockers(check: PlanCheck): string[] {
   const o = check.open;
+  const s = check.plan.spec;
   return [
+    s.intents.length + s.changes.length + s.sequences.length ? "" : "nothing in it yet",
+    o.intents ? `${o.intents} intent${o.intents === 1 ? "" : "s"} for the agent to work out` : "",
     o.missingIntent ? `${o.missingIntent} without intent` : "",
     o.questions ? `${o.questions} open question${o.questions === 1 ? "" : "s"}` : "",
     o.suggestions ? `${o.suggestions} suggestion${o.suggestions === 1 ? "" : "s"} to answer` : "",
@@ -203,7 +203,7 @@ export function PlanHead(props: {
   map: PlanMap;
   editable: boolean;
   busy: boolean;
-  onEdit: (ops: PlanEditOp[]) => void;
+  onEdit: (ops: PlanEditOp[]) => Promise<boolean>;
   hint?: string | undefined;
 }) {
   const { plan, check } = props.map;
@@ -211,6 +211,8 @@ export function PlanHead(props: {
   const blocked = blockers(check);
   const unread = plan.spec.unread?.length ?? 0;
   const designing = status === "drafting" || status === "reviewing";
+  // The person drives the design: nothing to send until they've said what they want.
+  const wrote = plan.spec.intents.some((n) => !n.by?.startsWith("agent:"));
   return (
     <header className="story-head plan-head">
       <div className="story-title">
@@ -228,46 +230,41 @@ export function PlanHead(props: {
           <button
             type="button"
             className="btn"
-            disabled={props.busy}
-            title={
-              unread
-                ? `Hand your ${unread} edit${unread === 1 ? "" : "s"} to the agent to review`
-                : "Ask the agent to review the plan"
-            }
-            onClick={() => props.onEdit([{ op: "send" }])}
-          >
-            Send to agent{unread ? ` (${unread})` : ""}
-          </button>
-          <button
-            type="button"
-            className="btn primary"
             disabled={props.busy || blocked.length > 0}
             title={
               blocked.length
                 ? `Settle these first: ${blocked.join(", ")}`
                 : "The plan is agreed: the agent writes the tasks and builds it"
             }
-            onClick={() => props.onEdit([{ op: "set", status: "ready" }, { op: "send" }])}
+            onClick={() => void props.onEdit([{ op: "set", status: "ready" }, { op: "send" }])}
           >
             Mark ready
           </button>
+          <SendToAgent
+            count={unread}
+            disabled={props.busy || !wrote}
+            title={
+              !wrote
+                ? "Click in a box on the map and say what you want there first: you drive the design"
+                : unread
+                  ? `Hand your ${unread} edit${unread === 1 ? "" : "s"} to the agent: it turns what you want into the model`
+                  : "Ask the agent to look again"
+            }
+            onSend={() => props.onEdit([{ op: "send" }])}
+          />
         </div>
       ) : null}
     </header>
   );
 }
 
-const KINDS = ["container", "component", "code", "datastore", "queue", "external"];
-
-/** The panel beside the map: a draft to finish, the selected box, or the plan as a whole. */
+/** The panel beside the map: the selected box, a sequence, or the plan as a whole. */
 export function PlanPanel(props: {
   map: PlanMap;
   model: Model;
   editable: boolean;
   busy: boolean;
   error?: string | undefined;
-  draft?: PlanDraft | undefined;
-  onDraft: (draft: PlanDraft | undefined) => void;
   selected?: string | undefined;
   onSelect: (key: string | undefined) => void;
   sequence?: string | undefined;
@@ -275,39 +272,11 @@ export function PlanPanel(props: {
   at: number;
   onAt: (at: number) => void;
   onEdit: (ops: PlanEditOp[]) => Promise<boolean>;
-  /** The element new top-level parts go in: the system, when the model has one. */
-  top?: string | undefined;
+  /** Opens the popover: on an intent, or in a box to say what's wanted there. */
+  onPop: (pop: PlanPop) => void;
 }) {
-  const { map, draft } = props;
+  const { map } = props;
   const error = props.error ? <p className="form-error">{props.error}</p> : null;
-  if (draft?.kind === "element")
-    return (
-      <div className="details plan-panel">
-        <ElementDraft {...props} parent={draft.parent ?? props.top} />
-        {error}
-      </div>
-    );
-  if (draft?.kind === "use")
-    return (
-      <div className="details plan-panel">
-        <UseDraft {...props} from={draft.from} to={draft.to} />
-        {error}
-      </div>
-    );
-  if (draft?.kind === "change")
-    return (
-      <div className="details plan-panel">
-        <ChangeDraft {...props} element={draft.element} how={draft.how} />
-        {error}
-      </div>
-    );
-  if (draft?.kind === "sequence")
-    return (
-      <div className="details plan-panel">
-        <SequenceDraft {...props} draft={draft} />
-        {error}
-      </div>
-    );
   const seq = props.sequence
     ? map.plan.spec.sequences.find((s) => s.id === props.sequence)
     : undefined;
@@ -340,313 +309,228 @@ function nameOf(model: Model, ref: string): string {
   return model.elements.get(ref)?.spec.name ?? model.actors.get(ref)?.spec.name ?? ref;
 }
 
-function Intent(props: {
-  value: string;
-  onChange: (v: string) => void;
-  label?: string | undefined;
-  placeholder?: string | undefined;
+/** Where an intent stands, in a few words. */
+function intentState(pin: IntentPin): string {
+  if (pin.resolved) return "settled";
+  if (pin.open) return "for the agent";
+  return `carried out by ${pin.carried.join(", ")}`;
+}
+
+/**
+ * The small window that opens where the person clicked on the map: what they
+ * want there, in their words. On an intent already there: its text, what
+ * carries it out, and the agent's notes on it.
+ */
+export function IntentPopover(props: {
+  map: PlanMap;
+  pop: PlanPop;
+  editable: boolean;
+  busy: boolean;
+  onEdit: (ops: PlanEditOp[]) => Promise<boolean>;
+  onClose: () => void;
+  /** Shows an item of the plan in the panel: a sequence, or a change's box. */
+  onItem?: ((id: string) => void) | undefined;
 }) {
+  const { map, pop } = props;
+  const intent = pop.intent ? map.plan.spec.intents.find((i) => i.id === pop.intent) : undefined;
+  const pin = pop.intent ? map.pins.find((p) => p.id === pop.intent) : undefined;
+  const [text, setText] = useState(intent?.text ?? "");
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    box.current?.focus();
+  }, []);
+  const ref = (pin?.node ?? pop.node) ? refOf((pin?.node ?? pop.node) as string) : undefined;
+  const where = ref ? nameOf(map.after, ref) : "the system";
+  const notes = intent ? map.plan.spec.notes.filter((n) => n.on === intent.id) : [];
+  const save = () => {
+    const value = text.trim();
+    if (!value || props.busy) return;
+    if (intent && value === intent.text) return props.onClose();
+    const item: Record<string, unknown> = intent
+      ? { ...intent, text: value }
+      : {
+          ...(ref ? { on: ref } : {}),
+          ...(pop.at ? { at: pop.at } : {}),
+          text: value,
+        };
+    void props.onEdit([{ op: "put", list: "intents", item }]).then((ok) => ok && props.onClose());
+  };
   return (
-    <label className="field">
-      <span>
-        {props.label ?? "Intent"} <span className="muted small">(required)</span>
-      </span>
-      <textarea
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-        rows={3}
-        required
-        placeholder={props.placeholder ?? "What this is for, and why it's needed"}
-      />
-    </label>
-  );
-}
-
-function ElementDraft(props: PanelProps & { parent?: string | undefined }) {
-  const parentEl = props.parent ? props.map.after.elements.get(props.parent) : undefined;
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState(childKind(parentEl?.spec.kind));
-  const [description, setDescription] = useState("");
-  const [intent, setIntent] = useState("");
-  const id = `${props.parent ? `${props.parent}.` : ""}${slug(name)}`;
-  const taken = props.map.after.elements.has(id);
-  return (
-    <form
-      className="plan-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const add: Record<string, unknown> = { id, kind, name: name.trim() };
-        if (description.trim()) add.description = description.trim();
-        void props
-          .onEdit([{ op: "put", list: "changes", item: { intent: intent.trim(), add } }])
-          .then((ok) => ok && props.onDraft(undefined));
+    <div
+      className="intent-popover"
+      role="dialog"
+      aria-label={intent ? `Intent ${intent.id}` : `What you want in ${where}`}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          props.onClose();
+        }
       }}
     >
-      <p className="step-where">
-        New element{parentEl ? ` in ${parentEl.spec.name ?? parentEl.id}` : ""}
+      <p className="intent-popover-where">
+        {intent ? (
+          <>
+            <span className="chip plan-chip">{intent.id}</span> in {where}
+          </>
+        ) : (
+          <>What do you want in {where}?</>
+        )}
       </p>
-      <label className="field">
-        <span>Name</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} required />
-      </label>
-      <p className="muted small">
-        ID <code>{id}</code>
-        {taken ? " is taken: pick another name." : ""}
-      </p>
-      <label className="field">
-        <span>Kind</span>
-        <select value={kind} onChange={(e) => setKind(e.target.value)}>
-          {KINDS.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        <span>What it is</span>
-        <input value={description} onChange={(e) => setDescription(e.target.value)} />
-      </label>
-      <Intent value={intent} onChange={setIntent} />
-      <div className="form-actions">
-        <button
-          type="submit"
-          className="btn primary"
-          disabled={props.busy || !name.trim() || !intent.trim() || taken}
+      {props.editable && !intent?.resolved ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
         >
-          Add to the plan
-        </button>
-        <button type="button" className="btn" onClick={() => props.onDraft(undefined)}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function UseDraft(props: PanelProps & { from: string; to: string }) {
-  const [description, setDescription] = useState("");
-  const [intent, setIntent] = useState("");
-  const from = refOf(props.from) ?? props.from;
-  const to = refOf(props.to) ?? props.to;
-  return (
-    <form
-      className="plan-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const use: Record<string, unknown> = { from, to };
-        if (description.trim()) use.description = description.trim();
-        void props
-          .onEdit([{ op: "put", list: "changes", item: { intent: intent.trim(), use } }])
-          .then((ok) => ok && props.onDraft(undefined));
-      }}
-    >
-      <p className="step-where">New arrow</p>
-      <h2 className="step-title">
-        {nameOf(props.map.after, from)} <span className="arrow">→</span>{" "}
-        {nameOf(props.map.after, to)}
-      </h2>
-      <label className="field">
-        <span>What it does</span>
-        <input
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Sends the journey's steps to render"
-        />
-      </label>
-      <Intent value={intent} onChange={setIntent} />
-      <div className="form-actions">
-        <button type="submit" className="btn primary" disabled={props.busy || !intent.trim()}>
-          Add to the plan
-        </button>
-        <button type="button" className="btn" onClick={() => props.onDraft(undefined)}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function ChangeDraft(props: PanelProps & { element: string; how: "set" | "remove" }) {
-  const el = props.model.elements.get(props.element);
-  const [description, setDescription] = useState(el?.spec.description ?? "");
-  const [intent, setIntent] = useState("");
-  return (
-    <form
-      className="plan-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const item: Record<string, unknown> =
-          props.how === "remove"
-            ? { intent: intent.trim(), remove: props.element }
-            : {
-                intent: intent.trim(),
-                set: { id: props.element, description: description.trim() || null },
-              };
-        void props
-          .onEdit([{ op: "put", list: "changes", item }])
-          .then((ok) => ok && props.onDraft(undefined));
-      }}
-    >
-      <p className="step-where">{props.how === "remove" ? "Remove" : "Change"}</p>
-      <h2 className="step-title">{el?.spec.name ?? props.element}</h2>
-      {props.how === "set" ? (
-        <label className="field">
-          <span>What it is, after the change</span>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
-        </label>
-      ) : (
-        <p className="muted small">
-          Removing it removes its parts and the arrows to it too, when the plan is built.
-        </p>
-      )}
-      <Intent
-        value={intent}
-        onChange={setIntent}
-        label={props.how === "remove" ? "Why it goes" : "Intent"}
-      />
-      <div className="form-actions">
-        <button type="submit" className="btn primary" disabled={props.busy || !intent.trim()}>
-          Add to the plan
-        </button>
-        <button type="button" className="btn" onClick={() => props.onDraft(undefined)}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function SequenceDraft(props: PanelProps & { draft: Extract<PlanDraft, { kind: "sequence" }> }) {
-  const { draft, model } = props;
-  const existing = draft.journey ? model.journeys.get(draft.journey) : undefined;
-  const [name, setName] = useState(existing?.spec.name ?? "");
-  const [goal, setGoal] = useState(existing?.spec.goal ?? "");
-  const [intent, setIntent] = useState("");
-  const set = (i: number, patch: Partial<DraftStep>) =>
-    props.onDraft({
-      ...draft,
-      steps: draft.steps.map((s, j) => (j === i ? { ...s, ...patch } : s)),
-    });
-  const first = draft.steps[0]?.from ?? draft.cursor;
-  const actor = first && model.actors.has(first) ? first : undefined;
-  const complete =
-    draft.steps.length > 0 &&
-    draft.steps.every((s) => s.intent.trim() && s.action.trim()) &&
-    (existing || (actor && goal.trim()));
-  return (
-    <form
-      className="plan-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const journey = draft.journey ?? slug(name || goal);
-        void props
-          .onEdit([
-            {
-              op: "put",
-              list: "sequences",
-              item: {
-                journey,
-                ...(name.trim() ? { name: name.trim() } : {}),
-                ...(existing ? {} : { actor, goal: goal.trim() }),
-                ...(intent.trim() ? { intent: intent.trim() } : {}),
-                steps: draft.steps.map((s) => ({
-                  from: s.from,
-                  to: s.to,
-                  action: s.action.trim(),
-                  intent: s.intent.trim(),
-                })),
-              },
-            },
-          ])
-          .then((ok) => ok && props.onDraft(undefined));
-      }}
-    >
-      <p className="step-where">
-        {existing ? `New steps for ${existing.spec.name ?? existing.id}` : "New sequence"}
-      </p>
-      <p className="plan-hint">
-        {draft.cursor
-          ? `Click the next box after ${nameOf(props.map.after, draft.cursor)}.`
-          : "Click who starts it on the map (a person or a system), then each box it goes to, in order."}
-      </p>
-      {existing ? null : (
-        <>
-          <label className="field">
-            <span>Name</span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Export a journey"
-            />
-          </label>
-          <label className="field">
-            <span>
-              Their goal <span className="muted small">(required)</span>
-            </span>
-            <input value={goal} onChange={(e) => setGoal(e.target.value)} />
-          </label>
-          {first && !actor ? (
-            <p className="form-error">
-              A new journey starts at an actor: click a person or system first.
-            </p>
-          ) : null}
-        </>
-      )}
-      <ol className="plan-steps">
-        {draft.steps.map((s, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: a step is its place in the sequence
-          <li key={i} className="plan-step">
-            <p className="step-ends">
-              {nameOf(props.map.after, s.from)} <span className="arrow">→</span>{" "}
-              {nameOf(props.map.after, s.to)}
+          <textarea
+            ref={box}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                save();
+              }
+            }}
+            rows={3}
+            aria-label="What you want here"
+            placeholder="Email the shopper a receipt once the charge goes through"
+          />
+          <div className="intent-popover-actions">
+            <button
+              type="submit"
+              className="btn small primary"
+              disabled={props.busy || !text.trim()}
+            >
+              {intent ? "Save" : "Add"}
+            </button>
+            <button type="button" className="btn small" onClick={props.onClose}>
+              {intent ? "Close" : "Cancel"}
+            </button>
+            {intent ? (
               <button
                 type="button"
-                className="link small plan-remove"
+                className="link small intent-remove"
+                disabled={props.busy}
                 onClick={() =>
-                  props.onDraft({
-                    ...draft,
-                    steps: draft.steps.filter((_, j) => j !== i),
-                    cursor: i === draft.steps.length - 1 ? s.from : draft.cursor,
-                  })
+                  void props
+                    .onEdit([{ op: "drop", id: intent.id }])
+                    .then((ok) => ok && props.onClose())
                 }
               >
-                remove
+                Remove
               </button>
+            ) : (
+              <span className="muted small">Enter to add</span>
+            )}
+          </div>
+        </form>
+      ) : (
+        <p className="plan-note-text">{intent?.text}</p>
+      )}
+      {pin ? (
+        <p className="muted small intent-popover-state">
+          {pin.open || pin.resolved
+            ? intentState(pin)
+            : pin.carried.map((id, i) => (
+                <span key={id}>
+                  {i ? ", " : "carried out by "}
+                  {props.onItem ? (
+                    <button type="button" className="link" onClick={() => props.onItem?.(id)}>
+                      {id}
+                    </button>
+                  ) : (
+                    id
+                  )}
+                </span>
+              ))}
+          {props.editable && intent && !pin.open ? (
+            <>
+              {" · "}
+              <button
+                type="button"
+                className="link"
+                disabled={props.busy}
+                onClick={() =>
+                  void props.onEdit([
+                    { op: "resolve", note: intent.id, resolved: !intent.resolved },
+                  ])
+                }
+              >
+                {intent.resolved ? "reopen" : "settle it"}
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+      {notes.length ? (
+        <ul className="intent-popover-notes">
+          {notes.map((n) => (
+            <li key={n.id} className={`intent-note note-${n.kind ?? "note"}`}>
+              <strong className="intent-note-kind">{n.kind ?? "note"}:</strong> {n.text}
+              {n.replies?.length ? (
+                <span className="muted small">
+                  {" "}
+                  · {n.replies.length} repl{n.replies.length === 1 ? "y" : "ies"}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/** The person's intents, each with where it is and where it stands. */
+function IntentList(props: PanelProps & { pins: IntentPin[] }) {
+  if (!props.pins.length) return null;
+  return (
+    <ul className="plan-changes plan-intents">
+      {props.pins.map((p) => {
+        const ref = p.node ? refOf(p.node) : undefined;
+        return (
+          <li
+            key={p.id}
+            className={`plan-change plan-intent-item${p.open ? " is-open" : ""}${p.resolved ? " is-resolved" : ""}`}
+          >
+            <button type="button" className="link" onClick={() => props.onPop({ intent: p.id })}>
+              {p.id} · in {ref ? nameOf(props.map.after, ref) : "the system"}
+            </button>
+            <p className="plan-intent">{p.text}</p>
+            <p className="muted small">
+              {p.open || p.resolved ? intentState(p) : "carried out by"}
             </p>
-            <label className="field">
-              <span className="sr-only">Action</span>
-              <input
-                value={s.action}
-                onChange={(e) => set(i, { action: e.target.value })}
-                placeholder="What happens: Clicks Export"
-              />
-            </label>
-            <label className="field">
-              <span className="sr-only">Intent</span>
-              <textarea
-                value={s.intent}
-                onChange={(e) => set(i, { intent: e.target.value })}
-                rows={2}
-                placeholder="Intent (required): why this hop, and what it carries"
-              />
-            </label>
+            {p.carried.length ? (
+              <ul className="plan-carried">
+                {p.carried.map((id) => {
+                  const c = props.map.plan.spec.changes.find((x) => x.id === id);
+                  const q = props.map.plan.spec.sequences.find((x) => x.id === id);
+                  const item = c ?? q;
+                  if (!item) return null;
+                  return (
+                    <li key={id}>
+                      {q ? (
+                        <button type="button" className="link" onClick={() => props.onSequence(id)}>
+                          {id} · {q.name ?? q.goal ?? q.journey}
+                        </button>
+                      ) : (
+                        <span>
+                          {id} · {c ? describeChange(c) : ""}
+                        </span>
+                      )}
+                      <Suggestion {...props} item={item} id={id} />
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+            <Notes {...props} on={p.id} compact />
           </li>
-        ))}
-      </ol>
-      <label className="field">
-        <span>What the sequence is for</span>
-        <input value={intent} onChange={(e) => setIntent(e.target.value)} />
-      </label>
-      <div className="form-actions">
-        <button type="submit" className="btn primary" disabled={props.busy || !complete}>
-          Add to the plan
-        </button>
-        <button type="button" className="btn" onClick={() => props.onDraft(undefined)}>
-          Cancel
-        </button>
-      </div>
-    </form>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -760,6 +644,7 @@ function ChangeItem(props: PanelProps & { change: Plan["spec"]["changes"][number
       >
         {c.id} · {describeChange(c)}
       </button>
+      {c.for?.length ? <span className="muted small"> for {c.for.join(", ")}</span> : null}
       <p className={c.intent ? "plan-intent" : "form-error"}>
         {c.intent ?? "No intent yet: say what it's for."}
       </p>
@@ -784,6 +669,7 @@ function BoxPanel(props: PanelProps & { nodeKey: string; reference: string }) {
   const { map, reference } = props;
   const ids = map.items.get(props.nodeKey) ?? [];
   const changes = map.plan.spec.changes.filter((c) => ids.includes(c.id));
+  const pins = map.pins.filter((p) => p.node === props.nodeKey);
   const el = map.after.elements.get(reference);
   const actor = map.after.actors.get(reference);
   const inModel = props.model.elements.has(reference) || props.model.actors.has(reference);
@@ -800,7 +686,7 @@ function BoxPanel(props: PanelProps & { nodeKey: string; reference: string }) {
       {el?.spec.description ? <p className="lede">{el.spec.description}</p> : null}
       {changes.length ? (
         <section className="block">
-          <h3>In this plan</h3>
+          <h3>What the agent proposes here</h3>
           <ul className="plan-changes">
             {changes.map((c) => (
               <ChangeItem key={c.id} {...props} change={c} />
@@ -808,53 +694,22 @@ function BoxPanel(props: PanelProps & { nodeKey: string; reference: string }) {
           </ul>
         </section>
       ) : null}
-      <Notes {...props} on={reference} />
-      {props.editable ? (
+      {pins.length ? (
         <section className="block">
-          <h3>Plan a change</h3>
-          <div className="form-actions">
-            {el && inModel ? (
-              <>
-                <button
-                  type="button"
-                  className="btn small"
-                  onClick={() => props.onDraft({ kind: "change", element: reference, how: "set" })}
-                >
-                  Change it
-                </button>
-                <button
-                  type="button"
-                  className="btn small"
-                  onClick={() =>
-                    props.onDraft({ kind: "change", element: reference, how: "remove" })
-                  }
-                >
-                  Remove it
-                </button>
-              </>
-            ) : null}
-            {el ? (
-              <button
-                type="button"
-                className="btn small"
-                onClick={() => props.onDraft({ kind: "element", parent: reference })}
-              >
-                Add a part inside
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="btn small"
-              onClick={() => props.onDraft({ kind: "sequence", steps: [], cursor: reference })}
-            >
-              Start a sequence here
-            </button>
-          </div>
-          <p className="muted small">
-            To draw an arrow, drag from this box's right edge to another box.
-          </p>
+          <h3>What you want here</h3>
+          <IntentList {...props} pins={pins} />
         </section>
       ) : null}
+      {props.editable ? (
+        <button
+          type="button"
+          className="btn small"
+          onClick={() => props.onPop({ node: props.nodeKey })}
+        >
+          + Say what you want here
+        </button>
+      ) : null}
+      <Notes {...props} on={reference} />
     </>
   );
 }
@@ -871,15 +726,29 @@ function PlanOverview(props: PanelProps) {
       {s.goal ? <p className="lede">{s.goal}</p> : null}
       {props.editable && (status === "drafting" || status === "reviewing") ? (
         <p className="plan-hint">
-          Double-click the map to add an element (inside an open box to put it there), drag from a
-          box's right edge to another for an arrow, or click a box to change it. Every part needs
-          its intent.
+          Click in a box on the map where you want something to change, and say what you want there:
+          the more you say about how, the closer it follows. Your agent turns it into elements,
+          arrows, and flows, asks where you've left a choice open, and you accept or dismiss what it
+          proposes.
         </p>
       ) : null}
 
       <section className="block">
         <h3>
-          Changes {s.changes.length ? <span className="muted">{s.changes.length}</span> : null}
+          What you want{" "}
+          {s.intents.length ? <span className="muted">{s.intents.length}</span> : null}
+        </h3>
+        {s.intents.length ? (
+          <IntentList {...props} pins={props.map.pins} />
+        ) : (
+          <p className="muted small">Nothing yet: click in a box on the map.</p>
+        )}
+      </section>
+
+      <section className="block">
+        <h3>
+          Changes the agent proposes{" "}
+          {s.changes.length ? <span className="muted">{s.changes.length}</span> : null}
         </h3>
         {s.changes.length ? (
           <ul className="plan-changes">
@@ -888,16 +757,18 @@ function PlanOverview(props: PanelProps) {
             ))}
           </ul>
         ) : (
-          <p className="muted small">None yet.</p>
+          <p className="muted small">
+            None yet. Once you've said what you want and sent it, your agent proposes the changes
+            that carry it out, here and on the map.
+          </p>
         )}
       </section>
 
-      <section className="block">
-        <h3>
-          Sequences{" "}
-          {s.sequences.length ? <span className="muted">{s.sequences.length}</span> : null}
-        </h3>
-        {s.sequences.length ? (
+      {s.sequences.length ? (
+        <section className="block">
+          <h3>
+            Flows the agent proposes <span className="muted">{s.sequences.length}</span>
+          </h3>
           <ul className="plan-changes">
             {s.sequences.map((q) => (
               <li key={q.id} className={`plan-change${q.status ? ` is-${q.status}` : ""}`}>
@@ -907,50 +778,14 @@ function PlanOverview(props: PanelProps) {
                 <p className="muted small">
                   {q.steps.length} step{q.steps.length === 1 ? "" : "s"} · journey {q.journey}
                   {props.model.journeys.has(q.journey) ? " (changed)" : " (new)"}
+                  {q.for?.length ? ` · for ${q.for.join(", ")}` : ""}
                 </p>
                 <Suggestion {...props} item={q} id={q.id} />
               </li>
             ))}
           </ul>
-        ) : null}
-        {props.editable ? (
-          <div className="form-actions">
-            <button
-              type="button"
-              className="btn small"
-              onClick={() => props.onDraft({ kind: "sequence", steps: [] })}
-            >
-              New sequence
-            </button>
-            <select
-              className="btn small"
-              value=""
-              aria-label="Change a journey's steps"
-              onChange={(e) =>
-                e.target.value &&
-                props.onDraft({
-                  kind: "sequence",
-                  journey: e.target.value,
-                  steps: (props.model.journeys.get(e.target.value)?.spec.steps ?? []).map((st) => ({
-                    from: st.from,
-                    to: st.to,
-                    action: st.action ?? "",
-                    intent: "",
-                  })),
-                  cursor: props.model.journeys.get(e.target.value)?.spec.steps.at(-1)?.to,
-                })
-              }
-            >
-              <option value="">Change a journey…</option>
-              {[...props.model.journeys.values()].map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.spec.name ?? j.id}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
 
       <Notes {...props} on={undefined} all />
 

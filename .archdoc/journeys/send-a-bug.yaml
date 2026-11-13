@@ -1,0 +1,18 @@
+journeys:
+  send-a-bug:
+    name: Send a bug to the agent
+    actor: developer
+    goal: Hand a bug to the coding agent from the explorer, and ask for what's next on its record, without copying a prompt
+    importance: normal
+    steps:
+      - { from: developer, to: web, action: "Pastes the bug on the Triage tab, sees where it lands, and presses Send to agent: find the root cause, or Find and fix it", code: apps/web/src/components/Traces.tsx#TriageStart, sends: BugSent }
+      - { from: web.model-loader, to: cli.view-server, action: Posts the bug and the ask to archdoc view, code: apps/web/src/model/traces.ts#sendToAgent, sends: BugSent }
+      - { from: cli.view-server, to: analyzers, action: "Refuses another site's request, then starts the record from the bug, with its first line as the title, marked sent", code: packages/cli/src/server.ts#triageRoute, sends: BugSent }
+      - { from: analyzers, to: model-files, action: "Writes .archdoc/triage/<id>.yaml as investigating, with sent and ask", code: packages/analyzers/src/triage.ts#triageStartAnswer, creates: TriageRecord }
+      - { from: coding-agent, to: mcp, action: "Calls archdoc_triage with wait, which returns once a record is sent", code: packages/mcp/src/server.ts, sends: ToolCall }
+      - { from: mcp, to: analyzers, action: "Finds the record sent and not picked up, marks it received, and returns it with what the person asked and how to follow it", code: packages/analyzers/src/triage.ts#triageWaitAnswer, sends: ToolCall }
+      - { from: analyzers, to: model-files, action: Records that the agent picked it up, changes: { TriageRecord.received: 0 -> 1 } }
+      - { from: developer, to: web, action: "Sends the record again from its header once it's root-caused: Send to agent: fix it", code: apps/web/src/components/Traces.tsx#TraceStory, sends: BugSent }
+      - { from: web.model-loader, to: cli.view-server, action: Posts the record ID and the new ask, code: apps/web/src/model/traces.ts#sendToAgent, sends: BugSent }
+      - { from: cli.view-server, to: analyzers, action: "Counts one more send, with the new ask, for the agent's next wait", code: packages/analyzers/src/triage.ts#triageSendAnswer, sends: BugSent }
+      - { from: analyzers, to: model-files, action: Writes the record with sent and ask, changes: { TriageRecord.sent: 1 -> 2 } }

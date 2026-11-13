@@ -50,7 +50,7 @@ seals:
     by: agent:claude-code
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-fe4752897a24171d
+    hash: fnv-51431099ea3c2bf5
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -202,14 +202,18 @@ seals:
       packages/analyzers/src/triage.ts:
         - TriageListInput
         - TriageMigrateInput
+        - TriageSendInput
         - TriageStartInput
+        - TriageWaitInput
         - knownBugs
         - migrateTraceText
         - modelDir
         - triageCheckAnswer
         - triageListAnswer
         - triageMigrateAnswer
+        - triageSendAnswer
         - triageStartAnswer
+        - triageWaitAnswer
       packages/analyzers/src/ts-imports.ts:
         - resolveSpecifier
         - tsImports
@@ -240,7 +244,7 @@ seals:
       packages/cli/tsconfig.json: []
   element:toolchain.cli.commands:
     kind: structure
-    hash: fnv-05a173c1e4671eb3
+    hash: fnv-eeef0ee2b59f3850
     files:
       packages/cli/src/commands/check.ts:
         - CheckOptions
@@ -310,6 +314,7 @@ seals:
         - triageList
         - triageMigrate
         - triageStart
+        - triageWait
       packages/cli/src/commands/validate.ts:
         - ValidateOptions
         - validate
@@ -674,7 +679,7 @@ seals:
     by: agent:claude-code
   element:toolchain.core.plans:
     kind: structure
-    hash: fnv-c732d18d505e6339
+    hash: fnv-eb894c3ac8f1796e
     files:
       packages/core/src/plan/check.ts:
         - AppliedPlan
@@ -708,6 +713,7 @@ seals:
         - isAgreed
         - journeySteps
         - loadPlans
+        - openIntents
         - parsePlan
         - planId
         - planItemIds
@@ -1073,7 +1079,7 @@ seals:
     files: {}
   element:toolchain.spec:
     kind: structure
-    hash: fnv-d30bac6e47ae338a
+    hash: fnv-25bfce0e32731ece
     files:
       packages/spec/package.json: []
       packages/spec/schema/archdoc.v2.schema.json: []
@@ -1098,6 +1104,8 @@ seals:
         - PlanChangeSpec
         - PlanFile
         - PlanFileSchema
+        - PlanIntentSchema
+        - PlanIntentSpec
         - PlanItemStatus
         - PlanItemStatusSchema
         - PlanNoteKind
@@ -1379,7 +1387,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-280cd5b4b83c9492
+    hash: fnv-ae2650f462d37220
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
@@ -1389,15 +1397,14 @@ seals:
         - UNDECLARED
         - compareCode
       apps/web/src/model/plans.ts:
+        - IntentPin
         - PlanMap
         - PlanWrite
         - Plans
-        - childKind
         - nodeOf
         - planMap
         - readPlans
         - refOf
-        - slug
         - startPlan
         - writePlan
       apps/web/src/model/stories.ts:
@@ -1434,6 +1441,7 @@ seals:
         - STATUS_GROUPS
         - TraceData
         - Traces
+        - TriageSend
         - anchorChip
         - endLabel
         - firstCause
@@ -1441,6 +1449,7 @@ seals:
         - hopText
         - observedExpected
         - readTraces
+        - sendToAgent
         - startPrompt
         - statusLabel
         - traceChips
@@ -1474,13 +1483,17 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-5337b4e16445316d
+    hash: fnv-d541fcfe88a62be6
     files:
       apps/web/src/App.tsx:
         - App
+      apps/web/src/components/Agent.tsx:
+        - AgentAsk
+        - SendToAgent
       apps/web/src/components/Canvas.tsx:
         - Canvas
         - CanvasProps
+        - PlanAnchor
         - PlanEditing
         - describe
         - useStoredChoice
@@ -1522,12 +1535,12 @@ seals:
         - Payload
         - PayloadEntry
       apps/web/src/components/Plan.tsx:
-        - DraftStep
+        - IntentPopover
         - NEW_PLAN
-        - PlanDraft
         - PlanHead
         - PlanList
         - PlanPanel
+        - PlanPop
         - PlanStart
       apps/web/src/components/Sidebar.tsx:
         - ChangesList
@@ -1568,6 +1581,9 @@ seals:
         - Others
         - OthersData
         - OthersNode
+        - Pin
+        - PinData
+        - PinNode
         - RowTable
         - RowTableData
         - RowTableNode
@@ -1944,31 +1960,30 @@ seals:
     by: agent:claude-code
   step:plan-a-change#5:
     kind: structure
-    hash: fnv-734994e607b4f566
+    hash: fnv-7b697acc9166fb0a
     files:
       apps/web/src/components/Plan.tsx:
-        - DraftStep
+        - IntentPopover
         - NEW_PLAN
-        - PlanDraft
         - PlanHead
         - PlanList
         - PlanPanel
+        - PlanPop
         - PlanStart
     by: agent:claude-code
   step:plan-a-change#6:
     kind: structure
-    hash: fnv-0b228330ce23e7c4
+    hash: fnv-57fb6f64a44399a4
     files:
       apps/web/src/model/plans.ts:
+        - IntentPin
         - PlanMap
         - PlanWrite
         - Plans
-        - childKind
         - nodeOf
         - planMap
         - readPlans
         - refOf
-        - slug
         - startPlan
         - writePlan
     by: agent:claude-code
@@ -2069,6 +2084,160 @@ seals:
         - summarizeChange
         - triageVerb
     by: agent:claude-code
+  step:send-a-bug#1:
+    kind: structure
+    hash: fnv-90125828642f3eb2
+    files:
+      apps/web/src/components/Traces.tsx:
+        - NEW
+        - TraceList
+        - TraceStepPanel
+        - TraceStory
+        - TriageStart
+    by: agent:claude-code
+  step:send-a-bug#10:
+    kind: structure
+    hash: fnv-a6e8113ebf78e050
+    files:
+      packages/analyzers/src/triage.ts:
+        - TriageListInput
+        - TriageMigrateInput
+        - TriageSendInput
+        - TriageStartInput
+        - TriageWaitInput
+        - knownBugs
+        - migrateTraceText
+        - modelDir
+        - triageCheckAnswer
+        - triageListAnswer
+        - triageMigrateAnswer
+        - triageSendAnswer
+        - triageStartAnswer
+        - triageWaitAnswer
+    by: agent:claude-code
+  step:send-a-bug#2:
+    kind: structure
+    hash: fnv-8e116de4c369afd0
+    files:
+      apps/web/src/model/traces.ts:
+        - STATUS_GROUPS
+        - TraceData
+        - Traces
+        - TriageSend
+        - anchorChip
+        - endLabel
+        - firstCause
+        - groupByStatus
+        - hopText
+        - observedExpected
+        - readTraces
+        - sendToAgent
+        - startPrompt
+        - statusLabel
+        - traceChips
+        - traceData
+        - traceInteractions
+        - traceJourney
+        - traceLanes
+        - traceRoles
+    by: agent:claude-code
+  step:send-a-bug#3:
+    kind: structure
+    hash: fnv-2baa63e5c92cfa0d
+    files:
+      packages/cli/src/server.ts:
+        - ViewServer
+        - ViewServerOptions
+        - findWebDir
+        - modelResponse
+        - startViewServer
+    by: agent:claude-code
+  step:send-a-bug#4:
+    kind: structure
+    hash: fnv-a6e8113ebf78e050
+    files:
+      packages/analyzers/src/triage.ts:
+        - TriageListInput
+        - TriageMigrateInput
+        - TriageSendInput
+        - TriageStartInput
+        - TriageWaitInput
+        - knownBugs
+        - migrateTraceText
+        - modelDir
+        - triageCheckAnswer
+        - triageListAnswer
+        - triageMigrateAnswer
+        - triageSendAnswer
+        - triageStartAnswer
+        - triageWaitAnswer
+    by: agent:claude-code
+  step:send-a-bug#5:
+    kind: structure
+    hash: fnv-3c8e7a02bbae7918
+    files:
+      packages/mcp/src/server.ts:
+        - ArchdocServerOptions
+        - INSTRUCTIONS
+        - createArchdocServer
+    by: agent:claude-code
+  step:send-a-bug#6:
+    kind: structure
+    hash: fnv-a6e8113ebf78e050
+    files:
+      packages/analyzers/src/triage.ts:
+        - TriageListInput
+        - TriageMigrateInput
+        - TriageSendInput
+        - TriageStartInput
+        - TriageWaitInput
+        - knownBugs
+        - migrateTraceText
+        - modelDir
+        - triageCheckAnswer
+        - triageListAnswer
+        - triageMigrateAnswer
+        - triageSendAnswer
+        - triageStartAnswer
+        - triageWaitAnswer
+    by: agent:claude-code
+  step:send-a-bug#8:
+    kind: structure
+    hash: fnv-90125828642f3eb2
+    files:
+      apps/web/src/components/Traces.tsx:
+        - NEW
+        - TraceList
+        - TraceStepPanel
+        - TraceStory
+        - TriageStart
+    by: agent:claude-code
+  step:send-a-bug#9:
+    kind: structure
+    hash: fnv-8e116de4c369afd0
+    files:
+      apps/web/src/model/traces.ts:
+        - STATUS_GROUPS
+        - TraceData
+        - Traces
+        - TriageSend
+        - anchorChip
+        - endLabel
+        - firstCause
+        - groupByStatus
+        - hopText
+        - observedExpected
+        - readTraces
+        - sendToAgent
+        - startPrompt
+        - statusLabel
+        - traceChips
+        - traceData
+        - traceInteractions
+        - traceJourney
+        - traceLanes
+        - traceRoles
+    by: agent:claude-code
   step:start-a-model#1:
     kind: structure
     hash: fnv-b5eb9a68eba1ed3e
@@ -2149,19 +2318,23 @@ seals:
     by: agent:claude-code
   step:triage-a-bug#3:
     kind: structure
-    hash: fnv-30b87a9a942fdc88
+    hash: fnv-a6e8113ebf78e050
     files:
       packages/analyzers/src/triage.ts:
         - TriageListInput
         - TriageMigrateInput
+        - TriageSendInput
         - TriageStartInput
+        - TriageWaitInput
         - knownBugs
         - migrateTraceText
         - modelDir
         - triageCheckAnswer
         - triageListAnswer
         - triageMigrateAnswer
+        - triageSendAnswer
         - triageStartAnswer
+        - triageWaitAnswer
     by: agent:claude-code
   step:triage-a-bug#4:
     kind: structure

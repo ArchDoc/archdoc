@@ -63,6 +63,11 @@ describe("archdoc plan", () => {
       ops: [
         {
           op: "put",
+          list: "intents",
+          item: { on: "api", text: "Email the receipt once it's paid" },
+        },
+        {
+          op: "put",
           list: "changes",
           item: { intent: "Sends mail", add: { id: "mailer", kind: "container" } },
         },
@@ -73,6 +78,7 @@ describe("archdoc plan", () => {
     expect(waiting.text).toMatch(/Still waiting/);
     await planEditAnswer(where(), { id, by: "human:@dana", track: true, ops: [{ op: "send" }] });
     const sent = await planWaitAnswer(where(), { id, timeout: 1 });
+    expect(sent.text).toMatch(/added i1/);
     expect(sent.text).toMatch(/added c1/);
   });
 
@@ -116,7 +122,7 @@ describe("archdoc plan", () => {
         {
           op: "put",
           list: "changes",
-          item: { intent: "The API sends it", use: { from: "api", to: "mailer" } },
+          item: { intent: "The API sends it", for: ["i1"], use: { from: "api", to: "mailer" } },
         },
         { op: "put", list: "notes", item: { on: "c1", kind: "question", text: "SMTP?" } },
       ],
@@ -154,5 +160,72 @@ describe("archdoc plan", () => {
     expect((await spec(id)).status).toBe("executing");
     await planTaskAnswer(where(), { id, task: "t1", status: "done" });
     expect((await spec(id)).status).toBe("done");
+  });
+
+  it("takes the person's intents, and the agent's changes for them, never the agent's intents", async () => {
+    const started = await planStartAnswer(where(), {
+      goal: "Log receipts\nKeep a copy of each",
+      by: "human:@dana",
+    });
+    const pid = started.id ?? "";
+    expect((await spec(pid)).title).toBe("Log receipts");
+    await planEditAnswer(where(), {
+      id: pid,
+      by: "human:@dana",
+      track: true,
+      ops: [
+        {
+          op: "put",
+          list: "intents",
+          item: { on: "api", at: { x: 50, y: 50 }, text: "Keep a copy" },
+        },
+      ],
+    });
+    const early = await planRespondAnswer(where(), {
+      id: pid,
+      by: "agent:claude",
+      ops: [{ op: "put", list: "changes", item: { intent: "A store", add: { id: "copies" } } }],
+    });
+    expect(early.ok).toBe(false);
+    expect(early.text).toMatch(/hasn't said what they want yet/);
+    await planEditAnswer(where(), {
+      id: pid,
+      by: "human:@dana",
+      track: true,
+      ops: [{ op: "send" }],
+    });
+    const refused = await planRespondAnswer(where(), {
+      id: pid,
+      by: "agent:claude",
+      ops: [
+        { op: "put", list: "intents", item: { text: "Mine" } },
+        { op: "put", list: "changes", item: { intent: "Unasked", add: { id: "cache" } } },
+        { op: "put", list: "changes", item: { intent: "x", for: ["i7"], add: { id: "cache" } } },
+      ],
+    });
+    expect(refused.ok).toBe(false);
+    expect(refused.text).toMatch(/intents are the person's/);
+    expect(refused.text).toMatch(/say which of the person's intents/);
+    expect(refused.text).toMatch(/i7 isn't an intent the person wrote/);
+    const ok = await planRespondAnswer(where(), {
+      id: pid,
+      by: "agent:claude",
+      ops: [
+        {
+          op: "put",
+          list: "changes",
+          item: {
+            intent: "Stores copies",
+            for: ["i1"],
+            add: { id: "receipts", kind: "datastore" },
+          },
+        },
+      ],
+    });
+    expect(ok.ok).toBe(true);
+    expect((await spec(pid)).changes[0]).toMatchObject({ for: ["i1"], status: "suggested" });
+    expect((await planReadAnswer(where(), { id: pid })).text).toMatch(
+      /i1 on api \(carried out by c1\)/,
+    );
   });
 });

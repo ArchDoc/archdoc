@@ -6,6 +6,7 @@ import {
   groupByStatus,
   hopText,
   observedExpected,
+  sendToAgent,
   startPrompt,
   statusLabel,
   traceChips,
@@ -13,6 +14,7 @@ import {
   traceLanes,
 } from "../model/traces.js";
 import type { LandscapeInfo } from "../model/useModel.js";
+import { type AgentAsk, SendToAgent } from "./Agent.js";
 import { type CodeContext, linkTarget, PathLinks } from "./code.js";
 import { Lanes } from "./Lanes.js";
 import { Payload } from "./Payload.js";
@@ -36,7 +38,7 @@ export function TraceList(props: {
         <span className="side-item-label">
           + Start a triage
           <span className="side-item-sub">
-            Paste an error to place it, and hand it to your agent
+            Paste the bug and send it to your agent, which follows it to the root cause
           </span>
         </span>
       </button>
@@ -105,8 +107,14 @@ export function TraceStory(props: {
   map?: React.ReactNode;
   sequence: boolean;
   onSequence: (sequence: boolean) => void;
+  /** Whether the record can be sent to the agent from here (archdoc view). */
+  editable?: boolean | undefined;
+  /** Sent it to the agent: reload to show it. */
+  onSent?: (() => Promise<void>) | undefined;
 }) {
   const { model, check, landscape } = props;
+  const [error, setError] = useState<string>();
+  const sent = check.trace.spec.sent ?? 0;
   const v = check.view;
   const lanes = useMemo(() => traceLanes(model, v, landscape), [model, v, landscape]);
   // The header stays small, so the map has the room: the root cause in brief, the report on asking.
@@ -136,29 +144,53 @@ export function TraceStory(props: {
               ))}
             </p>
           </div>
-          {v.steps.length ? (
-            <fieldset className="segmented story-view" aria-label="Show the bug as">
-              <legend>Show as</legend>
-              {(
-                [
-                  [false, "Map", "Each step of the bug on the map of the system, one at a time"],
-                  [true, "Sequence", "Each step as a row, beneath the journey step it opens up"],
-                ] as const
-              ).map(([seq, label, title]) => (
-                <button
-                  key={label}
-                  type="button"
-                  className={props.sequence === seq ? "is-on" : undefined}
-                  aria-pressed={props.sequence === seq}
-                  title={title}
-                  onClick={() => props.onSequence(seq)}
-                >
-                  {label}
-                </button>
-              ))}
-            </fieldset>
-          ) : null}
+          <div className="plan-actions">
+            {v.steps.length ? (
+              <fieldset className="segmented story-view" aria-label="Show the bug as">
+                <legend>Show as</legend>
+                {(
+                  [
+                    [false, "Map", "Each step of the bug on the map of the system, one at a time"],
+                    [true, "Sequence", "Each step as a row, beneath the journey step it opens up"],
+                  ] as const
+                ).map(([seq, label, title]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className={props.sequence === seq ? "is-on" : undefined}
+                    aria-pressed={props.sequence === seq}
+                    title={title}
+                    onClick={() => props.onSequence(seq)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </fieldset>
+            ) : null}
+            {props.editable ? (
+              <SendToAgent
+                title="Hand the bug to your agent again, with what you want now"
+                asks={sendAsks(v.status)}
+                onSend={async (ask) => {
+                  setError(undefined);
+                  const r = await sendToAgent({ id: v.id, ask });
+                  if (!r.ok) {
+                    setError(r.error);
+                    return false;
+                  }
+                  await props.onSent?.();
+                  return true;
+                }}
+              />
+            ) : null}
+          </div>
         </div>
+        {sent || error ? (
+          <p className={error ? "form-error" : "plan-hint"}>
+            {error ??
+              `Sent to your agent${sent > 1 ? ` ${sent}×` : ""}${check.trace.spec.ask ? `, asking: ${check.trace.spec.ask}` : ""}. ${(check.trace.spec.received ?? 0) >= sent ? "Your agent has it." : "It picks it up with archdoc triage wait, or tell it in the chat."}`}
+          </p>
+        ) : null}
         <div className="trace-rca">
           <p
             className={`trace-rca-text${open ? " is-open" : ""}`}
@@ -226,7 +258,8 @@ export function TraceStory(props: {
 /**
  * Starting a triage: paste an error and see where it belongs (the journey
  * steps it likely showed up in, the elements it names, and records already
- * on them), with what to hand the agent. The explorer writes nothing.
+ * on them), then send it to the agent, which writes the record and follows
+ * it. A read-only explorer gives the command instead.
  */
 export function TriageStart(props: {
   model: Model;
@@ -235,9 +268,14 @@ export function TriageStart(props: {
   onJourney: (id: string) => void;
   onTrace: (id: string) => void;
   onSelect: (key: string) => void;
+  /** Whether bugs can be sent to the agent from here (archdoc view). */
+  editable?: boolean | undefined;
+  /** A bug was sent: its record's ID, to open once it's loaded. */
+  onSent?: ((id: string) => void) | undefined;
 }) {
   const [text, setText] = useState("");
   const [copied, setCopied] = useState<string>();
+  const [error, setError] = useState<string>();
   const result = useMemo(
     () =>
       text.trim()
@@ -256,6 +294,18 @@ export function TriageStart(props: {
       (c) => on.has(c.view.id) || (c.view.anchor && steps.has(c.view.anchor.written)),
     );
   }, [result, props.checks, props.model]);
+  const send = async (ask?: string): Promise<boolean> => {
+    if (!text.trim()) return false;
+    setError(undefined);
+    const r = await sendToAgent({ symptom: text, ask });
+    if (!r.ok) {
+      setError(r.error);
+      return false;
+    }
+    setText("");
+    props.onSent?.(r.id);
+    return true;
+  };
   const hand = startPrompt(text);
   const copy = (what: string, value: string) => {
     void navigator.clipboard?.writeText(value).then(() => setCopied(what));
@@ -267,10 +317,12 @@ export function TriageStart(props: {
           <h1>Start a triage</h1>
           <p className="muted">
             Paste the bug: an error, a stack trace, a log, or what went wrong. The explorer places
-            it on the system; your agent follows it to the root cause and writes the record.
+            it on the system; send it to your agent, and it follows it to the root cause and writes
+            the record.
           </p>
         </div>
       </header>
+      {error ? <p className="form-error">{error}</p> : null}
       <div className="triage-start-body">
         <label className="triage-paste">
           <span className="sr-only">The bug</span>
@@ -285,8 +337,28 @@ export function TriageStart(props: {
             }
             rows={8}
             spellCheck={false}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && props.editable) {
+                e.preventDefault();
+                void send(sendAsks()[0]?.ask);
+              }
+            }}
           />
         </label>
+        {props.editable ? (
+          <div className="form-actions">
+            <SendToAgent
+              disabled={!text.trim()}
+              title="Write the record and hand the bug to your agent"
+              asks={sendAsks()}
+              onSend={send}
+            />
+            <span className="muted small">
+              Writes the record; your agent picks it up with archdoc triage wait.
+            </span>
+          </div>
+        ) : null}
+        {error ? <p className="form-error">{error}</p> : null}
         {result ? (
           <div className="triage-placed">
             <section className="block">
@@ -360,27 +432,41 @@ export function TriageStart(props: {
                 </ul>
               </section>
             ) : null}
-            <section className="block">
-              <h3>Hand it to your agent</h3>
-              <pre className="triage-prompt">{hand.prompt}</pre>
-              <div className="triage-copy">
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={() => copy("prompt", hand.prompt)}
-                >
-                  {copied === "prompt" ? "Copied" : "Copy the prompt"}
-                </button>
-                <span className="muted small">
-                  or run <code>{hand.command}</code>
-                </span>
-              </div>
-            </section>
+            {props.editable ? null : (
+              <section className="block">
+                <h3>Hand it to your agent</h3>
+                <p className="muted small">
+                  This explorer is read-only. Run <code>{hand.command}</code>, or give your agent
+                  this:
+                </p>
+                <pre className="triage-prompt">{hand.prompt}</pre>
+                <div className="triage-copy">
+                  <button type="button" className="btn" onClick={() => copy("prompt", hand.prompt)}>
+                    {copied === "prompt" ? "Copied" : "Copy the prompt"}
+                  </button>
+                </div>
+              </section>
+            )}
           </div>
         ) : null}
       </div>
     </section>
   );
+}
+
+/** What to ask the agent about a bug, by where it stands: the main ask first. */
+function sendAsks(status?: string): AgentAsk[] {
+  if (status === "root-caused")
+    return [
+      { label: "Send to agent: fix it", ask: "Fix it" },
+      { label: "Look again", ask: "Look again" },
+    ];
+  if (status === "fixed")
+    return [{ label: "Send to agent: it's back", ask: "It's back: look again" }];
+  return [
+    { label: "Send to agent: find the root cause", ask: "Find the root cause" },
+    { label: "Find and fix it", ask: "Find the root cause and fix it" },
+  ];
 }
 
 function localOf(model: Model, id: string): string {

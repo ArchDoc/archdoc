@@ -730,7 +730,10 @@ class Editor {
   }
 
   private moveElement(from: string, to: string): string {
-    const own = this.stripNamespace(to);
+    // shop.ui with a system named shop (init names it for the namespace) goes inside
+    // that system, as add does, not to the top of namespace shop.
+    const rawParent = to.includes(".") ? to.slice(0, to.lastIndexOf(".")) : undefined;
+    const own = rawParent && this.index.elements.has(rawParent) ? to : this.stripNamespace(to);
     let parent: string | undefined;
     let key: string;
     const absolute =
@@ -742,6 +745,11 @@ class Editor {
       const dot = own.lastIndexOf(".");
       key = dot === -1 ? own : own.slice(dot + 1);
       parent = dot === -1 ? undefined : this.elementId(own.slice(0, dot));
+    }
+    // The system's own parts stay inside it: only externals and other systems sit beside it.
+    if (parent === undefined && !OUTSIDE_SYSTEM.has(this.kindOf(from) ?? "container")) {
+      const system = this.onlySystem();
+      if (system && system !== from) parent = system;
     }
     checkKey(key);
     const next = parent ? `${parent}.${key}` : key;

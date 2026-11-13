@@ -55,6 +55,11 @@ async function checkAll(m: LoadedModel, traces: readonly Trace[]): Promise<Trace
 export interface TriageStartInput extends TriageReport {
   /** What the person handed over: the error, log, stack trace, wrong output, or issue text. */
   symptom: string;
+  /**
+   * Sent from the explorer (Send to agent): the record says so (`sent: 1`, and
+   * `ask`), so an agent waiting with `archdoc triage wait` picks it up.
+   */
+  send?: { ask?: string | undefined } | undefined;
   /** Print the record without writing it. */
   dryRun?: boolean | undefined;
 }
@@ -65,7 +70,10 @@ export interface TriageStartInput extends TriageReport {
  * status investigating, the best journey step, the elements the error names
  * as open leads, and steps from the stack. Says where to start in the code.
  */
-export async function triageStartAnswer(where: Where, input: TriageStartInput): Promise<Answer> {
+export async function triageStartAnswer(
+  where: Where,
+  input: TriageStartInput,
+): Promise<Answer & { id?: string | undefined }> {
   const symptom = input.symptom.trim();
   if (!symptom) return { ok: false, text: "Give the bug: the error, log, or what went wrong." };
   const m = await loaded(where);
@@ -78,7 +86,8 @@ export async function triageStartAnswer(where: Where, input: TriageStartInput): 
   let id = base;
   for (let n = 2; taken.has(id) || exists(join(dir, `${id}.yaml`)); n++) id = `${base}-${n}`;
   const at = input.at ?? new Date().toISOString().slice(0, 10);
-  const yaml = traceSkeleton(anchored, symptom, { ...input, id, at });
+  const skeleton = traceSkeleton(anchored, symptom, { ...input, id, at });
+  const yaml = input.send ? withSent(skeleton, 1, input.send.ask) : skeleton;
   const file = join(dir, `${id}.yaml`);
   const shown = relative(where.cwd, file).replace(/\\/g, "/") || file;
   const out: string[] = [];
@@ -90,16 +99,109 @@ export async function triageStartAnswer(where: Where, input: TriageStartInput): 
     out.push(`Started ${shown} (status: investigating).`);
   }
   out.push("", formatAnchors(anchored));
-  out.push(
-    "",
+  out.push("", ...nextSteps(id));
+  return { ok: true, text: out.join("\n"), id };
+}
+
+/** What to do with a record, in order: the whole workflow, so an agent needn't find the skill. */
+function nextSteps(id: string): string[] {
+  return [
     "Next (this is the whole workflow; you don't need to find the skill file):",
     "  1. Follow the code from the top journey step. As you go, rule each lead in or out (verdict, evidence, note), and add a step per hop the failing request took, on the most specific element.",
     "  2. Give every step what a reader needs to walk through it on the map: action (what it does, in a few words), description (what happened at this hop in the failing run: the value it had, what the code did with it, and why that's right or wrong there), sends (the data entry it passes, by its name under data:, added with archdoc edit if the model has none yet; creates or changes for a write), observed and expected on that entry's fields where they differ (observed: { Order.status: pending }), code (path#function or path:line), and evidence (reproduced, read, or inferred).",
     "  3. Mark the step where it goes wrong role: cause, and say why in root-cause: { summary, step }. Set status: root-caused. If you were asked only to explain it, stop and report.",
     "  4. If you fix it, keep the record: set status: fixed and fix: { summary, link, test }, and commit it with the fix. A fix without its record isn't done.",
     `  5. archdoc check checks the record; archdoc_triage with id: ${id} shows it the way the explorer will, and what it still lacks.`,
-  );
-  return { ok: true, text: out.join("\n") };
+  ];
+}
+
+/** A record's text with `sent` and `ask` set, keeping everything else as written. */
+function withSent(text: string, sent: number, ask: string | undefined): string {
+  const doc = parseDocument(text);
+  doc.set("sent", sent);
+  if (ask?.trim()) doc.set("ask", ask.trim());
+  else doc.delete("ask");
+  return doc.toString({ lineWidth: 0 });
+}
+
+export interface TriageSendInput {
+  id: string;
+  /** What the person wants this time: fix it, look again, a question. */
+  ask?: string | undefined;
+}
+
+/**
+ * Sends a record to the agent again from the explorer: one more `sent`, and
+ * what the person asks this time, for `archdoc triage wait` to pick up.
+ */
+export async function triageSendAnswer(where: Where, input: TriageSendInput): Promise<Answer> {
+  const m = await loaded(where);
+  if (!m) return { ok: false, text: NO_MODEL };
+  const trace = (await records(where)).find((t) => t.id === input.id);
+  if (!trace) return { ok: false, text: `No Triage record "${input.id}".` };
+  const file = join(where.cwd, trace.file);
+  const text = readFileSync(file, "utf8");
+  writeFileSync(file, withSent(text, (trace.spec.sent ?? 0) + 1, input.ask));
+  return { ok: true, text: `Sent ${input.id} to the agent.` };
+}
+
+export interface TriageWaitInput {
+  /** One record to wait for; without it, any record the person sends. */
+  id?: string | undefined;
+  /** Seconds to wait before giving up. Default 600. */
+  timeout?: number | undefined;
+  /** How often to look, in milliseconds. Default 1000. */
+  interval?: number | undefined;
+}
+
+/** A record the person sent that the agent hasn't picked up yet. */
+function waiting(t: Trace): boolean {
+  return (t.spec.sent ?? 0) > (t.spec.received ?? 0);
+}
+
+/**
+ * Waits until the person sends a bug from the explorer's Triage tab (Send to
+ * agent): a new record, or one sent again with what they ask now. Then
+ * marks it picked up (`received`), and shows it, what it lacks, and the
+ * workflow. A record sent before the wait and not picked up yet comes at once.
+ */
+export async function triageWaitAnswer(where: Where, input: TriageWaitInput = {}): Promise<Answer> {
+  const m = await loaded(where);
+  if (!m) return { ok: false, text: NO_MODEL };
+  const mine = (t: Trace) => !input.id || t.id === input.id;
+  const start = (await records(where)).filter(mine);
+  if (input.id && !start.length) return { ok: false, text: `No Triage record "${input.id}".` };
+  const pickUp = async (t: Trace): Promise<Answer> => {
+    // Picked up: the explorer shows the agent has it, and the next wait looks past it.
+    const file = join(where.cwd, t.file);
+    const doc = parseDocument(readFileSync(file, "utf8"));
+    doc.set("received", t.spec.sent ?? 0);
+    writeFileSync(file, doc.toString({ lineWidth: 0 }));
+    const shown = await triageCheckAnswer(where, t.id);
+    const ask = t.spec.ask?.trim();
+    return {
+      ...shown,
+      text: [
+        `The person sent ${t.id} from the explorer${ask ? `, asking: ${ask}` : ""}.`,
+        "",
+        shown.text,
+        "",
+        ...nextSteps(t.id),
+      ].join("\n"),
+    };
+  };
+  const first = start.find(waiting);
+  if (first) return pickUp(first);
+  const deadline = Date.now() + (input.timeout ?? 600) * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, input.interval ?? 1000));
+    const sent = (await records(where).catch(() => [])).filter(mine).find(waiting);
+    if (sent) return pickUp(sent);
+  }
+  return {
+    ok: true,
+    text: `Still waiting: the person hasn't sent ${input.id ?? "a bug"} from the explorer's Triage tab yet. Run archdoc triage wait${input.id ? ` ${input.id}` : ""} again, or ask them in the chat.`,
+  };
 }
 
 function exists(path: string): boolean {

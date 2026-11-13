@@ -399,3 +399,30 @@ export function startPrompt(text: string): { prompt: string; command: string } {
     command: "archdoc triage start -   # then paste the bug, and end with Ctrl-D",
   };
 }
+
+/** What the server answered a bug sent to the agent with. */
+export type TriageSend = { ok: true; id: string } | { ok: false; error: string };
+
+/**
+ * Sends a bug to the agent from the explorer (archdoc view): a new record
+ * from the pasted bug, or (with `id`) one sent again with what's asked now.
+ * The agent picks it up with archdoc triage wait.
+ */
+export async function sendToAgent(
+  input: { symptom: string; ask?: string | undefined } | { id: string; ask?: string | undefined },
+): Promise<TriageSend> {
+  const again = "id" in input;
+  try {
+    const res = await fetch(again ? `api/triage/${encodeURIComponent(input.id)}` : "api/triage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(again ? { ask: input.ask } : { symptom: input.symptom, ask: input.ask }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+    if (!res.ok || !body.id)
+      return { ok: false, error: body.error ?? `The server answered ${res.status}.` };
+    return { ok: true, id: body.id };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

@@ -12,6 +12,7 @@ import {
   changeTarget,
   describeChange,
   isAgreed,
+  openIntents,
   type Plan,
   planItemIds,
   planStatusOf,
@@ -124,6 +125,8 @@ export interface PlanReach {
 
 /** Counts a person reads at a glance: what's still open in the plan. */
 export interface PlanOpen {
+  /** The person's intents nothing in the plan carries out yet. */
+  intents: number;
   questions: number;
   suggestions: number;
   missingIntent: number;
@@ -258,6 +261,35 @@ export function checkPlan(
       );
     }
   }
+  for (const [i, n] of spec.intents.entries()) {
+    if (n.on && !known(n.on)) {
+      push(
+        "warning",
+        "plan/unknown-item",
+        `Intent ${n.id} is on ${n.on}, which isn't in the plan or the model.`,
+        n.id,
+        loc(`intents.${i}`),
+      );
+    }
+  }
+  const intentIds = new Set(spec.intents.map((n) => n.id));
+  for (const [list, items] of [
+    ["changes", spec.changes],
+    ["sequences", spec.sequences],
+  ] as const) {
+    for (const [i, item] of items.entries()) {
+      for (const f of item.for ?? []) {
+        if (intentIds.has(f)) continue;
+        push(
+          "warning",
+          "plan/unknown-item",
+          `${item.id} carries out ${f}, which isn't one of the plan's intents.`,
+          item.id,
+          loc(`${list}.${i}`),
+        );
+      }
+    }
+  }
   for (const [i, t] of spec.tasks.entries()) {
     for (const f of t.from ?? []) {
       if (!ids.has(f)) {
@@ -316,6 +348,19 @@ export function checkPlan(
     }
   }
 
+  const unanswered = openIntents(spec);
+  if (!closed) {
+    for (const n of unanswered) {
+      push(
+        settled ? "error" : "warning",
+        "plan/open-intent",
+        `Intent ${n.id}${n.on ? ` on ${n.on}` : ""} isn't carried out yet: "${n.text.trim().split("\n")[0]}". Suggest the changes and sequences that do it, each with for: [${n.id}], or ask a question on it.`,
+        n.id,
+        loc(`intents.${spec.intents.indexOf(n)}`),
+      );
+    }
+  }
+
   let questions = 0;
   for (const [i, n] of spec.notes.entries()) {
     if (n.resolved || n.kind !== "question") continue;
@@ -363,6 +408,7 @@ export function checkPlan(
     findings,
     reach: reachOf(model, after, plan),
     open: {
+      intents: unanswered.length,
       questions,
       suggestions: waiting.length,
       missingIntent,
@@ -384,6 +430,8 @@ function itemFor(changes: readonly PlanChangeSpec[], element: string): string | 
 /** Where an item is written in the plan file. */
 export function itemLocation(plan: Plan, item: string): SourceLocation | undefined {
   const spec = plan.spec;
+  const ii = spec.intents.findIndex((n) => n.id === item);
+  if (ii >= 0) return plan.locations[`intents.${ii}`];
   const ci = spec.changes.findIndex((c) => c.id === item);
   if (ci >= 0) return plan.locations[`changes.${ci}`];
   const [seq, step] = item.split("#");

@@ -30,6 +30,7 @@ import {
   triageList,
   triageMigrate,
   triageStart,
+  triageWait,
 } from "./commands/triage.js";
 import { validate } from "./commands/validate.js";
 import { view } from "./commands/view.js";
@@ -287,6 +288,17 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
       run(triageList(opts, io)),
     );
   triage
+    .command("wait")
+    .description(
+      "Wait until the person sends a bug from the explorer's Triage tab (Send to agent), then show it and how to follow it",
+    )
+    .argument("[id]", "one record to wait for (default: any)")
+    .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
+    .option("--timeout <seconds>", "give up after this long (default 600)")
+    .action((id: string | undefined, opts: { model?: string; timeout?: string }) =>
+      run(triageWait(id, opts, io)),
+    );
+  triage
     .command("migrate")
     .description("Move traces from before 0.8 (.archdoc/traces/) to Triage records")
     .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
@@ -300,7 +312,9 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     );
   plan
     .command("start")
-    .description("Start a plan from the idea, and say how to sketch it in the explorer")
+    .description(
+      "Start a plan from the idea, and say how the person adds what they want in the explorer",
+    )
     .argument("<goal...>", "the idea in a sentence, or - (stdin)")
     .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
     .option("-t, --title <title>", "the change in one line")

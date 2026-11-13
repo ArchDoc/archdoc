@@ -13,6 +13,8 @@ import {
   type Snapshot,
   sealReport,
   snapshot,
+  triageSendAnswer,
+  triageStartAnswer,
 } from "@archdoc/analyzers";
 import {
   buildModel,
@@ -107,6 +109,9 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       }
       if (url.pathname === "/api/plans" || url.pathname.startsWith("/api/plans/")) {
         return await planRoute(req, res, url, { target: options.target, cwd });
+      }
+      if (url.pathname === "/api/triage" || url.pathname.startsWith("/api/triage/")) {
+        return await triageRoute(req, res, url, { target: options.target, cwd });
       }
       if (url.pathname === "/api/refs") {
         const { current, branches } = await listBranches(options.cwd);
@@ -218,18 +223,8 @@ async function planRoute(
   url: URL,
   where: { target: string; cwd: string },
 ) {
-  if (req.method !== "POST") return json(res, 405, { error: "Plans are changed with POST." });
-  const origin = req.headers.origin;
-  if (origin && new URL(origin).host !== req.headers.host)
-    return json(res, 403, { error: "Plans can only be changed from the explorer itself." });
-  if (!String(req.headers["content-type"] ?? "").startsWith("application/json"))
-    return json(res, 415, { error: "Send JSON." });
-  let body: Record<string, unknown>;
-  try {
-    body = JSON.parse(await readBody(req)) as Record<string, unknown>;
-  } catch (err) {
-    return json(res, 400, { error: err instanceof Error ? err.message : String(err) });
-  }
+  const body = await jsonBody(req, res, "Plans");
+  if (!body) return;
   const by = typeof body.by === "string" && body.by ? body.by : "human";
   const w = { model: where.target, cwd: where.cwd };
   if (url.pathname === "/api/plans") {
@@ -256,6 +251,70 @@ async function planRoute(
   const r = await planEditAnswer(w, { id, ops, by, track: true });
   if (!r.ok) return json(res, 400, { error: r.text });
   return json(res, 200, { ids: r.ids ?? [], text: r.text });
+}
+
+/**
+ * Sends bugs to the agent from the explorer's Triage tab: POST /api/triage
+ * starts a record from the pasted bug, marked sent; POST /api/triage/<id>
+ * sends one again, with what the person asks now. The same guards as plans.
+ */
+async function triageRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  where: { target: string; cwd: string },
+) {
+  const body = await jsonBody(req, res, "Triage records");
+  if (!body) return;
+  const w = { model: where.target, cwd: where.cwd };
+  const ask = typeof body.ask === "string" ? body.ask : undefined;
+  if (url.pathname === "/api/triage") {
+    const symptom = typeof body.symptom === "string" ? body.symptom : "";
+    // Until the agent names it, the bug's first line is its title.
+    const first = symptom.trim().split("\n")[0]?.trim() ?? "";
+    const title =
+      typeof body.title === "string" && body.title.trim()
+        ? body.title
+        : first
+          ? first.length > 80
+            ? `${first.slice(0, 77)}…`
+            : first
+          : undefined;
+    const r = await triageStartAnswer(w, { symptom, title, send: { ask } });
+    if (!r.ok) return json(res, 400, { error: r.text });
+    return json(res, 200, { id: r.id, text: r.text });
+  }
+  const id = decodeURIComponent(url.pathname.slice("/api/triage/".length));
+  const r = await triageSendAnswer(w, { id, ask });
+  if (!r.ok) return json(res, 400, { error: r.text });
+  return json(res, 200, { id, text: r.text });
+}
+
+/** A JSON POST from the explorer itself, or undefined once it has answered with why not. */
+async function jsonBody(
+  req: IncomingMessage,
+  res: ServerResponse,
+  what: string,
+): Promise<Record<string, unknown> | undefined> {
+  if (req.method !== "POST") {
+    json(res, 405, { error: `${what} are changed with POST.` });
+    return undefined;
+  }
+  const origin = req.headers.origin;
+  if (origin && new URL(origin).host !== req.headers.host) {
+    json(res, 403, { error: `${what} can only be changed from the explorer itself.` });
+    return undefined;
+  }
+  if (!String(req.headers["content-type"] ?? "").startsWith("application/json")) {
+    json(res, 415, { error: "Send JSON." });
+    return undefined;
+  }
+  try {
+    return JSON.parse(await readBody(req)) as Record<string, unknown>;
+  } catch (err) {
+    json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    return undefined;
+  }
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
