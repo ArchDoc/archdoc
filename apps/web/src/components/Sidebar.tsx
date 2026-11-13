@@ -2,7 +2,7 @@ import { ASKED_CONCERNS, DataRegistry, type Model } from "@archdoc/core/browser"
 import { forwardRef, type ReactNode, useMemo, useState } from "react";
 import { sensitivity } from "../graph/data.js";
 import { type ChangeItem, type Compare, UNDECLARED } from "../model/compare.js";
-import { actorLabel, journeysByImportance } from "../model/stories.js";
+import { actorLabel, journeySections } from "../model/stories.js";
 import type { LandscapeInfo } from "../model/useModel.js";
 
 /* The left column of the Journeys, Data, and Changes tabs, and the search in the top bar. */
@@ -16,34 +16,47 @@ export function JourneyList(props: {
   affected?: ReadonlySet<string> | undefined;
   landscape?: LandscapeInfo | undefined;
 }) {
-  const journeys = useMemo(() => journeysByImportance(props.model), [props.model]);
+  const sections = useMemo(() => journeySections(props.model), [props.model]);
+  const empty = sections.every((s) => !s.journeys.length);
+  const item = (j: (typeof sections)[number]["journeys"][number]) => (
+    // The whole title, wrapped, with the importance beneath it: a long goal stays readable.
+    <Item
+      key={j.id}
+      active={props.journeyId === j.id}
+      onClick={() => props.onJourney(j.id)}
+      title={[j.spec.name, j.spec.goal].filter(Boolean).join(": ") || j.id}
+      sub={
+        <span className="journey-sub">
+          <span className={`importance importance-${j.spec.importance ?? "normal"}`}>
+            {j.spec.importance ?? "normal"}
+          </span>
+          <span>
+            {j.steps.length} step{j.steps.length === 1 ? "" : "s"}
+            {j.spec.goal && j.spec.name ? ` · ${j.spec.goal}` : ""}
+          </span>
+        </span>
+      }
+    >
+      {j.spec.name ?? j.spec.goal ?? j.id}
+      {props.affected?.has(j.id) ? <span className="badge-changed"> · affected</span> : null}
+    </Item>
+  );
   return (
     <nav className="side-list" aria-label="Journeys">
       <h2 className="side-title">Journeys</h2>
-      {journeys.length === 0 ? <p className="empty">No journeys yet.</p> : null}
-      {journeys.map((j) => (
-        // The whole title, wrapped, with the importance beneath it: a long goal stays readable.
-        <Item
-          key={j.id}
-          active={props.journeyId === j.id}
-          onClick={() => props.onJourney(j.id)}
-          title={[j.spec.name, j.spec.goal].filter(Boolean).join(": ") || j.id}
-          sub={
-            <span className="journey-sub">
-              <span className={`importance importance-${j.spec.importance ?? "normal"}`}>
-                {j.spec.importance ?? "normal"}
-              </span>
-              <span>
-                {j.steps.length} step{j.steps.length === 1 ? "" : "s"}
-                {j.spec.goal && j.spec.name ? ` · ${j.spec.goal}` : ""}
-              </span>
-            </span>
-          }
-        >
-          {j.spec.name ?? j.spec.goal ?? j.id}
-          {props.affected?.has(j.id) ? <span className="badge-changed"> · affected</span> : null}
-        </Item>
-      ))}
+      {empty ? <p className="empty">No journeys yet.</p> : null}
+      {sections.map((s) =>
+        s.title ? (
+          <section key={s.title} className="side-group journey-section">
+            <h3>
+              {s.title} <span className="muted">{s.journeys.length}</span>
+            </h3>
+            {s.journeys.map(item)}
+          </section>
+        ) : (
+          s.journeys.map(item)
+        ),
+      )}
     </nav>
   );
 }

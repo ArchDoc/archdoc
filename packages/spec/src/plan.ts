@@ -276,6 +276,14 @@ export const PlanFileSchema = z.strictObject({
     .int()
     .optional()
     .describe("How many times the person has sent the plan to the agent"),
+  seen: z.number().int().optional().describe("The round (sent) the agent last read"),
+  answered: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      "The round (sent) the agent last answered: while sent is ahead of it, it's the agent's turn",
+    ),
 });
 
 export type PlanStatus = z.infer<typeof PlanStatusSchema>;

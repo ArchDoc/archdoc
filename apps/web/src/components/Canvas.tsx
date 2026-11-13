@@ -142,6 +142,12 @@ export interface PlanEditing {
         to?: string | undefined;
       }) => void)
     | undefined;
+  /**
+   * What a click on the map does: annotate (the default) opens a small menu
+   * where the person clicked, to add an element or a note there; explore
+   * selects the box, to read it. A pin opens its intent either way.
+   */
+  mode?: "annotate" | "explore" | undefined;
   /** The popover to show, and where. */
   popover?: { anchor: PlanAnchor; content: React.ReactNode } | undefined;
   /** Closes the popover: a click on the map outside it. */
@@ -217,7 +223,7 @@ export function Canvas(props: CanvasProps) {
   // Planning: an arrow's label opens what should change between its boxes, like the arrow.
   const pointRef = useRef(props.edit?.onPoint);
   pointRef.current = props.edit?.onPoint;
-  const pointable = !!props.edit?.onPoint;
+  const pointable = !!props.edit?.onPoint && props.edit.mode !== "explore";
   const [hoverNode, setHoverNode] = useState<string>();
   const firstFit = useRef(true);
   // A level or direction was picked: fit the map once it's laid out again.
@@ -1003,13 +1009,14 @@ export function Canvas(props: CanvasProps) {
   }, [steps, at, flow, written]);
 
   const edit = props.edit;
+  const annotating = !!edit?.onPoint && edit.mode !== "explore";
   const shownNodes = useMemo(() => {
     if (!edit) return nodes;
     const marked = nodes.map((n) => {
       const leaf = n.type === "card" && !(n.data as { isGroup?: boolean }).isGroup;
       const classes = [
         n.className,
-        edit.onPoint && leaf ? "nopan" : undefined,
+        annotating && leaf ? "nopan" : undefined,
         edit.suggested?.has(n.id) ? "is-suggested" : undefined,
         edit.notes?.get(n.id) ? "has-plan-notes" : undefined,
       ].filter(Boolean);
@@ -1079,7 +1086,7 @@ export function Canvas(props: CanvasProps) {
       });
     }
     return pins.length ? [...marked, ...pins] : marked;
-  }, [nodes, edit]);
+  }, [nodes, edit, annotating]);
   // Each box comes with the size the layout gave it, as React Flow measured it: a box passed
   // again without its measurements is measured again, and until it is, its arrows aren't drawn.
   const measuredNodes = useMemo(
@@ -1138,6 +1145,7 @@ export function Canvas(props: CanvasProps) {
   return (
     <ReactFlow
       ref={pane_}
+      className={annotating ? "is-annotating" : undefined}
       nodes={measuredNodes}
       edges={shownEdges}
       nodeTypes={nodeTypes}
@@ -1154,13 +1162,17 @@ export function Canvas(props: CanvasProps) {
             });
           }
           const onControl = (e.target as HTMLElement).closest("button, a, input, select, textarea");
-          if (node.type === "card" && /^(element|actor):/.test(node.id) && !onControl) {
+          if (
+            annotating &&
+            node.type === "card" &&
+            /^(element|actor):/.test(node.id) &&
+            !onControl
+          ) {
             const abs = flow.getInternalNode(node.id)?.internals.positionAbsolute;
             const w = node.width ?? node.measured?.width ?? 0;
             const h = node.height ?? node.measured?.height ?? 0;
             const pct = (v: number, size: number) =>
               size > 0 ? Math.round(Math.min(100, Math.max(0, (v / size) * 100))) : 50;
-            props.onSelect(node.id);
             return edit.onPoint({
               node: node.id,
               at: abs ? { x: pct(flowAt.x - abs.x, w), y: pct(flowAt.y - abs.y, h) } : undefined,
@@ -1187,12 +1199,16 @@ export function Canvas(props: CanvasProps) {
           props.onTables(el.id);
         } else props.onToggle(node.id.slice(8));
       }}
-      onPaneClick={() =>
-        edit?.popover && edit.onDismiss ? edit.onDismiss() : props.onSelect(undefined)
-      }
+      onPaneClick={(e) => {
+        if (edit?.popover && edit.onDismiss) return edit.onDismiss();
+        props.onSelect(undefined);
+        // Annotating: the map itself is the system as a whole, to add a box or a note to.
+        if (annotating && edit?.onPoint)
+          edit.onPoint({ flow: flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }) });
+      }}
       onEdgeClick={(e, edge) => {
         // Planning: a click on an arrow asks what should change between its two boxes.
-        if (!edit?.onPoint) return;
+        if (!annotating || !edit?.onPoint) return;
         const ends = [edge.source, edge.target];
         if (!ends.every((k) => /^(element|actor):/.test(k))) return;
         edit.onPoint({
@@ -1202,7 +1218,7 @@ export function Canvas(props: CanvasProps) {
         });
       }}
       onPointerDown={(e) => {
-        if (!edit?.onPoint || e.button !== 0) return;
+        if (!annotating || e.button !== 0) return;
         const id = nodeAt(e.clientX, e.clientY);
         const el = (e.target as HTMLElement).closest(".react-flow__node");
         if (!id || !el?.classList.contains("nopan")) return;

@@ -19,3 +19,4 @@ steps:
     to: web
     action: Opens boxes, reads what each use is for, focuses on an actor, and steps through journeys on the map or as a sequence
     code: apps/web/src/App.tsx
+section: Map the system

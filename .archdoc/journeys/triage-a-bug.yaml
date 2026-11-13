@@ -42,3 +42,4 @@ steps:
     to: cli
     action: Reads the record with the fix (archdoc show <id>), and CI's archdoc check keeps it true
     code: packages/cli/src/commands/check.ts
+section: Fix bugs

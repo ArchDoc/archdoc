@@ -27,3 +27,4 @@ steps:
     to: core
     action: Lists consumers and journeys in other repos, and the ones the change breaks
     code: packages/core/src/federation/consumers.ts
+section: Across repos

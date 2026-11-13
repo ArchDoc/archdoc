@@ -123,7 +123,7 @@ export async function planStartAnswer(
   out.push(
     "",
     "Next (this is the whole workflow):",
-    "  1. Open the explorer for the person yourself, now: run archdoc view --detach --watch --open (it starts in the background, opens their browser, and prints the URL), and give them the URL and the Plan tab under Build. Don't leave the command for them to run. Tell them to click in the box where they want something to change (or on an arrow, or drag from one box to another, for how two connect) and write what they want there, in their own words (an intent), as many as they like, then press Send to agent. They drive the design: you turn what they wrote into the model. Don't suggest changes or sequences before they've written and sent an intent (respond refuses them); a note with what you found in the code is fine.",
+    "  1. Open the explorer for the person yourself, now: run archdoc view --detach --watch --open (it starts in the background, opens their browser, and prints the URL), and give them the URL and the Plan tab under Build. Don't leave the command for them to run. Tell them to click on the map where they want something: a small menu adds a box there (New element) or a note on what they want (New note), and clicking an arrow or dragging from one box to another says how two connect. Each comes to you as they add it (an intent, in their words). They drive the design: you turn what they wrote into the model, a turn each, as in a chat. Don't suggest changes or sequences before they've written and sent an intent (respond refuses them); a note with what you found in the code is fine.",
     `  2. Wait for it: archdoc plan wait ${id} (or archdoc_plan with action wait). It returns their intents and what they changed.`,
     "  3. For each intent, check it against the code (archdoc_context on what it touches) and carry out what it says, no more: the elements, arrows, data, and sequences it asks for, as suggested changes and sequences, each with for: [the intent's ID] and its own intent. An intent with to is about how its two boxes connect (on → to): answer with a use, or a new element between them. Where it leaves a design choice open (which store, sync or queued, a new element or an existing one), don't choose for them: ask with a question on the intent (a note on i1) with options, each a few words and what it costs, which they tap to answer, and suggest once they answer. Add insights and risks you find in the code as notes. Answer with archdoc plan respond. Never edit the person's items: suggest, and they accept or dismiss.",
     "  4. Repeat 2 and 3 until nothing's open and they mark it ready. Then write the tasks that carry it out, each with the changes it makes, files, and tests, and carry them out in order.",
@@ -169,7 +169,8 @@ export async function planReadAnswer(where: Where, input: PlanReadInput): Promis
   if (!plan) return unknownPlan(l, input.id);
   const check = checkOne(l, plan);
   const unread = plan.spec.unread ?? [];
-  if (unread.length && !input.peek) await editFile(where, plan, [{ op: "read" }], {});
+  const behind = (plan.spec.sent ?? 0) > (plan.spec.seen ?? 0);
+  if ((unread.length || behind) && !input.peek) await editFile(where, plan, [{ op: "read" }], {});
   const status = planStatusOf(plan.spec);
   return {
     ok: true,
@@ -180,7 +181,7 @@ export async function planReadAnswer(where: Where, input: PlanReadInput): Promis
 
 /** How to answer, shown with a plan to review: the respond ops, one line each. */
 const RESPOND_OPS = [
-  "Respond with these ops (archdoc plan respond <id> '<ops as JSON>', or archdoc_plan with action respond). Each intent (i1) is what the person wants: carry it out with suggested changes and sequences that name it in for. An intent with to is about how its two boxes connect (on → to): answer with a use, or a new element between them.",
+  "Respond with these ops (archdoc plan respond <id> '<ops as JSON>', or archdoc_plan with action respond). Each intent (i1) is what the person wants: carry it out with suggested changes and sequences that name it in for. An intent with to is about how its two boxes connect (on → to): answer with a use, or a new element between them. An intent on a box the person drew (their own add change) is what that box is for: keep their box and its ID, and suggest what it needs beside it (uses, a set with its description and code). Answer in turns, as in a chat: what's new since your last answer (the unread items) first, briefly, then wait again; one question at a time, with options, beats a list of them.",
   '  {"op":"put","list":"notes","item":{"on":"i1","kind":"question","text":"…","options":["Headless Chromium (150 MB)","Our own SVG renderer"]}}  options: the choices, each a few words with its cost, which the person taps to answer',
   '  {"op":"put","list":"notes","item":{"on":"c1","kind":"insight","text":"…"}}  kind: insight, question, risk, or note; on: an intent, a change, s1, s1#2, or a model ID',
   '  {"op":"reply","note":"n1","text":"…","kind":"answer"}',
@@ -211,7 +212,8 @@ export async function planWaitAnswer(where: Where, input: PlanWaitInput): Promis
   const startSent = plan.spec.sent ?? 0;
   const startStatus = planStatusOf(plan.spec);
   // Sent before the agent started waiting: what changed is already there to read.
-  if (startStatus !== "drafting" && plan.spec.unread?.length) {
+  const behind = startSent > (plan.spec.seen ?? 0);
+  if (startStatus !== "drafting" && (plan.spec.unread?.length || behind)) {
     const read = await planReadAnswer(where, { id: input.id });
     return { ...read, text: `The person sent ${input.id} (${startStatus}).\n\n${read.text}` };
   }
@@ -256,7 +258,7 @@ export interface PlanRespondInput {
 function unanswerable(spec: Plan["spec"], wanted: unknown): string | undefined {
   const mine = spec.intents.filter((n) => !n.by?.startsWith("agent:"));
   if (!mine.length || !spec.sent)
-    return "the person hasn't said what they want yet. They drive the design: wait for them to click in a box, write what they want there, and send it (archdoc plan wait). Until then, only a note with what you found in the code.";
+    return "the person hasn't said what they want yet. They drive the design: wait for them to click on the map and say what they want there (archdoc plan wait). Until then, only a note with what you found in the code.";
   const ids = Array.isArray(wanted) ? wanted.filter((x): x is string => typeof x === "string") : [];
   if (!ids.length)
     return `say which of the person's intents it carries out, with for: [${mine[0]?.id}]. A suggestion only answers what they asked for; if you think something else is needed, say so in a note.`;
@@ -346,6 +348,8 @@ export async function planRespondAnswer(where: Where, input: PlanRespondInput): 
       text: ["Nothing changed:", ...refused.map((r) => `  ✗ ${r}`)].join("\n"),
     };
   }
+  // Answering hands the turn back: the explorer shows the person it's theirs again.
+  if (plan.spec.sent && ops.length) ops.push({ op: "answered" });
   const r = await editFile(where, plan, ops, { by });
   if (!r.ok) return r;
   const after = await load(where);
@@ -359,7 +363,7 @@ export async function planRespondAnswer(where: Where, input: PlanRespondInput): 
         ? [
             "",
             `Open: ${check.open.intents} intent${check.open.intents === 1 ? "" : "s"} to work out, ${check.open.questions} question${check.open.questions === 1 ? "" : "s"}, ${check.open.suggestions} suggestion${check.open.suggestions === 1 ? "" : "s"}, ${check.open.missingIntent} without intent.`,
-            "Tell the person what you found in a sentence or two; the detail is on the map.",
+            "Tell the person what you found in a sentence or two; the detail is on the map. Then wait for their next turn (archdoc plan wait) right away: the plan is a conversation, a turn each.",
           ]
         : []),
     ].join("\n"),

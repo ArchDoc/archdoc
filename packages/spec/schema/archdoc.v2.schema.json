@@ -223,6 +223,10 @@
                 "type": "string",
                 "enum": ["critical", "high", "normal"]
               },
+              "section": {
+                "description": "The topic it's listed under with journeys like it, such as Checkout or Accounts: what part of the product it's about, never how important it is",
+                "type": "string"
+              },
               "owners": {
                 "type": "array",
                 "items": {
@@ -1359,6 +1363,10 @@
           "description": "Used to rank impact. Defaults to normal.",
           "type": "string",
           "enum": ["critical", "high", "normal"]
+        },
+        "section": {
+          "description": "The topic it's listed under with journeys like it, such as Checkout or Accounts: what part of the product it's about, never how important it is",
+          "type": "string"
         },
         "owners": {
           "type": "array",
@@ -4028,6 +4036,18 @@
         },
         "sent": {
           "description": "How many times the person has sent the plan to the agent",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "seen": {
+          "description": "The round (sent) the agent last read",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "answered": {
+          "description": "The round (sent) the agent last answered: while sent is ahead of it, it's the agent's turn",
           "type": "integer",
           "minimum": -9007199254740991,
           "maximum": 9007199254740991

@@ -410,6 +410,12 @@ const journeyShape = {
   goal: z.string(),
   description: z.string().optional(),
   importance: ImportanceSchema.optional().describe("Used to rank impact. Defaults to normal."),
+  section: z
+    .string()
+    .optional()
+    .describe(
+      "The topic it's listed under with journeys like it, such as Checkout or Accounts: what part of the product it's about, never how important it is",
+    ),
   owners: StringList.optional(),
   tags: StringList.optional(),
   status: StatusSchema.optional(),

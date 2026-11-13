@@ -1389,7 +1389,7 @@ seals:
     by: agent:claude
   element:toolchain.web.model-loader:
     kind: structure
-    hash: fnv-ae2650f462d37220
+    hash: fnv-e6b013532c0fb1b3
     files:
       apps/web/src/model/compare.ts:
         - ChangeFindings
@@ -1412,6 +1412,7 @@ seals:
       apps/web/src/model/stories.ts:
         - IMPORTANCE
         - JourneyCard
+        - JourneySection
         - Lane
         - LaneBand
         - LaneBranch
@@ -1425,6 +1426,7 @@ seals:
         - journeyFacts
         - journeyLanes
         - journeyPath
+        - journeySections
         - journeysByImportance
         - ownership
         - repoName
@@ -1485,7 +1487,7 @@ seals:
     by: agent:claude-code
   element:toolchain.web.ui:
     kind: structure
-    hash: fnv-d541fcfe88a62be6
+    hash: fnv-6daed9e0c5bcacf4
     files:
       apps/web/src/App.tsx:
         - App
@@ -1541,9 +1543,14 @@ seals:
         - NEW_PLAN
         - PlanHead
         - PlanList
+        - PlanMode
         - PlanPanel
         - PlanPop
         - PlanStart
+        - PlanTurn
+        - newElementId
+        - newElementPlace
+        - planTurn
       apps/web/src/components/Sidebar.tsx:
         - ChangesList
         - DataList
@@ -1962,16 +1969,21 @@ seals:
     by: agent:claude-code
   step:plan-a-change#5:
     kind: structure
-    hash: fnv-7b697acc9166fb0a
+    hash: fnv-f8c337c2ed299a88
     files:
       apps/web/src/components/Plan.tsx:
         - IntentPopover
         - NEW_PLAN
         - PlanHead
         - PlanList
+        - PlanMode
         - PlanPanel
         - PlanPop
         - PlanStart
+        - PlanTurn
+        - newElementId
+        - newElementPlace
+        - planTurn
     by: agent:claude-code
   step:plan-a-change#6:
     kind: structure

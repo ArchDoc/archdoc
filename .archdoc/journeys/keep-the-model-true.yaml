@@ -35,3 +35,4 @@ steps:
     action: Writes the new seals to archdoc.sum, which the pull request shows
     code: packages/analyzers/src/answers.ts
     sends: Seal
+section: Code with an agent

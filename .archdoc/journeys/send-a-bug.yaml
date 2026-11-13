@@ -16,3 +16,4 @@ journeys:
       - { from: web.model-loader, to: cli.view-server, action: Posts the record ID and the new ask, code: apps/web/src/model/traces.ts#sendToAgent, sends: BugSent }
       - { from: cli.view-server, to: analyzers, action: "Counts one more send, with the new ask, for the agent's next wait", code: packages/analyzers/src/triage.ts#triageSendAnswer, sends: BugSent }
       - { from: analyzers, to: model-files, action: Writes the record with sent and ask, changes: { TriageRecord.sent: 1 -> 2 } }
+    section: Fix bugs

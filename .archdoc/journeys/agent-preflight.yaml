@@ -25,3 +25,4 @@ steps:
     to: coding-agent
     action: Returns the brief, and the agent names the affected journeys and actors before editing
     sends: ToolResult
+section: Code with an agent

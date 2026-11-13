@@ -6,6 +6,7 @@ import {
   journeyFacts,
   journeyLanes,
   journeyPath,
+  journeySections,
   ownership,
 } from "../src/model/stories.js";
 import { hashOf, readHash } from "../src/model/useCompare.js";
@@ -152,5 +153,55 @@ describe("the address", () => {
     );
     expect(hashOf({ tab: "changes", pair: { base: "main" } })).toBe("#diff=main");
     expect(hashOf({ tab: "plan" })).toBe("#plan");
+  });
+});
+
+describe("journey sections", () => {
+  const many = (sections: (string | undefined)[]) =>
+    buildModel([
+      {
+        path: "archdoc.yaml",
+        text: `
+archdoc: "2.0"
+namespace: shop
+actors:
+  buyer: { kind: person }
+elements:
+  shop: { kind: system, elements: { web: { kind: container, name: Storefront }, admin: { kind: container, name: Back office } } }
+journeys:
+${sections
+  .map(
+    (s, i) => `  j${i}:
+    actor: buyer
+    goal: Goal ${i}${s ? `\n    section: ${s}` : ""}${i === 3 ? "\n    importance: critical" : ""}
+    steps:
+      - { from: buyer, to: ${i % 2 ? "shop.admin" : "shop.web"} }
+`,
+  )
+  .join("")}`,
+      },
+    ]);
+  const shape = (m: ReturnType<typeof many>) =>
+    journeySections(m).map((s) => [s.title, s.journeys.map((j) => j.id)]);
+
+  it("lists the sections the journeys declare, by their most important journey, Other last", () => {
+    expect(shape(many(["Checkout", undefined, "Accounts", "Accounts"]))).toEqual([
+      ["Accounts", ["j3", "j2"]],
+      ["Checkout", ["j0"]],
+      ["Other", ["j1"]],
+    ]);
+  });
+
+  it("keeps a short list without sections as one list", () => {
+    expect(shape(many([undefined, undefined, undefined]))).toEqual([
+      [undefined, ["j0", "j1", "j2"]],
+    ]);
+  });
+
+  it("groups a long list without sections by the part of the system it runs in", () => {
+    expect(shape(many(Array.from({ length: 8 }, () => undefined)))).toEqual([
+      ["Back office", ["j3", "j1", "j5", "j7"]],
+      ["Storefront", ["j0", "j2", "j4", "j6"]],
+    ]);
   });
 });

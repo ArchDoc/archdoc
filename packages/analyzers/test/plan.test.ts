@@ -132,6 +132,23 @@ describe("archdoc plan", () => {
     expect(s.changes[1]).toMatchObject({ id: "c2", status: "suggested", by: "agent:claude" });
     expect(s.notes[1]).toMatchObject({ id: "n2", kind: "question", by: "agent:claude" });
     expect(s.unread).toBeUndefined();
+    // Answering hands the turn back: the round it read is answered.
+    expect(s).toMatchObject({ sent: 1, seen: 1, answered: 1 });
+    expect(ok.text).toMatch(/plan wait\) right away/);
+  });
+
+  it("returns from wait at once when a round was sent the agent hasn't read", async () => {
+    await planEditAnswer(where(), { id, by: "human:@dana", track: true, ops: [{ op: "send" }] });
+    // Read without unread: the round is still the agent's to read, and wait says so at once.
+    await planEditAnswer(where(), { id, by: "agent:claude", ops: [{ op: "read" }] });
+    await planEditAnswer(where(), { id, by: "human:@dana", track: false, ops: [{ op: "send" }] });
+    const s = await spec(id);
+    expect(s.sent).toBeGreaterThan(s.seen);
+    const started = Date.now();
+    const r = await planWaitAnswer(where(), { id, timeout: 5 });
+    expect(r.text).toMatch(/^The person sent/);
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect((await spec(id)).seen).toBe(s.sent);
   });
 
   it("lists plans with what's open", async () => {

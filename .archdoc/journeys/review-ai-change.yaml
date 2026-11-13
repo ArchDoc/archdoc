@@ -23,3 +23,4 @@ steps:
   - from: developer
     to: web
     action: Opens the Diff (archdoc view --base), which reads the pull request's code change into its model, and reviews what's not in the model yet and the suggested facts
+section: Review changes
