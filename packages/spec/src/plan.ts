@@ -66,6 +66,12 @@ export const PlanIntentSchema = z
       .describe(
         "The box the person clicked in: a model ID (web), or something the plan adds. Omit for the system as a whole.",
       ),
+    to: z
+      .string()
+      .optional()
+      .describe(
+        "For an intent about how two boxes connect: the other box (on → to), from an arrow the person clicked or a drag from on to it, whether or not they're connected yet",
+      ),
     at: PlanPositionSchema.optional().describe(
       "Where in that box, as percentages of its width and height (0-100), or on the map without on",
     ),
@@ -191,6 +197,12 @@ export const PlanNoteSchema = z
     by: PlanAuthorSchema.optional(),
     kind: PlanNoteKindSchema.optional(),
     text: z.string().min(1),
+    options: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(
+        "For a question: the choices, each a few words with its cost (Headless Chromium, 150 MB), shown as buttons the person taps to answer",
+      ),
     replies: z.array(PlanReplySchema).optional(),
     resolved: z.boolean().optional(),
   })

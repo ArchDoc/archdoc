@@ -3389,6 +3389,10 @@
                 "description": "The box the person clicked in: a model ID (web), or something the plan adds. Omit for the system as a whole.",
                 "type": "string"
               },
+              "to": {
+                "description": "For an intent about how two boxes connect: the other box (on → to), from an arrow the person clicked or a drag from on to it, whether or not they're connected yet",
+                "type": "string"
+              },
               "at": {
                 "description": "Where in that box, as percentages of its width and height (0-100), or on the map without on",
                 "type": "object",
@@ -3902,6 +3906,14 @@
               "text": {
                 "type": "string",
                 "minLength": 1
+              },
+              "options": {
+                "description": "For a question: the choices, each a few words with its cost (Headless Chromium, 150 MB), shown as buttons the person taps to answer",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "replies": {
                 "type": "array",

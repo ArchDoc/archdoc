@@ -31,6 +31,8 @@ export interface RoutedData extends Record<string, unknown> {
         className?: string | undefined;
         /** Pointing at the label lights its line, so it's clear which line it's for. */
         onHover?: ((on: boolean) => void) | undefined;
+        /** Clicking the label, like clicking its line (planning: what should change between its boxes). */
+        onClick?: ((e: React.MouseEvent) => void) | undefined;
       }
     | undefined;
 }
@@ -86,6 +88,7 @@ function Note(props: {
   at: Point;
   className?: string | undefined;
   onHover?: ((on: boolean) => void) | undefined;
+  onClick?: ((e: React.MouseEvent) => void) | undefined;
 }) {
   const { box } = props;
   const style: React.CSSProperties = box
@@ -94,8 +97,12 @@ function Note(props: {
   return (
     <EdgeLabelRenderer>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: pointing at a label only lights its line; the text is the same either way. */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: clicking a label is a shortcut for clicking its line, which the plan's panel also offers. */}
       <div
-        className={["edge-note", props.className].filter(Boolean).join(" ")}
+        className={["edge-note", props.className, props.onClick ? "is-pointable" : ""]
+          .filter(Boolean)
+          .join(" ")}
+        onClick={props.onClick}
         style={style}
         title={props.lines.join(" ") === props.text ? undefined : props.text}
         onMouseEnter={() => props.onHover?.(true)}

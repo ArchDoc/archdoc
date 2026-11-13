@@ -198,7 +198,7 @@ elements:
                 description: Resolves IDs and references the way the model does
           plans:
             kind: component
-            description: "Plans, in .archdoc/plans/, never part of the model. Parses them; makes a plan's agreed changes and sequences on a copy of the model's sources one at a time, so one that can't be made doesn't stop the rest; and checks it: every change and step has its intent, what can't be made and why, what the plan would break (findings the model with the plan has that the model hasn't), open questions and suggestions, the journeys, actors, owners, and other repos it reaches, the tasks once it's ready, and while it's carried out, which changes the model doesn't show yet. Edits a plan file by op, all or none, and records what the person changed for the agent's next read."
+            description: "Plans, in .archdoc/plans/, never part of the model. Parses them, and says what each touches (its intents, on a box or between two, its changes, and its sequences) for a map that shows only that; makes a plan's agreed changes and sequences on a copy of the model's sources one at a time, so one that can't be made doesn't stop the rest; and checks it: every change and step has its intent, what can't be made and why, what the plan would break (findings the model with the plan has that the model hasn't), open questions and suggestions, the journeys, actors, owners, and other repos it reaches, the tasks once it's ready, and while it's carried out, which changes the model doesn't show yet. Edits a plan file by op, all or none, and records what the person changed for the agent's next read."
             code:
               - path: packages/core/src/plan/**
               - path: packages/core/src/plan/check.ts
@@ -333,7 +333,7 @@ elements:
                 provenance: { source: suggested, by: agent:claude-code }
           graph:
             kind: component
-            description: Decides what's visible (never code elements, which stand for their component; the C4 context and containers, with one box for a model without a system; expand, focus, journeys, a landscape's boxes by repo, team, or domain, and an environment's infrastructure), lifts relationships to visible boxes, sizes each use's description, and lays them out with ELK, keeping room for the descriptions; routes a journey step no use joins straight across between its boxes; times a step's message chip to move at one speed whatever the line's length, there and back for a request and its response; and gathers the Data tab's catalog (each store's tables and who reaches it, each entry's stores, producers, and journey steps).
+            description: Decides what's visible (never code elements, which stand for their component; the C4 context and containers, with one box for a model without a system; expand, focus, a plan's focus on what it touches and what that connects to, journeys, a landscape's boxes by repo, team, or domain, and an environment's infrastructure), lifts relationships to visible boxes, sizes each use's description, and lays them out with ELK, keeping room for the descriptions; routes a journey step no use joins straight across between its boxes; times a step's message chip to move at one speed whatever the line's length, there and back for a request and its response; and gathers the Data tab's catalog (each store's tables and who reaches it, each entry's stores, producers, and journey steps).
             code: [{ path: apps/web/src/graph/** }]
           ui:
             kind: component

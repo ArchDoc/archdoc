@@ -239,6 +239,7 @@ export {
   type PlanChangeKind,
   type PlanSpec,
   parsePlan,
+  planFocus,
   planId,
   planItemIds,
   planStatusOf,

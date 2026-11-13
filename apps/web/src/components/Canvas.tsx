@@ -138,6 +138,8 @@ export interface PlanEditing {
         at?: { x: number; y: number } | undefined;
         flow: { x: number; y: number };
         intent?: string | undefined;
+        /** For how two boxes connect: the other box, from an arrow or a drag from `node`. */
+        to?: string | undefined;
       }) => void)
     | undefined;
   /** The popover to show, and where. */
@@ -212,6 +214,10 @@ export function Canvas(props: CanvasProps) {
   >();
   const flow = useReactFlow();
   const [hoverEdge, setHoverEdge] = useState<string>();
+  // Planning: an arrow's label opens what should change between its boxes, like the arrow.
+  const pointRef = useRef(props.edit?.onPoint);
+  pointRef.current = props.edit?.onPoint;
+  const pointable = !!props.edit?.onPoint;
   const [hoverNode, setHoverNode] = useState<string>();
   const firstFit = useRef(true);
   // A level or direction was picked: fit the map once it's laid out again.
@@ -724,6 +730,19 @@ export function Canvas(props: CanvasProps) {
                 text: note.text,
                 box: layout.labels.get(e.id),
                 onHover: (on: boolean) => setHoverEdge(on ? e.id : undefined),
+                onClick:
+                  pointable &&
+                  /^(element|actor):/.test(e.source) &&
+                  /^(element|actor):/.test(e.target)
+                    ? (ev: React.MouseEvent) => {
+                        ev.stopPropagation();
+                        pointRef.current?.({
+                          node: e.source,
+                          to: e.target,
+                          flow: flow.screenToFlowPosition({ x: ev.clientX, y: ev.clientY }),
+                        });
+                      }
+                    : undefined,
                 className: [
                   journey ? "is-step" : "",
                   journey && currentPair === [e.source, e.target].sort().join("|")
@@ -823,6 +842,8 @@ export function Canvas(props: CanvasProps) {
     selected,
     dimming,
     hoverEdge,
+    pointable,
+    flow,
     overlay,
     crossings,
     focus,
@@ -905,6 +926,17 @@ export function Canvas(props: CanvasProps) {
     );
   }, [layout, graph, view.focus, flow]);
 
+  // A plan's focus grows as the person and the agent add to it: show all of it.
+  const onlyKey = view.only ? [...view.only.keep].sort().join(",") : "";
+  const lastOnly = useRef("");
+  useEffect(() => {
+    if (!layout || layout.source !== graph || lastOnly.current === onlyKey) return;
+    lastOnly.current = onlyKey;
+    requestAnimationFrame(
+      () => void flow.fitView({ padding: 0.12, duration: 450, minZoom: 0.4, maxZoom: 1.15 }),
+    );
+  }, [layout, graph, onlyKey, flow]);
+
   // Regrouping moves everything: show all of it.
   const lastBy = useRef(grouping?.by);
   useEffect(() => {
@@ -974,8 +1006,10 @@ export function Canvas(props: CanvasProps) {
   const shownNodes = useMemo(() => {
     if (!edit) return nodes;
     const marked = nodes.map((n) => {
+      const leaf = n.type === "card" && !(n.data as { isGroup?: boolean }).isGroup;
       const classes = [
         n.className,
+        edit.onPoint && leaf ? "nopan" : undefined,
         edit.suggested?.has(n.id) ? "is-suggested" : undefined,
         edit.notes?.get(n.id) ? "has-plan-notes" : undefined,
       ].filter(Boolean);
@@ -985,7 +1019,44 @@ export function Canvas(props: CanvasProps) {
     const boxes = new Map(marked.map((n) => [n.id, n]));
     const active = edit.popover?.anchor.intent;
     const pins: PinNode[] = [];
+    // A box's place on the map, through the boxes it sits in.
+    const absoluteOf = (id: string): { x: number; y: number } => {
+      const n = boxes.get(id);
+      if (!n) return { x: 0, y: 0 };
+      const up = n.parentId ? absoluteOf(n.parentId) : { x: 0, y: 0 };
+      return { x: up.x + n.position.x, y: up.y + n.position.y };
+    };
     for (const p of edit.pins ?? []) {
+      const pinData = {
+        id: p.id,
+        text: p.text,
+        open: p.open,
+        resolved: p.resolved,
+        active: active === p.id,
+      };
+      // About how two boxes connect: halfway between them, on the line that joins them.
+      if (p.to) {
+        const a = p.node ? boxes.get(p.node) : undefined;
+        const b = boxes.get(p.to);
+        if (!a || !b) continue;
+        const pa = absoluteOf(a.id);
+        const pb = absoluteOf(b.id);
+        pins.push({
+          id: `pin:${p.id}`,
+          type: "pin",
+          position: {
+            x: (pa.x + (a.width ?? 0) / 2 + pb.x + (b.width ?? 0) / 2) / 2 - PIN / 2,
+            y: (pa.y + (a.height ?? 0) / 2 + pb.y + (b.height ?? 0) / 2) / 2 - PIN / 2,
+          },
+          width: PIN,
+          height: PIN,
+          selectable: false,
+          draggable: false,
+          zIndex: 1000,
+          data: pinData,
+        });
+        continue;
+      }
       const box = p.node ? boxes.get(p.node) : undefined;
       if (!box) continue;
       const w = box.width ?? 0;
@@ -1004,33 +1075,70 @@ export function Canvas(props: CanvasProps) {
         selectable: false,
         draggable: false,
         zIndex: 1000,
-        data: {
-          id: p.id,
-          text: p.text,
-          open: p.open,
-          resolved: p.resolved,
-          active: active === p.id,
-        },
+        data: pinData,
       });
     }
     return pins.length ? [...marked, ...pins] : marked;
   }, [nodes, edit]);
-  const shownEdges = useMemo(
+  // Each box comes with the size the layout gave it, as React Flow measured it: a box passed
+  // again without its measurements is measured again, and until it is, its arrows aren't drawn.
+  const measuredNodes = useMemo(
     () =>
-      edit?.suggestedEdges?.size
-        ? edges.map((e) =>
-            edit.suggestedEdges?.has(`${e.source}|${e.target}`)
-              ? { ...e, className: [e.className, "is-suggested"].filter(Boolean).join(" ") }
-              : e,
-          )
-        : edges,
-    [edges, edit],
+      shownNodes.map((n) =>
+        n.width !== undefined && n.height !== undefined && !n.measured
+          ? { ...n, measured: { width: n.width, height: n.height } }
+          : n,
+      ),
+    [shownNodes],
   );
+  const shownEdges = useMemo(() => {
+    const marked = edit?.suggestedEdges?.size
+      ? edges.map((e) =>
+          edit.suggestedEdges?.has(`${e.source}|${e.target}`)
+            ? { ...e, className: [e.className, "is-suggested"].filter(Boolean).join(" ") }
+            : e,
+        )
+      : edges;
+    // An intent about two boxes no arrow joins: a dotted line between them, for its pin to sit on.
+    const pairs = (edit?.pins ?? []).filter((p) => p.node && p.to);
+    if (!pairs.length || !layout || layout.source !== graph) return marked;
+    const joined = new Set(
+      edges.flatMap((e) => [`${e.source}|${e.target}`, `${e.target}|${e.source}`]),
+    );
+    const absolute = absoluteBoxes(layout.graph, layout.boxes);
+    const links: RoutedEdge[] = [];
+    for (const p of pairs) {
+      const a = absolute.get(p.node as string);
+      const b = absolute.get(p.to as string);
+      if (!a || !b || joined.has(`${p.node}|${p.to}`)) continue;
+      links.push({
+        id: `intent-link:${p.id}`,
+        type: "routed" as const,
+        source: p.node as string,
+        target: p.to as string,
+        data: { points: directRoute(a, b) },
+        className: "intent-link",
+        selectable: false,
+        zIndex: 2,
+      });
+    }
+    return links.length ? [...marked, ...links] : marked;
+  }, [edges, edit, layout, graph]);
+
+  // Dragging from one box to another: an intent about how they connect.
+  const dragFrom = useRef<{ node: string; x: number; y: number } | undefined>(undefined);
+  const [dragLine, setDragLine] = useState<{ x1: number; y1: number; x2: number; y2: number }>();
+  const paneBox = () => pane_.current?.getBoundingClientRect();
+  const nodeAt = (x: number, y: number): string | undefined => {
+    const el = document.elementFromPoint(x, y)?.closest(".react-flow__node");
+    const id = el?.getAttribute("data-id") ?? undefined;
+    return id && /^(element|actor):/.test(id) ? id : undefined;
+  };
 
   return (
     <ReactFlow
       ref={pane_}
-      nodes={shownNodes}
+      nodes={measuredNodes}
       edges={shownEdges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
@@ -1082,6 +1190,54 @@ export function Canvas(props: CanvasProps) {
       onPaneClick={() =>
         edit?.popover && edit.onDismiss ? edit.onDismiss() : props.onSelect(undefined)
       }
+      onEdgeClick={(e, edge) => {
+        // Planning: a click on an arrow asks what should change between its two boxes.
+        if (!edit?.onPoint) return;
+        const ends = [edge.source, edge.target];
+        if (!ends.every((k) => /^(element|actor):/.test(k))) return;
+        edit.onPoint({
+          node: edge.source,
+          to: edge.target,
+          flow: flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }),
+        });
+      }}
+      onPointerDown={(e) => {
+        if (!edit?.onPoint || e.button !== 0) return;
+        const id = nodeAt(e.clientX, e.clientY);
+        const el = (e.target as HTMLElement).closest(".react-flow__node");
+        if (!id || !el?.classList.contains("nopan")) return;
+        if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+        dragFrom.current = { node: id, x: e.clientX, y: e.clientY };
+      }}
+      onPointerMove={(e) => {
+        const from = dragFrom.current;
+        const box = paneBox();
+        if (!from || !box) return;
+        if (!dragLine && Math.hypot(e.clientX - from.x, e.clientY - from.y) < 8) return;
+        setDragLine({
+          x1: from.x - box.left,
+          y1: from.y - box.top,
+          x2: e.clientX - box.left,
+          y2: e.clientY - box.top,
+        });
+      }}
+      onPointerUp={(e) => {
+        const from = dragFrom.current;
+        dragFrom.current = undefined;
+        if (!from || !dragLine) return;
+        setDragLine(undefined);
+        const to = nodeAt(e.clientX, e.clientY);
+        if (!to || to === from.node || !edit?.onPoint) return;
+        edit.onPoint({
+          node: from.node,
+          to,
+          flow: flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }),
+        });
+      }}
+      onPointerLeave={() => {
+        dragFrom.current = undefined;
+        setDragLine(undefined);
+      }}
       onEdgeMouseEnter={(_, edge) => setHoverEdge(edge.id)}
       onEdgeMouseLeave={() => setHoverEdge(undefined)}
       onNodeMouseEnter={(_, node) => setHoverNode(node.id)}
@@ -1095,6 +1251,11 @@ export function Canvas(props: CanvasProps) {
       <Background gap={24} size={1} />
       {edit?.popover ? (
         <PopoverAt anchor={edit.popover.anchor}>{edit.popover.content}</PopoverAt>
+      ) : null}
+      {dragLine ? (
+        <svg className="intent-drag" aria-hidden="true">
+          <line {...dragLine} />
+        </svg>
       ) : null}
       <Controls showInteractive={false} position="bottom-left" />
       <Panel position="top-center">

@@ -43,6 +43,8 @@ export interface PlanPop {
   flow?: { x: number; y: number } | undefined;
   /** An intent already on the map, to read or change. */
   intent?: string | undefined;
+  /** For how two boxes connect: the other box (node ID), from an arrow or a drag. */
+  to?: string | undefined;
 }
 
 /** The plans, by where each stands. */
@@ -205,6 +207,8 @@ export function PlanHead(props: {
   busy: boolean;
   onEdit: (ops: PlanEditOp[]) => Promise<boolean>;
   hint?: string | undefined;
+  /** The map shows what the plan touches, or (whole) the whole system. */
+  focus?: { whole: boolean; available: boolean; onWhole: (whole: boolean) => void } | undefined;
 }) {
   const { plan, check } = props.map;
   const status = planStatusOf(plan.spec);
@@ -223,6 +227,18 @@ export function PlanHead(props: {
           {plan.spec.sent ? ` · sent ${plan.spec.sent}×` : ""}
           {blocked.length ? ` · ${blocked.join(", ")}` : designing ? " · nothing open" : ""}
         </p>
+        {props.focus?.available ? (
+          <p className="plan-focus muted small">
+            {props.focus.whole ? "Showing the whole system · " : "Showing what the plan touches · "}
+            <button
+              type="button"
+              className="link"
+              onClick={() => props.focus?.onWhole(!props.focus.whole)}
+            >
+              {props.focus.whole ? "Show only what it touches" : "Show the whole system"}
+            </button>
+          </p>
+        ) : null}
         {props.hint ? <p className="plan-hint">{props.hint}</p> : null}
       </div>
       {props.editable && designing ? (
@@ -340,7 +356,13 @@ export function IntentPopover(props: {
     box.current?.focus();
   }, []);
   const ref = (pin?.node ?? pop.node) ? refOf((pin?.node ?? pop.node) as string) : undefined;
-  const where = ref ? nameOf(map.after, ref) : "the system";
+  const toKey = pin?.to ?? pop.to;
+  const toRef = toKey ? refOf(toKey) : (intent?.to ?? undefined);
+  const where = toRef
+    ? `${ref ? nameOf(map.after, ref) : "the system"} → ${nameOf(map.after, toRef)}`
+    : ref
+      ? nameOf(map.after, ref)
+      : "the system";
   const notes = intent ? map.plan.spec.notes.filter((n) => n.on === intent.id) : [];
   const save = () => {
     const value = text.trim();
@@ -350,16 +372,24 @@ export function IntentPopover(props: {
       ? { ...intent, text: value }
       : {
           ...(ref ? { on: ref } : {}),
-          ...(pop.at ? { at: pop.at } : {}),
+          ...(toRef ? { to: toRef } : pop.at ? { at: pop.at } : {}),
           text: value,
         };
-    void props.onEdit([{ op: "put", list: "intents", item }]).then((ok) => ok && props.onClose());
+    // Close at once: the pin appears when the plan reloads, and an error shows in the panel.
+    props.onClose();
+    void props.onEdit([{ op: "put", list: "intents", item }]);
   };
   return (
     <div
       className="intent-popover"
       role="dialog"
-      aria-label={intent ? `Intent ${intent.id}` : `What you want in ${where}`}
+      aria-label={
+        intent
+          ? `Intent ${intent.id}`
+          : toRef
+            ? `What you want between ${where}`
+            : `What you want in ${where}`
+      }
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.stopPropagation();
@@ -370,8 +400,10 @@ export function IntentPopover(props: {
       <p className="intent-popover-where">
         {intent ? (
           <>
-            <span className="chip plan-chip">{intent.id}</span> in {where}
+            <span className="chip plan-chip">{intent.id}</span> {toRef ? "on" : "in"} {where}
           </>
+        ) : toRef ? (
+          <>What should change between {where}?</>
         ) : (
           <>What do you want in {where}?</>
         )}
@@ -395,7 +427,11 @@ export function IntentPopover(props: {
             }}
             rows={3}
             aria-label="What you want here"
-            placeholder="Email the shopper a receipt once the charge goes through"
+            placeholder={
+              toRef
+                ? "Send it through a queue, so a slow mailer doesn't hold up checkout"
+                : "Email the shopper a receipt once the charge goes through"
+            }
           />
           <div className="intent-popover-actions">
             <button
@@ -469,6 +505,7 @@ export function IntentPopover(props: {
           {notes.map((n) => (
             <li key={n.id} className={`intent-note note-${n.kind ?? "note"}`}>
               <strong className="intent-note-kind">{n.kind ?? "note"}:</strong> {n.text}
+              <Choices note={n} editable={props.editable} busy={props.busy} onEdit={props.onEdit} />
               {n.replies?.length ? (
                 <span className="muted small">
                   {" "}
@@ -490,13 +527,18 @@ function IntentList(props: PanelProps & { pins: IntentPin[] }) {
     <ul className="plan-changes plan-intents">
       {props.pins.map((p) => {
         const ref = p.node ? refOf(p.node) : undefined;
+        const to = p.to ? refOf(p.to) : undefined;
+        const name = (r: string) => nameOf(props.map.after, r);
         return (
           <li
             key={p.id}
             className={`plan-change plan-intent-item${p.open ? " is-open" : ""}${p.resolved ? " is-resolved" : ""}`}
           >
             <button type="button" className="link" onClick={() => props.onPop({ intent: p.id })}>
-              {p.id} · in {ref ? nameOf(props.map.after, ref) : "the system"}
+              {p.id} ·{" "}
+              {ref && to
+                ? `between ${name(ref)} → ${name(to)}`
+                : `in ${ref ? name(ref) : "the system"}`}
             </button>
             <p className="plan-intent">{p.text}</p>
             <p className="muted small">
@@ -951,6 +993,47 @@ function Notes(props: PanelProps & { on: string | undefined; compact?: boolean; 
   );
 }
 
+/**
+ * A question's options as buttons: one tap answers it with that option,
+ * settles it, and sends the plan back to the agent.
+ */
+function Choices(props: {
+  note: PlanNote;
+  editable: boolean;
+  busy: boolean;
+  onEdit: (ops: PlanEditOp[]) => Promise<boolean>;
+}) {
+  const n = props.note;
+  const answer = (n.replies ?? []).find((r) => r.kind === "answer");
+  if (!n.options?.length || (n.kind ?? "note") !== "question") return null;
+  if (answer || n.resolved)
+    return answer ? (
+      <span className="plan-choice-picked muted small"> · you chose: {answer.text}</span>
+    ) : null;
+  if (!props.editable) return null;
+  return (
+    <fieldset className="plan-choices" aria-label={`Answer ${n.id}`}>
+      {n.options.map((o) => (
+        <button
+          key={o}
+          type="button"
+          className="btn small plan-choice"
+          disabled={props.busy}
+          onClick={() =>
+            void props.onEdit([
+              { op: "reply", note: n.id, text: o, kind: "answer" },
+              { op: "resolve", note: n.id },
+              { op: "send" },
+            ])
+          }
+        >
+          {o}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
 function NoteItem(props: PanelProps & { note: PlanNote; on?: string | undefined }) {
   const n = props.note;
   const [reply, setReply] = useState("");
@@ -966,6 +1049,9 @@ function NoteItem(props: PanelProps & { note: PlanNote; on?: string | undefined 
         </span>
       </p>
       <p className="plan-note-text">{n.text}</p>
+      {n.options?.length && !answered && !n.resolved ? (
+        <Choices note={n} editable={props.editable} busy={props.busy} onEdit={props.onEdit} />
+      ) : null}
       {(n.replies ?? []).map((r, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: replies are only ever added at the end
         <p key={i} className={`plan-reply reply-${r.kind ?? "reply"}`}>
@@ -993,7 +1079,13 @@ function NoteItem(props: PanelProps & { note: PlanNote; on?: string | undefined 
           <input
             value={reply}
             onChange={(e) => setReply(e.target.value)}
-            placeholder={kind === "question" && !answered ? "Answer" : "Reply"}
+            placeholder={
+              kind === "question" && !answered
+                ? n.options?.length
+                  ? "Or in your own words"
+                  : "Answer"
+                : "Reply"
+            }
             aria-label={`Reply to ${n.id}`}
           />
           <button type="submit" className="btn small" disabled={props.busy || !reply.trim()}>

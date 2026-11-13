@@ -7,6 +7,7 @@ import {
   drawnChildIds,
   journeyEdges,
   journeyExpansion,
+  onlyGraph,
   shownId,
 } from "../src/graph/graph.js";
 import { actorLabel } from "../src/model/stories.js";
@@ -180,5 +181,43 @@ journeys:
 
   it("names actors in plain words when they have no name:", () => {
     expect(actorLabel(coded, "dashboard-user")).toBe("Dashboard User");
+  });
+});
+
+describe("onlyGraph", () => {
+  const all = (expanded: string[]) => buildGraph(model, { expanded: new Set(expanded) });
+
+  it("keeps what a plan touches, what it connects to, and the boxes they sit in", () => {
+    const g = onlyGraph(all(["platform"]), {
+      keep: new Set(["element:platform.api"]),
+      around: new Set(["element:platform.api"]),
+    });
+    expect(ids(g.nodes)).toEqual([
+      "element:app",
+      "element:console",
+      "element:platform",
+      "element:platform.api",
+      "element:platform.cache",
+      "element:platform.db",
+    ]);
+    expect(g.edges.every((e) => ids(g.nodes).includes(e.source))).toBe(true);
+  });
+
+  it("shows a scope without its neighbors, and everything when nothing it names is drawn", () => {
+    const g = all(["platform"]);
+    const scoped = onlyGraph(g, {
+      keep: new Set(["element:platform.db"]),
+      around: new Set(),
+    });
+    expect(ids(scoped.nodes)).toEqual(["element:platform", "element:platform.db"]);
+    expect(onlyGraph(g, { keep: new Set(["element:nope"]), around: new Set() })).toBe(g);
+  });
+
+  it("is applied by buildGraph", () => {
+    const only = { keep: new Set(["actor:ops-team"]), around: new Set(["actor:ops-team"]) };
+    expect(ids(buildGraph(model, { expanded: new Set(), only }).nodes)).toEqual([
+      "actor:ops-team",
+      "element:console",
+    ]);
   });
 });

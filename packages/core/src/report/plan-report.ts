@@ -88,7 +88,9 @@ export function formatPlan(
         : open.has(n.id)
           ? "to work out"
           : `carried out by ${carried.join(", ")}`;
-      out.push(`  ${n.id}${n.on ? ` on ${n.on}` : " on the system"} (${state}): ${n.text.trim()}`);
+      out.push(
+        `  ${n.id}${n.on ? ` on ${n.on}` : " on the system"}${n.to ? ` → ${n.to} (how they connect)` : ""} (${state}): ${n.text.trim()}`,
+      );
     }
   }
 
@@ -129,6 +131,7 @@ export function formatPlan(
       out.push(
         `  ${n.id} ${n.kind ?? "note"}${n.on ? ` on ${n.on}` : ""}${n.resolved ? " (resolved)" : ""} · ${n.by ?? "?"}: ${n.text}`,
       );
+      if (n.options?.length) out.push(`      options: ${n.options.join(" | ")}`);
       for (const r of n.replies ?? [])
         out.push(`      ↳ ${r.kind ?? "reply"} · ${r.by ?? "?"}: ${r.text}`);
     }
@@ -212,7 +215,8 @@ function openIds(check: PlanCheck): string[] {
 function describeItem(plan: Plan, id: string): string {
   const s = plan.spec;
   const intent = s.intents.find((x) => x.id === id);
-  if (intent) return `: ${intent.on ? `on ${intent.on}: ` : ""}${intent.text.trim()}`;
+  if (intent)
+    return `: ${intent.on ? `on ${intent.on}${intent.to ? ` → ${intent.to}` : ""}: ` : ""}${intent.text.trim()}`;
   const c = s.changes.find((x) => x.id === id);
   if (c) return `: ${describeChange(c)}${c.intent ? ` (${c.intent.trim().split("\n")[0]})` : ""}`;
   const [seq, step] = id.split("#");
