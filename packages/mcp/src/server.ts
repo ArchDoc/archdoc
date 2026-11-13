@@ -46,6 +46,13 @@ export const INSTRUCTIONS = `This repository's architecture is modeled in .archd
 - archdoc_check: after you edit, with base "main". It lists what your change broke or made stale, each with its fix, and facts whose code changed.
 - archdoc_seal: once you've checked each changed fact against its code, seal it. Never seal a fact you haven't read.`;
 
+/**
+ * The longest a wait holds one tool call, in seconds: MCP clients give up on
+ * a call after about a minute (Claude Code after 60 seconds), so a wait
+ * returns before that and says to wait again.
+ */
+const WAIT_MAX = 50;
+
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
 
 /** An MCP server with one tool per question an agent asks. Reloads the model on every call. */
@@ -263,7 +270,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
       },
     },
     (input) => {
-      if (input.wait) return respond(triageWaitAnswer(where, { id: input.id }));
+      if (input.wait) return respond(triageWaitAnswer(where, { id: input.id, timeout: WAIT_MAX }));
       if (input.list || (!input.symptom && !input.id))
         return respond(
           triageListAnswer(where, {
@@ -304,7 +311,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
         by: z.string().optional().describe("agent:<name>"),
         task: z.string().optional(),
         status: z.string().optional().describe("task: todo, doing, done, skipped"),
-        timeout: z.number().optional().describe("wait: seconds"),
+        timeout: z.number().optional().describe(`wait: seconds, ≤${WAIT_MAX}`),
       },
       annotations: {
         readOnlyHint: false,
@@ -336,7 +343,12 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
           return respond(planReadAnswer(where, { id: input.id }));
         case "wait":
           if (!input.id) return need("id");
-          return respond(planWaitAnswer(where, { id: input.id, timeout: input.timeout }));
+          return respond(
+            planWaitAnswer(where, {
+              id: input.id,
+              timeout: Math.min(input.timeout ?? WAIT_MAX, WAIT_MAX),
+            }),
+          );
         case "respond":
           if (!input.id || !input.ops?.length) return need("id and ops");
           return respond(

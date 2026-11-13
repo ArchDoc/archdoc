@@ -6,15 +6,15 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 // The free half of the plan eval (scripts/eval-plan.mjs): each scenario
-// starts where its stage does. A review's plan loads, and its check finds
-// what a check can, so the flaws left for the agent are the ones that take
-// reading the code; a plan to carry out is clean but for its tasks.
+// starts where its stage does. A plan to answer is the person's alone, sent
+// once and unread, and checks clean, so what's scored is the agent's answer;
+// a plan to carry out is clean but for its tasks.
 const evals = fileURLToPath(new URL("../../../evals/", import.meta.url));
 const scenarios = readdirSync(join(evals, "plan"), { withFileTypes: true })
   .filter((d) => d.isDirectory())
   .map((d) => d.name);
 const stage = (name: string) =>
-  parse(readFileSync(join(evals, "plan", name, "scenario.yaml"), "utf8")).stage ?? "review";
+  parse(readFileSync(join(evals, "plan", name, "scenario.yaml"), "utf8")).stage;
 const golden = (fixture: string) => {
   const text = readFileSync(join(evals, "fixtures", fixture, "golden.yaml"), "utf8");
   const sources = [{ path: ".archdoc/archdoc.yaml", text }];
@@ -48,35 +48,38 @@ describe.each(scenarios.filter((n) => stage(n) === "carry"))("plan eval %s", (na
   });
 });
 
-describe.each(scenarios.filter((n) => stage(n) === "review"))("plan eval %s", (name) => {
+describe.each(scenarios.filter((n) => stage(n) === "answer"))("plan eval %s", (name) => {
   const scenario = parse(readFileSync(join(evals, "plan", name, "scenario.yaml"), "utf8"));
   const text = readFileSync(join(evals, "plan", name, "plan.yaml"), "utf8");
-  const golden = readFileSync(join(evals, "fixtures", scenario.fixture, "golden.yaml"), "utf8");
-  const sources = [{ path: ".archdoc/archdoc.yaml", text: golden }];
-  const model = buildModel(sources, { root: ".archdoc/archdoc.yaml" });
+  const { sources, model } = golden(scenario.fixture);
+  const { plans, diagnostics } = loadPlans([{ path: `.archdoc/plans/${name}.yaml`, text }]);
+  const plan = plans[0];
+  if (!plan) throw new Error("no plan");
 
-  it("loads, sent, with every flaw on an item it has", () => {
-    const { plans, diagnostics } = loadPlans([{ path: `.archdoc/plans/${name}.yaml`, text }]);
+  it("is sent once, with every item unread and nothing from the agent yet", () => {
     expect(diagnostics).toEqual([]);
-    const plan = plans[0];
-    expect(plan?.spec.status).toBe("reviewing");
-    const ids = new Set([
-      ...(plan?.spec.changes.map((c) => c.id) ?? []),
-      ...(plan?.spec.sequences.flatMap((s) => [
-        s.id,
-        ...s.steps.map((_, i) => `${s.id}#${i + 1}`),
-      ]) ?? []),
-    ]);
-    for (const f of scenario.expected.flaws)
-      expect(f.on.some((o: string) => ids.has(o))).toBe(true);
+    expect(plan.spec.status).toBe("reviewing");
+    expect(plan.spec.sent).toBe(1);
+    expect(plan.spec.seen ?? 0).toBe(0);
+    const items = [...plan.spec.intents, ...plan.spec.changes, ...plan.spec.notes];
+    expect(items.every((x) => !x.by?.startsWith("agent:"))).toBe(true);
+    expect(new Set(plan.spec.unread?.map((u) => u.id))).toEqual(new Set(items.map((x) => x.id)));
   });
 
-  it("checks: the missing intent is found, and nothing errs", () => {
-    const plan = loadPlans([{ path: `.archdoc/plans/${name}.yaml`, text }]).plans[0];
-    if (!plan) throw new Error("no plan");
+  it("has the intents it scores: clear ones, an open one between two boxes, one on the person's box", () => {
+    const ids = plan.spec.intents.map((i) => i.id);
+    for (const id of [...scenario.expected.clear, scenario.expected.open])
+      expect(ids).toContain(id);
+    expect(plan.spec.intents.find((i) => i.id === scenario.expected.open)?.to).toBeTruthy();
+    const box = plan.spec.changes.find((c) => c.id === scenario.expected.box.change);
+    expect(box?.add?.id).toBe(scenario.expected.box.id);
+    expect(plan.spec.intents.some((i) => i.on === scenario.expected.box.id)).toBe(true);
+  });
+
+  it("checks: each intent waits on the agent, and nothing else is wrong", () => {
     const c = checkPlan(model, sources, plan, { root: ".archdoc/archdoc.yaml" });
-    expect(c.findings.filter((f) => f.code === "plan/missing-intent")).toHaveLength(1);
-    expect(c.findings.filter((f) => f.severity === "error")).toEqual([]);
-    expect(c.findings.map((f) => f.code)).not.toContain("plan/would-break");
+    const found = c.findings.filter((f) => f.severity !== "info");
+    expect(found.filter((f) => f.code !== "plan/open-intent")).toEqual([]);
+    expect(found.map((f) => f.item).sort()).toEqual(plan.spec.intents.map((i) => i.id).sort());
   });
 });

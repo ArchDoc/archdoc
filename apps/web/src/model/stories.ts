@@ -365,3 +365,66 @@ function otherKind(model: Model, ref: string): string | undefined {
   const ns = ref.split(".")[0] ?? ref;
   return new DataRegistry(model).models.get(ns)?.elements.get(ref.slice(ns.length + 1))?.spec.kind;
 }
+
+/** Journeys under a heading: the topic they're about. */
+export interface JourneySection {
+  /** The heading; none when the list has no sections. */
+  title?: string | undefined;
+  journeys: JourneyNode[];
+}
+
+/** Beyond this many journeys, a list without sections groups them by where they run. */
+const SECTION_AT = 6;
+
+/**
+ * The journeys in sections by topic, most important first within each: the
+ * `section:` each declares, in the order their most important journey comes
+ * (the ones without one last, under Other). When none declares a section and
+ * there are more than a handful, they're grouped by the part of the system
+ * most of their steps run in, which is what they're about more often than
+ * not. A short list stays one list.
+ */
+export function journeySections(model: Model): JourneySection[] {
+  const ranked = journeysByImportance(model);
+  const declared = ranked.some((j) => j.spec.section?.trim());
+  if (!declared && ranked.length <= SECTION_AT) return [{ journeys: ranked }];
+  const titleOf = declared
+    ? (j: JourneyNode) => j.spec.section?.trim() || undefined
+    : (j: JourneyNode) => mainPart(model, j);
+  const sections = new Map<string, JourneyNode[]>();
+  const other: JourneyNode[] = [];
+  for (const j of ranked) {
+    const title = titleOf(j);
+    if (!title) other.push(j);
+    else sections.set(title, [...(sections.get(title) ?? []), j]);
+  }
+  const out: JourneySection[] = [...sections].map(([title, journeys]) => ({ title, journeys }));
+  if (other.length) out.push({ title: out.length ? "Other" : undefined, journeys: other });
+  return out;
+}
+
+/** The top-level part of the system (a container, or a system's own part) most of a journey's steps run in. */
+function mainPart(model: Model, j: JourneyNode): string | undefined {
+  const counts = new Map<string, number>();
+  for (const s of j.steps) {
+    for (const t of [s.to, s.from]) {
+      if (t?.type !== "element") continue;
+      const part = partOf(model, t.id);
+      if (part) counts.set(part, (counts.get(part) ?? 0) + (t === s.to ? 2 : 1));
+    }
+  }
+  const best = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (!best) return undefined;
+  const el = model.elements.get(best);
+  return el?.spec.name ?? plainWords(best.split(".").at(-1) ?? best);
+}
+
+function partOf(model: Model, id: string): string | undefined {
+  let el = model.elements.get(id);
+  while (el?.parentId) {
+    const parent = model.elements.get(el.parentId);
+    if (!parent || parent.spec.kind === "system") return el.id;
+    el = parent;
+  }
+  return el && el.spec.kind !== "system" ? el.id : undefined;
+}

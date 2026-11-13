@@ -3,6 +3,7 @@ import {
   changeTarget,
   checkPlan,
   type Diagnostic,
+  describeChange,
   diffModels,
   loadPlans,
   type Model,
@@ -12,6 +13,7 @@ import {
   type Plan,
   type PlanCheck,
   type PlanEditOp,
+  planStatusOf,
 } from "@archdoc/core/browser";
 
 /** The plans beside a model, each checked against it. */
@@ -196,4 +198,138 @@ export async function startPlan(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+type PlanNote = Plan["spec"]["notes"][number];
+
+/** Whose turn it is in the conversation with the agent. */
+export type PlanTurn = "you" | "unsent" | "sent" | "agent" | "none";
+
+/** What the map calls a model ID. */
+export function nameOf(model: Model, ref: string): string {
+  return model.elements.get(ref)?.spec.name ?? model.actors.get(ref)?.spec.name ?? ref;
+}
+
+/** Where a new box goes when the person clicks in `node` (none: the map itself), and what kind. */
+export function newElementPlace(
+  model: Model,
+  node: string | undefined,
+): { parent?: string | undefined; kind: string } {
+  const systems = [...model.elements.values()].filter((e) => e.spec.kind === "system");
+  const top = systems.length === 1 ? systems[0]?.id : undefined;
+  const inside = (parent: string | undefined) => {
+    const kind = parent ? model.elements.get(parent)?.spec.kind : undefined;
+    return {
+      parent,
+      kind: kind === "container" ? "component" : kind === "component" ? "code" : "container",
+    };
+  };
+  const el = node?.startsWith("element:") ? model.elements.get(node.slice(8)) : undefined;
+  if (!el) return inside(top);
+  // A system or a container holds the new box; anything else gets a sibling.
+  if (el.spec.kind === "system" || el.spec.kind === "container") return inside(el.id);
+  if (el.parentId) return inside(el.parentId);
+  return inside(top);
+}
+
+/** A model ID from a name: lowercase words joined by dashes, made unique beside its siblings. */
+export function newElementId(model: Model, parent: string | undefined, name: string): string {
+  const slug =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "new-element";
+  const at = (s: string) => (parent ? `${parent}.${s}` : s);
+  let id = at(slug);
+  for (let n = 2; model.elements.has(id) || model.actors.has(id); n++) id = at(`${slug}-${n}`);
+  return id;
+}
+
+/** One turn of the conversation: what the person said, and the agent's answer to it. */
+export interface Turn {
+  intent: Plan["spec"]["intents"][number];
+  pin?: IntentPin | undefined;
+  /** The box the person drew for it: their own add change on the box it's in. */
+  drew?: Plan["spec"]["changes"][number] | undefined;
+  /** The changes and sequences that carry it out. */
+  items: (Plan["spec"]["changes"][number] | Plan["spec"]["sequences"][number])[];
+  /** The agent's notes on it, or on what carries it out. */
+  notes: PlanNote[];
+  /** Nothing waits on the person here: no suggestion to answer, no question open. */
+  settled: boolean;
+}
+
+/** The plan as a conversation: each intent the person sent, with the agent's answer, and the notes on nothing. */
+export function turnsOf(map: PlanMap): { turns: Turn[]; rest: PlanNote[] } {
+  const s = map.plan.spec;
+  const used = new Set<string>();
+  const turns = s.intents
+    .filter((i) => !i.by?.startsWith("agent:"))
+    .map((intent): Turn => {
+      const items = [...s.changes, ...s.sequences].filter((x) => x.for?.includes(intent.id));
+      const drew = s.changes.find(
+        (c) => c.add && c.add.id === intent.on && !c.by?.startsWith("agent:"),
+      );
+      const about = new Set([intent.id, ...items.map((x) => x.id), ...(drew ? [drew.id] : [])]);
+      const notes = s.notes.filter((n) => n.on && about.has(n.on.split("#")[0] ?? n.on));
+      for (const n of notes) used.add(n.id);
+      const waiting =
+        items.some((x) => x.status === "suggested") ||
+        notes.some(
+          (n) =>
+            (n.kind ?? "note") === "question" &&
+            !n.resolved &&
+            !(n.replies ?? []).some((r) => r.kind === "answer"),
+        );
+      const pin = map.pins.find((p) => p.id === intent.id);
+      return {
+        intent,
+        pin,
+        drew,
+        items,
+        notes,
+        settled: intent.resolved === true || (!waiting && !pin?.open),
+      };
+    });
+  const rest = s.notes.filter((n) => !used.has(n.id));
+  return { turns, rest };
+}
+
+/** A change in a few words, with the names the map shows. */
+export function changeLine(map: PlanMap, c: Plan["spec"]["changes"][number]): string {
+  const name = (ref: string) => nameOf(map.after, ref);
+  const said = (v: unknown) => (typeof v === "string" && v ? `: ${v}` : "");
+  if (c.use)
+    return `${c.use.remove ? "No longer " : ""}${name(c.use.from)} → ${name(c.use.to)}${said(c.use.description)}`;
+  if (c.add)
+    return `New ${typeof c.add.kind === "string" ? c.add.kind : "element"}: ${name(c.add.id)}`;
+  return describeChange(c);
+}
+
+/**
+ * Whose turn it is: the agent's from when the person sends until it answers
+ * that round (sent: it hasn't picked it up yet; agent: it read it and is
+ * working), the person's otherwise (unsent: they've changed things without
+ * sending them).
+ */
+export function planTurn(spec: Plan["spec"]): PlanTurn {
+  const status = planStatusOf(spec);
+  if (status !== "drafting" && status !== "reviewing") return "none";
+  const sent = spec.sent ?? 0;
+  if (sent > (spec.answered ?? 0)) return sent > (spec.seen ?? 0) ? "sent" : "agent";
+  return spec.unread?.length ? "unsent" : "you";
+}
+
+/** The question the person's next message answers: the agent's latest, still open. */
+export function openQuestion(map: PlanMap): PlanNote | undefined {
+  return [...map.plan.spec.notes]
+    .reverse()
+    .find(
+      (n) =>
+        (n.kind ?? "note") === "question" &&
+        n.by?.startsWith("agent:") &&
+        !n.resolved &&
+        !(n.replies ?? []).some((r) => r.kind === "answer"),
+    );
 }

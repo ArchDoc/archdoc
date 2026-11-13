@@ -18,3 +18,4 @@ steps:
     to: web
     action: Opens the landscape, groups it by repo, team, or domain, and follows a journey across teams' repos
     code: apps/web/src/graph/groups.ts
+section: Across repos

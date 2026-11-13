@@ -60,8 +60,10 @@ export type PlanEditOp =
     }
   /** Sends the plan to the agent: status reviewing, one more round. */
   | { op: "send" }
-  /** The agent has read what changed: clears unread. */
-  | { op: "read" };
+  /** The agent has read what changed: clears unread, and notes the round it read. */
+  | { op: "read" }
+  /** The agent has answered the latest round: the person's turn again. */
+  | { op: "answered" };
 
 export interface EditPlanOptions {
   /** Who's making the edit: human:@handle or agent:<name>. Stamped on new items and replies. */
@@ -209,8 +211,17 @@ class PlanEditor {
         this.doc.set("sent", sent + 1);
         return `sent to the agent (round ${sent + 1})`;
       }
+      case "answered": {
+        // The round the agent read, not one the person sent while it was answering.
+        const round = Number(this.doc.get("seen") ?? this.doc.get("sent") ?? 0);
+        if (!round) return "nothing sent to answer";
+        this.doc.set("answered", round);
+        return `answered round ${round}`;
+      }
       case "read": {
         if (this.doc.has("unread")) this.doc.delete("unread");
+        const sent = Number(this.doc.get("sent") ?? 0);
+        if (sent) this.doc.set("seen", sent);
         return "marked read";
       }
       default:

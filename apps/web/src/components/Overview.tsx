@@ -1,6 +1,6 @@
 import type { Model } from "@archdoc/core/browser";
 import { useMemo } from "react";
-import { journeyCards, journeyFacts, ownership } from "../model/stories.js";
+import { journeyCards, journeyFacts, journeySections, ownership } from "../model/stories.js";
 import type { LandscapeInfo, SealsInfo } from "../model/useModel.js";
 
 export interface OverviewProps {
@@ -24,6 +24,20 @@ export function Overview(props: OverviewProps) {
   const { model, landscape } = props;
   const cards = useMemo(() => journeyCards(model, landscape), [model, landscape]);
   const owners = useMemo(() => ownership(model), [model]);
+  // Many journeys read by topic: each section's cards under its heading.
+  const sections = useMemo(() => {
+    const titled = journeySections(model).filter((s) => s.title);
+    if (!titled.length) return [{ title: undefined as string | undefined, cards }];
+    const byId = new Map(cards.map((c) => [c.id, c]));
+    const out = titled.map((s) => ({
+      title: s.title,
+      cards: s.journeys.flatMap((j) => byId.get(j.id) ?? []),
+    }));
+    const placed = new Set(out.flatMap((s) => s.cards.map((c) => c.id)));
+    const rest = cards.filter((c) => !placed.has(c.id));
+    if (rest.length) out.push({ title: "Other", cards: rest });
+    return out.filter((s) => s.cards.length);
+  }, [model, cards]);
   return (
     <div className="overview">
       <header className="overview-intro">
@@ -50,41 +64,48 @@ export function Overview(props: OverviewProps) {
       <section className="overview-section" aria-labelledby="ov-journeys">
         <h2 id="ov-journeys">Start with what people do</h2>
         {cards.length ? (
-          <ul className="journey-cards">
-            {cards.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  className="journey-card"
-                  onClick={() => props.onJourney(c.id)}
-                  onMouseEnter={() => props.onPreview(c.id)}
-                  onMouseLeave={() => props.onPreview(undefined)}
-                  onFocus={() => props.onPreview(c.id)}
-                  onBlur={() => props.onPreview(undefined)}
-                >
-                  <span className="journey-card-top">
-                    <span className="journey-card-title">{c.title}</span>
-                    <span className={`importance importance-${c.importance}`}>{c.importance}</span>
-                  </span>
-                  <span className="journey-card-path">
-                    {c.path.map((name, i) => (
-                      // biome-ignore lint/suspicious/noArrayIndexKey: the path is fixed for the card; "…" may repeat a name.
-                      <span key={`${name}${i}`} className={name === "…" ? "muted" : undefined}>
-                        {i ? <span className="arrow"> → </span> : null}
-                        {name}
+          sections.map((section) => (
+            <div key={section.title ?? ""} className="journey-section">
+              {section.title ? <h3 className="journey-section-title">{section.title}</h3> : null}
+              <ul className="journey-cards">
+                {section.cards.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      className="journey-card"
+                      onClick={() => props.onJourney(c.id)}
+                      onMouseEnter={() => props.onPreview(c.id)}
+                      onMouseLeave={() => props.onPreview(undefined)}
+                      onFocus={() => props.onPreview(c.id)}
+                      onBlur={() => props.onPreview(undefined)}
+                    >
+                      <span className="journey-card-top">
+                        <span className="journey-card-title">{c.title}</span>
+                        <span className={`importance importance-${c.importance}`}>
+                          {c.importance}
+                        </span>
                       </span>
-                    ))}
-                  </span>
-                  <span className="journey-card-facts">
-                    {journeyFacts(c)}
-                    {props.affected?.has(c.id) ? (
-                      <span className="badge-changed"> · affected by the change</span>
-                    ) : null}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                      <span className="journey-card-path">
+                        {c.path.map((name, i) => (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: the path is fixed for the card; "…" may repeat a name.
+                          <span key={`${name}${i}`} className={name === "…" ? "muted" : undefined}>
+                            {i ? <span className="arrow"> → </span> : null}
+                            {name}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="journey-card-facts">
+                        {journeyFacts(c)}
+                        {props.affected?.has(c.id) ? (
+                          <span className="badge-changed"> · affected by the change</span>
+                        ) : null}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
         ) : (
           <p className="muted">
             No journeys yet. A journey says how an actor reaches a goal, step by step.

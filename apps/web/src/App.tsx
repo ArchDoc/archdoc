@@ -30,6 +30,7 @@ import {
   NEW_PLAN,
   PlanHead,
   PlanList,
+  type PlanMode,
   PlanPanel,
   type PlanPop,
   PlanStart,
@@ -296,6 +297,8 @@ function Explorer({
   const [planError, setPlanError] = useState<string>();
   // The plan's map shows what it touches, unless the person asks for the whole system.
   const [planWhole, setPlanWhole] = useState(false);
+  // What a click on the plan's map does: add something there, or read the box.
+  const [planMode, setPlanMode] = useState<PlanMode>("annotate");
   const planState = useMemo(() => readPlans(planning?.plans ?? []), [planning?.plans]);
   const plan =
     planId === NEW_PLAN
@@ -320,11 +323,11 @@ function Explorer({
         return [key.startsWith("element:") ? `element:${shownId(after, key.slice(8))}` : key];
       });
     const { touched, scope } = planFocus(planView.plan.spec);
-    // What the person and the agent touched shows with what it connects to; until there's
-    // any, the scope the idea landed on shows alone.
-    const around = new Set(keys(touched));
-    const keep = around.size ? around : new Set(keys(scope));
-    return keep.size ? { keep, around } : undefined;
+    // Only what the person and the agent touched, the few places the idea landed on most, and
+    // the arrows between them. The rest is a click away (Whole system).
+    const shown = [...keys(touched), ...keys(scope).slice(0, 3)];
+    const keep = new Set(shown);
+    return keep.size ? { keep, around: new Set<string>() } : undefined;
   }, [planView, planWhole, planSeq]);
   const planJourney =
     planView && planSequence ? planView.after.journeys.get(planSequence.journey) : undefined;
@@ -714,6 +717,9 @@ function Explorer({
       } else if (!typing && e.key === "/") {
         e.preventDefault();
         search.current?.focus();
+      } else if (!typing && tab === "plan" && !e.metaKey && !e.ctrlKey && /^[ae]$/i.test(e.key)) {
+        setPlanPop(undefined);
+        setPlanMode(e.key.toLowerCase() === "a" ? "annotate" : "explore");
       } else if (!typing && e.key === "Escape") {
         if (planPop) setPlanPop(undefined);
         else select(undefined);
@@ -798,7 +804,9 @@ function Explorer({
                 setPlanPop(
                   p.intent
                     ? { intent: p.intent, node: p.node, flow: p.flow }
-                    : { node: p.node, at: p.to ? undefined : p.at, flow: p.flow, to: p.to },
+                    : p.to
+                      ? { node: p.node, flow: p.flow, to: p.to }
+                      : { node: p.node, at: p.at, flow: p.flow, make: "menu" },
                 );
               },
               popover: planPop
@@ -818,6 +826,11 @@ function Explorer({
                         busy={planBusy}
                         onEdit={editPlan}
                         onClose={() => setPlanPop(undefined)}
+                        onPop={setPlanPop}
+                        onDetails={(node) => {
+                          setSelected(node);
+                          setPlanSeq(undefined);
+                        }}
                         onItem={(id) => {
                           setPlanPop(undefined);
                           if (planView.plan.spec.sequences.some((q) => q.id === id)) {
@@ -830,6 +843,7 @@ function Explorer({
                   }
                 : undefined,
               onDismiss: () => setPlanPop(undefined),
+              mode: planning?.editable ? planMode : "explore",
               pins: planView.pins,
               suggested: planView.suggested,
               suggestedEdges: planView.suggestedEdges,
@@ -1131,6 +1145,13 @@ function Explorer({
           busy={planBusy}
           onEdit={editPlan}
           hint={planningHint(planView.plan.spec, !!planning?.editable)}
+          mode={{
+            current: planMode,
+            onMode: (m: PlanMode) => {
+              setPlanPop(undefined);
+              setPlanMode(m);
+            },
+          }}
           focus={
             planSeq
               ? undefined
@@ -1576,17 +1597,11 @@ const VERDICT_LABEL = {
 
 /** What the plan's header says to do next. */
 function planningHint(
-  spec: {
-    unread?: readonly unknown[] | undefined;
-    intents: readonly { by?: string | undefined }[];
-  },
+  spec: { intents: readonly { by?: string | undefined }[] },
   editable: boolean,
 ): string | undefined {
   if (!editable) return "Read-only here: plans are made in archdoc view.";
   if (!spec.intents.some((n) => !n.by?.startsWith("agent:")))
-    return "Click in a box on the map and say what you want there. Your agent answers once you send it.";
-  const unread = spec.unread?.length ?? 0;
-  if (unread)
-    return `${unread} edit${unread === 1 ? "" : "s"} your agent hasn't seen: Send to agent when you want its review.`;
+    return "Click on the map to add an element or a note where you want something. Explore (E) to read the boxes instead.";
   return undefined;
 }

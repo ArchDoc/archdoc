@@ -417,6 +417,24 @@ describe("editPlan", () => {
     expect(read.plan?.spec.unread).toBeUndefined();
   });
 
+  it("knows whose turn it is: the round the agent read, and the one it answered", () => {
+    const sent = edit(text, [
+      { op: "put", list: "intents", item: { on: "shop.web", text: "Receipts" } },
+      { op: "send" },
+    ]);
+    const read = editPlan(FILE, sent.text ?? "", [{ op: "read" }], { by: "agent:claude" });
+    expect(read.plan?.spec).toMatchObject({ sent: 1, seen: 1 });
+    // The person sends again while the agent is answering: its answer is to the round it read.
+    const again = edit(read.text ?? "", [
+      { op: "put", list: "intents", item: { text: "And a refund" } },
+      { op: "send" },
+    ]);
+    const answered = editPlan(FILE, again.text ?? "", [{ op: "answered" }], {
+      by: "agent:claude",
+    });
+    expect(answered.plan?.spec).toMatchObject({ sent: 2, seen: 1, answered: 1 });
+  });
+
   it("adds, replaces, and drops steps", () => {
     const one = edit(text, [
       {

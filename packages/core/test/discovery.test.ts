@@ -128,6 +128,37 @@ describe("assessDiscovery", () => {
     expect(a.gaps.find((g) => g.code === "done/undescribed")?.message).toContain("api.routes");
   });
 
+  it("asks for a section on each journey once there are many", () => {
+    const journeys = (n: number, section?: string) =>
+      Array.from(
+        { length: n },
+        (_, i) => `
+          j${i}:
+            actor: shopper
+            goal: Goal ${i}${section ? `\n            section: ${section}` : ""}
+            steps:
+              - { from: shopper, to: api, action: Calls }`,
+      ).join("");
+    const at = (n: number, section?: string) =>
+      assessDiscovery(
+        model({
+          "archdoc.yaml": `
+        archdoc: "2.0"
+        namespace: shop
+        actors:
+          shopper: { kind: person, uses: { api: Buys } }
+        elements:
+          api: { kind: container, description: The API., code: api/** }
+        journeys:${journeys(n, section)}
+      `,
+        }),
+        files,
+      ).gaps.find((g) => g.code === "done/journey-sections");
+    expect(at(8)).toBeUndefined();
+    expect(at(9)?.message).toMatch(/^9 journeys, 9 without a section \(j0, j1, j2, j3, j4, …\)/);
+    expect(at(9, "Checkout")).toBeUndefined();
+  });
+
   it("flags a journey that never reaches what it stores or calls", () => {
     const m = model({
       "archdoc.yaml": `

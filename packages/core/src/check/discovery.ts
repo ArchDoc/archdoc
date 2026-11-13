@@ -17,6 +17,9 @@ import { orphanElements } from "./check.js";
  * Directories that hold tests, test helpers, and verification code: suites,
  * end-to-end and load tests, fixtures, mocks, benchmarks, smoke checks.
  */
+/** Beyond this many journeys, each says its section. */
+const JOURNEY_SECTIONS_AT = 8;
+
 const VERIFICATION_DIR =
   /(^|\/)(tests?|__tests__|e2e|e2e-tests?|integration-?tests?|acceptance-?tests?|functional-?tests?|smoke-?tests?|load-?tests?|loadtests?|perf-?tests?|testdata|__testdata__|test-?data|testutils?|test-?utils?|test-?helpers?|testing-?utils?|testlib|testing|__mocks__|mocks?|fakes?|stubs|fixtures?|__fixtures__|bench(mark)?s?|verification|conformance|playwright|cypress|test-[^/]+|[^/]+[-_]tests?|[^/]+\.(Unit|Functional|Integration|E2E)?Tests?)\//i;
 /** Files that are tests or only serve them, in the languages init reads. */
@@ -364,6 +367,15 @@ export function assessDiscovery(
     gaps.push({
       code: "done/few-journeys",
       message: `${journeys.length ? "One journey" : "No journeys"}. Add a journey for each main flow, starting from the entry points: routes, pages, CLI commands, consumers, and scheduled jobs. Most systems have four to ten; mark the main one importance: critical.`,
+    });
+  }
+  // Many journeys read by topic: each says the section it's listed under.
+  const unsectioned = journeys.filter((j) => !j.spec.section?.trim());
+  if (journeys.length > JOURNEY_SECTIONS_AT && unsectioned.length) {
+    const shown = unsectioned.slice(0, 5).map((j) => j.id);
+    gaps.push({
+      code: "done/journey-sections",
+      message: `${journeys.length} journeys, ${unsectioned.length} without a section (${shown.join(", ")}${unsectioned.length > shown.length ? ", …" : ""}). Give each a section: the topic it's about, such as Checkout or Accounts, a few journeys each, never its importance. The explorer lists them under it.`,
     });
   }
   // Every actor who reaches the system starts at least one journey.

@@ -25,3 +25,4 @@ steps:
     to: core
     action: Loads the vendored models and checks every reference, contract, and journey step into them
     code: packages/core/src/federation/federate.ts
+section: Across repos

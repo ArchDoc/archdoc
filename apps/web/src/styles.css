@@ -4365,7 +4365,8 @@ table.observed td.is-wrong code {
 }
 
 /* Plan: click in a box to say what you want there. */
-.tab-plan .react-flow__node-card {
+.tab-plan .react-flow.is-annotating .react-flow__node-card,
+.tab-plan .react-flow.is-annotating .react-flow__pane {
   cursor: crosshair;
 }
 
@@ -4535,4 +4536,339 @@ fieldset.plan-choices {
 /* Planning: an arrow's label opens what should change between its boxes. */
 .edge-note.is-pointable {
   cursor: pointer;
+}
+
+/* Plan 0.9.2: a click on the map opens a small menu; the panel is a conversation, a turn each. */
+.plan-head-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.plan-mode {
+  display: inline-flex;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.plan-mode button {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.plan-mode button.is-on {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px var(--shadow-strong);
+}
+
+.plan-turn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.plan-turn.turn-you {
+  color: var(--accent);
+}
+
+.plan-turn.turn-agent {
+  color: var(--changed);
+}
+
+.plan-typing {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.plan-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: plan-typing 1.2s infinite ease-in-out;
+}
+
+.plan-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.plan-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes plan-typing {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-typing i {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+.plan-menu {
+  gap: 2px;
+  padding: 8px;
+}
+
+.plan-menu .intent-popover-where {
+  padding: 2px 6px;
+}
+
+.plan-menu-kind {
+  font-weight: 400;
+  font-size: var(--fs-1);
+}
+
+.plan-menu-desc {
+  margin: 0 0 4px;
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.plan-menu-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-menu-item:hover,
+.plan-menu-item:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.plan-menu-icon {
+  width: 16px;
+  flex: none;
+  text-align: center;
+  color: var(--accent);
+}
+
+.plan-menu-tip {
+  margin: 4px 6px 0;
+}
+
+.intent-popover .plan-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.plan-chat-panel {
+  min-height: 100%;
+  box-sizing: border-box;
+  grid-template-rows: 1fr auto auto;
+  padding-bottom: 0;
+}
+
+.plan-chat {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.plan-chat-goal {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: var(--fs-2);
+}
+
+.plan-chat-empty {
+  margin: 0;
+}
+
+.plan-msg {
+  display: grid;
+  gap: 4px;
+  max-width: 92%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: var(--fs-2);
+}
+
+.plan-msg.from-you {
+  justify-self: end;
+  border-bottom-right-radius: 4px;
+  background: var(--accent-soft);
+}
+
+.plan-msg.from-you.is-resolved {
+  opacity: 0.7;
+}
+
+.plan-msg.from-agent {
+  justify-self: start;
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 4px;
+  background: var(--surface);
+}
+
+.plan-msg p {
+  margin: 0;
+}
+
+.plan-msg-where {
+  justify-self: start;
+  font-size: var(--fs-1);
+}
+
+.plan-msg-typing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-msg .plan-note {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.plan-answer-items {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-answer-items li.is-dismissed {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.plan-answer-items .plan-suggestion {
+  margin-top: 2px;
+}
+
+.plan-turn-folded {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  justify-self: end;
+  max-width: 92%;
+  padding: 4px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-turn-folded .plan-turn-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.plan-composer {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: 4px;
+  margin: 0 -18px;
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.plan-composer-to {
+  margin: 0;
+}
+
+.plan-composer-q {
+  color: var(--ink);
+}
+
+.plan-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.plan-composer textarea {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-2);
+  resize: none;
+}
+
+.plan-details {
+  padding: 8px 0 18px;
+  font-size: var(--fs-2);
+}
+
+.plan-details summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* Journeys by topic: a heading per section, on the Overview and in the Journeys list. */
+.journey-section + .journey-section {
+  margin-top: 14px;
+}
+
+.journey-section-title {
+  margin: 0 0 6px;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
