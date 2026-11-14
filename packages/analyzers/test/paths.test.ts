@@ -8,6 +8,7 @@ import {
   contextFor,
   findPaths,
   formatPaths,
+  frameworkEntries,
   matchEntries,
   parseHcl,
   pathsAnswer,
@@ -179,5 +180,108 @@ describe("infrastructure as code", () => {
       "daily-reports date:string []",
     ]);
     expect(cdk.services).toEqual(["Amazon SES"]);
+  });
+});
+
+describe("entry points in other frameworks", () => {
+  const labels = (file: string, text: string) =>
+    frameworkEntries(file, text).map((e) => `${e.kind} ${e.label} ${e.file}#${e.symbol ?? ""}`);
+
+  it("reads Spring controllers, listeners, and schedules", () => {
+    const java = `@RestController
+@RequestMapping("/orders")
+public class OrderController {
+  @GetMapping("/{id}")
+  public Order show(@PathVariable long id) { return null; }
+  @PostMapping
+  public ResponseEntity<Order> create(@RequestBody Order o) { return null; }
+  @RequestMapping(value = "/sync", method = RequestMethod.PUT)
+  public void sync() {}
+  @KafkaListener(topics = "order-placed")
+  public void onPlaced(String m) {}
+  @Scheduled(cron = "0 0 2 * * *")
+  public void nightly() {}
+}`;
+    expect(labels("src/main/java/shop/OrderController.java", java)).toEqual([
+      "route GET /orders/{id} src/main/java/shop/OrderController.java#show",
+      "route POST /orders src/main/java/shop/OrderController.java#create",
+      "route PUT /orders/sync src/main/java/shop/OrderController.java#sync",
+      "consumer consumes order-placed src/main/java/shop/OrderController.java#onPlaced",
+      "schedule 0 0 2 * * * src/main/java/shop/OrderController.java#nightly",
+    ]);
+    const kotlin = `@RestController\nclass PingController {\n  @GetMapping("/ping")\n  suspend fun ping(): String = "pong"\n}`;
+    expect(labels("src/main/kotlin/Ping.kt", kotlin)).toEqual([
+      "route GET /ping src/main/kotlin/Ping.kt#ping",
+    ]);
+  });
+
+  it("reads Rails, Laravel, and Django routes, pointing at the controller or view", () => {
+    expect(
+      labels(
+        "config/routes.rb",
+        'Rails.application.routes.draw do\n  resources :orders\n  get "/health", to: "status#show"\n  post "checkout" => "checkout#create"\nend\n',
+      ),
+    ).toEqual([
+      "route GET /health app/controllers/status_controller.rb#show",
+      "route POST /checkout app/controllers/checkout_controller.rb#create",
+      "route RESOURCES /orders app/controllers/orders_controller.rb#",
+    ]);
+    expect(
+      labels(
+        "routes/api.php",
+        "<?php\nRoute::get('/orders/{id}', [OrderController::class, 'show']);\nRoute::apiResource('carts', CartController::class);\n",
+      ),
+    ).toEqual([
+      "route GET /api/orders/{id} app/Http/Controllers/OrderController.php#show",
+      "route RESOURCES /api/carts app/Http/Controllers/CartController.php#",
+    ]);
+    expect(
+      labels(
+        "blog/urls.py",
+        'urlpatterns = [\n    path("", views.index, name="index"),\n    path("<slug:slug>/", EntryView.as_view()),\n    path("admin/", include("admin.urls")),\n]\n',
+      ),
+    ).toEqual(["route ANY / blog/urls.py#index", "route ANY /<slug:slug> blog/urls.py#EntryView"]);
+  });
+
+  it("reads axum routers and actix-web handlers", () => {
+    expect(
+      labels(
+        "src/main.rs",
+        'let app = Router::new()\n    .route("/users", get(list_users).post(handlers::create_user))\n    .route("/health", get(health));\n',
+      ),
+    ).toEqual([
+      "route GET /users src/main.rs#list_users",
+      "route POST /users src/main.rs#create_user",
+      "route GET /health src/main.rs#health",
+    ]);
+    expect(
+      labels("src/api.rs", '#[get("/items/{id}")]\nasync fn item(path: Path<u32>) -> String {}'),
+    ).toEqual(["route GET /items/{id} src/api.rs#item"]);
+  });
+
+  it("lists Next.js pages, without route groups", async () => {
+    const root = await mkdtemp(join(tmpdir(), "archdoc-next-"));
+    const w = async (p: string) => {
+      await mkdir(dirname(join(root, p)), { recursive: true });
+      await writeFile(join(root, p), "export default function Page() { return null; }\n");
+    };
+    for (const p of [
+      "app/page.tsx",
+      "app/(shop)/product/[handle]/page.tsx",
+      "app/layout.tsx",
+      "pages/about.tsx",
+      "pages/_app.tsx",
+      "next.config.mjs",
+      // A Vite app's pages are components, not routes.
+      "admin/src/pages/users.tsx",
+    ])
+      await w(p);
+    const r = await findPaths(contextFor(root, await listRepoFiles(root)));
+    expect(r.entryPoints.map((e) => `${e.kind} ${e.label}`).sort()).toEqual([
+      "page /",
+      "page /about",
+      "page /product/[handle]",
+    ]);
+    await rm(root, { recursive: true, force: true });
   });
 });

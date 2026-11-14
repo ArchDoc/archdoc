@@ -52,6 +52,18 @@ export interface PathsOptions {
 export const FLOW_KINDS = new Set(["route", "consumer", "schedule", "command", "page"]);
 
 const SOURCE = /\.(?:[cm]?[jt]sx?|py|go)$/;
+/** Files entry points are read from: SOURCE, and the frameworks whose routes are read but whose calls aren't traced yet. */
+const ENTRY_SOURCE = /\.(?:[cm]?[jt]sx?|py|go|java|kt|rb|php|rs)$/;
+
+function escapeRe(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** A Next.js route from an app/ or pages/ path: route groups dropped, the rest kept. */
+function nextRoute(dir: string): string {
+  const parts = dir.split("/").filter((p) => p && !/^\(.*\)$/.test(p) && !p.startsWith("@"));
+  return `/${parts.join("/")}`;
+}
 const SKIP = /(^|\/)(node_modules|dist|build|out|vendor|\.git|\.archdoc|coverage|cdk\.out)\//;
 
 /** Every entry point in the repository, from IaC, routes, consumers, CLIs, and manifests. */
@@ -96,7 +108,7 @@ export async function findEntryPoints(
       }
       continue;
     }
-    if (!SOURCE.test(file)) continue;
+    if (!ENTRY_SOURCE.test(file)) continue;
     // Next.js: app/**/route.ts and pages/api/**.
     const next = /(^|\/)app\/(.*\/)?route\.[jt]sx?$/.exec(file);
     const text = await ctx.read(file).catch(() => "");
@@ -127,6 +139,22 @@ export async function findEntryPoints(
         file,
         symbol: "default",
       });
+      continue;
+    }
+    // Next.js pages: app/**/page.tsx, and pages/** outside pages/api (but _app, _document).
+    const appPage = /(^|\/)app\/((?:.*\/)?)page\.[jt]sx?$/.exec(file);
+    // pages/ means Next.js only beside a next.config: a Vite or CRA app's src/pages/ are components.
+    const pagesPage = /^((?:.*\/)?)(?:src\/)?pages\/(.+)\.[jt]sx$/.exec(file);
+    const isNext =
+      !!pagesPage &&
+      ctx.files.some((f) =>
+        new RegExp(`^${escapeRe(pagesPage[1] ?? "")}next\\.config\\.[cm]?[jt]s$`).test(f),
+      );
+    if (appPage || (pagesPage && isNext && !/(^|\/)_[^/]+$/.test(pagesPage[2] as string))) {
+      const route = appPage
+        ? nextRoute(appPage[2] ?? "")
+        : nextRoute(String(pagesPage?.[2] ?? "").replace(/(^|\/)index$/, ""));
+      push({ kind: "page", label: route, file, symbol: "default" });
       continue;
     }
     if (/\.[cm]?[jt]sx?$/.test(file)) {
@@ -189,6 +217,7 @@ export async function findEntryPoints(
       continue;
     }
     if (file.endsWith(".py")) {
+      for (const e of frameworkEntries(file, text)) push({ ...e, line: lineOf(e.at) });
       for (const m of text.matchAll(
         /@(\w+)\.(get|post|put|patch|delete|route|api_route)\(\s*["']([^"']*)["'][^\n]*\n(?:\s*@[^\n]*\n)*\s*(?:async\s+)?def\s+(\w+)/g,
       )) {
@@ -270,6 +299,186 @@ export async function findEntryPoints(
           symbol: "main",
         });
       }
+      continue;
+    }
+    for (const e of frameworkEntries(file, text)) push({ ...e, line: lineOf(e.at) });
+  }
+  return out;
+}
+
+type Found = Omit<EntryPoint, "line"> & { at: number };
+
+/** The first string literal in an annotation's arguments, such as "/orders" in ("/orders") or (value = "/orders"). */
+function firstString(args: string | undefined): string {
+  return /["']([^"']*)["']/.exec(args ?? "")?.[1] ?? "";
+}
+
+/** Joins route parts into one path, with one slash between each. */
+function joinRoute(...parts: string[]): string {
+  return `/${parts.join("/")}`.replace(/\/{2,}/g, "/").replace(/(.)\/$/, "$1");
+}
+
+/**
+ * Entry points in the frameworks whose routes are declared in their own way:
+ * Spring (Java, Kotlin), Rails, Laravel, Django's urls.py, and Rust's axum
+ * and actix-web. Their calls aren't traced yet: `archdoc paths` lists them,
+ * so journeys can start there.
+ */
+export function frameworkEntries(file: string, text: string): Found[] {
+  const out: Found[] = [];
+  if (/\.(java|kt)$/.test(file)) {
+    // Spring: @RequestMapping on the class, @GetMapping and the like on its methods.
+    const classMapping =
+      /@RequestMapping\(([^)]*)\)\s*(?:@\w+(?:\([^)]*\))?\s*)*(?:public\s+|open\s+|internal\s+)*(?:abstract\s+)?(?:class|interface)\b/.exec(
+        text,
+      );
+    const base = firstString(classMapping?.[1]);
+    const method =
+      /@(Get|Post|Put|Patch|Delete|Request)Mapping(?:\(([^)]*)\))?\s*(?:@\w+(?:\([^)]*\))?\s*)*(?:public\s+|private\s+|protected\s+|suspend\s+|override\s+)*(?:fun\s+(\w+)|[\w<>,.?[\]\s]+?\s+(\w+)\s*\()/g;
+    for (const m of text.matchAll(method)) {
+      if (classMapping && m.index === classMapping.index) continue;
+      const verb =
+        m[1] === "Request"
+          ? (/RequestMethod\.(\w+)/.exec(m[2] ?? "")?.[1] ?? "ANY")
+          : (m[1] as string).toUpperCase();
+      out.push({
+        kind: "route",
+        label: `${verb} ${joinRoute(base, firstString(m[2]))}`,
+        file,
+        symbol: m[3] ?? m[4],
+        at: m.index ?? 0,
+      });
+    }
+    for (const m of text.matchAll(
+      /@(KafkaListener|RabbitListener|JmsListener|SqsListener)\(([^)]*)\)[\s\S]*?(?:fun\s+(\w+)|\s(\w+)\s*\()/g,
+    )) {
+      const topic =
+        /(?:topics|queues|destination|value)\s*=\s*\{?\s*["']([^"']+)["']/.exec(m[2] ?? "")?.[1] ??
+        firstString(m[2]);
+      out.push({
+        kind: "consumer",
+        label: `consumes ${topic}`,
+        file,
+        symbol: m[3] ?? m[4],
+        at: m.index ?? 0,
+      });
+    }
+    for (const m of text.matchAll(/@Scheduled\(([^)]*)\)[\s\S]*?(?:fun\s+(\w+)|\s(\w+)\s*\()/g)) {
+      const when =
+        /cron\s*=\s*["']([^"']+)["']/.exec(m[1] ?? "")?.[1] ??
+        /fixed(?:Rate|Delay)\w*\s*=\s*([^,)]+)/.exec(m[1] ?? "")?.[0] ??
+        "scheduled";
+      out.push({
+        kind: "schedule",
+        label: when.trim(),
+        file,
+        symbol: m[2] ?? m[3],
+        at: m.index ?? 0,
+      });
+    }
+    return out;
+  }
+  if (/(^|\/)config\/routes\.rb$/.test(file)) {
+    // Rails: get "path", to: "orders#show"; resources :orders.
+    for (const m of text.matchAll(
+      /^\s*(get|post|put|patch|delete|match)\s+["']([^"']+)["'](?:\s*(?:=>|,)\s*["']([\w/]+)#(\w+)["'])?(?:[^\n]*?to:\s*["']([\w/]+)#(\w+)["'])?/gm,
+    )) {
+      const controller = m[3] ?? m[5];
+      const action = m[4] ?? m[6];
+      out.push({
+        kind: "route",
+        label: `${m[1] === "match" ? "ANY" : (m[1] as string).toUpperCase()} ${joinRoute(m[2] as string)}`,
+        file: controller ? `app/controllers/${controller}_controller.rb` : file,
+        symbol: action,
+        at: m.index ?? 0,
+      });
+    }
+    for (const m of text.matchAll(/^\s*resources?\s+:(\w+)/gm)) {
+      out.push({
+        kind: "route",
+        label: `${m[0].trim().startsWith("resources") ? "RESOURCES" : "RESOURCE"} /${m[1]}`,
+        file: `app/controllers/${m[1]}_controller.rb`,
+        at: m.index ?? 0,
+      });
+    }
+    return out;
+  }
+  if (/(^|\/)routes\/[^/]+\.php$/.test(file)) {
+    // Laravel: Route::get('/x', [OrderController::class, 'show']); Route::resource('orders', ...).
+    const prefix = /(^|\/)routes\/api\.php$/.test(file) ? "api" : "";
+    for (const m of text.matchAll(
+      /Route::(get|post|put|patch|delete|any|match)\(\s*(?:\[[^\]]*\]\s*,\s*)?["']([^"']*)["']\s*,\s*(?:\[\s*([\w\\]+)::class\s*,\s*["'](\w+)["']\s*\]|["']([\w\\]+)@(\w+)["'])?/g,
+    )) {
+      const controller = (m[3] ?? m[5])?.split("\\").pop();
+      out.push({
+        kind: "route",
+        label: `${m[1] === "any" || m[1] === "match" ? "ANY" : (m[1] as string).toUpperCase()} ${joinRoute(prefix, m[2] as string)}`,
+        file: controller ? `app/Http/Controllers/${controller}.php` : file,
+        symbol: m[4] ?? m[6],
+        at: m.index ?? 0,
+      });
+    }
+    for (const m of text.matchAll(
+      /Route::(?:api)?[Rr]esources?\(\s*["']([^"']+)["']\s*,\s*([\w\\]+)::class/g,
+    )) {
+      out.push({
+        kind: "route",
+        label: `RESOURCES ${joinRoute(prefix, m[1] as string)}`,
+        file: `app/Http/Controllers/${(m[2] as string).split("\\").pop()}.php`,
+        at: m.index ?? 0,
+      });
+    }
+    for (const m of text.matchAll(/Artisan::command\(\s*["']([\w:-]+)/g)) {
+      out.push({ kind: "command", label: m[1] as string, file, at: m.index ?? 0 });
+    }
+    return out;
+  }
+  if (/(^|\/)urls(\/[^/]+)?\.py$/.test(file)) {
+    // Django: path("orders/<int:pk>/", views.order_detail, name=...), re_path(r"^x$", View.as_view()).
+    for (const m of text.matchAll(
+      /\b(path|re_path|url)\(\s*r?["']([^"']*)["']\s*,\s*([\w.]+)(\.as_view\(\))?/g,
+    )) {
+      if (m[3] === "include") continue;
+      const view = m[3] as string;
+      out.push({
+        kind: "route",
+        label: `ANY ${joinRoute((m[2] as string).replace(/^\^|\$$/g, ""))}`,
+        file,
+        symbol: view
+          .replace(/\.as_view$/, "")
+          .split(".")
+          .pop(),
+        at: m.index ?? 0,
+      });
+    }
+    return out;
+  }
+  if (file.endsWith(".rs")) {
+    // axum: .route("/x", get(handler).post(other)).
+    for (const m of text.matchAll(/\.route\(\s*"([^"]+)"\s*,([^\n]*)/g)) {
+      for (const h of (m[2] as string).matchAll(
+        /\b(get|post|put|patch|delete|any)\(\s*([\w:]+)\s*\)/g,
+      )) {
+        out.push({
+          kind: "route",
+          label: `${h[1] === "any" ? "ANY" : (h[1] as string).toUpperCase()} ${m[1]}`,
+          file,
+          symbol: (h[2] as string).split("::").pop(),
+          at: m.index ?? 0,
+        });
+      }
+    }
+    // actix-web and Rocket: #[get("/x")] async fn handler.
+    for (const m of text.matchAll(
+      /#\[(get|post|put|patch|delete)\(\s*"([^"]+)"[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)/g,
+    )) {
+      out.push({
+        kind: "route",
+        label: `${(m[1] as string).toUpperCase()} ${m[2]}`,
+        file,
+        symbol: m[3],
+        at: m.index ?? 0,
+      });
     }
   }
   return out;
