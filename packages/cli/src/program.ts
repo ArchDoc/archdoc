@@ -50,10 +50,10 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
 
   program
     .description("An architecture control plane for AI-assisted development.")
-    .version(`${version} (spec ${SPEC_VERSION})`)
+    .version(`${version} (model format ${SPEC_VERSION})`)
     .addHelpText(
       "after",
-      "\nExperimental, and left out above: sharing models across repos (sync, publish,\nlandscape build, view --landscape). See https://github.com/ArchDoc/archdoc/blob/main/docs/experimental.md",
+      "\nExperimental commands may change in a minor release: see https://github.com/ArchDoc/archdoc/blob/main/docs/experimental.md",
     )
     .configureOutput({
       writeOut: (s) => io.out(s.trimEnd()),
@@ -150,7 +150,8 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     );
 
   program
-    .command("eval", { hidden: true })
+    .command("eval")
+    .helpGroup("Other commands:")
     .description(
       "Replay recent commits through archdoc context: how many of the files each changed the brief pointed at",
     )
@@ -470,7 +471,8 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     );
 
   program
-    .command("sync", { hidden: true })
+    .command("sync")
+    .helpGroup("Experimental, sharing models across repos:")
     .description(
       "Pin the model's imports in archdoc.lock and vendor other repos' models, then check references into them",
     )
@@ -485,7 +487,8 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     );
 
   program
-    .command("publish", { hidden: true })
+    .command("publish")
+    .helpGroup("Experimental, sharing models across repos:")
     .description("Write a versioned, validated bundle of the model for other repos to import")
     .argument("[version]", "release version, such as 5.2.0 (default: the release tag on HEAD)")
     .option("-m, --model <path>", "repository, .archdoc directory, or model file", ".")
@@ -495,7 +498,8 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     );
 
   const landscape = program
-    .command("landscape", { hidden: true })
+    .command("landscape")
+    .helpGroup("Experimental, sharing models across repos:")
     .description("Compose every repo's model into one landscape (run in the landscape repo)");
   landscape
     .command("build")
@@ -508,8 +512,11 @@ export function createProgram(io: Io = processIo): Command & { exitCode?: number
     );
 
   program
-    .command("migrate", { hidden: true })
-    .description("Convert a v1 model (users/components) to spec v2")
+    .command("migrate")
+    .helpGroup("Other commands:")
+    .description(
+      "Convert a v1 model (users and components, from ArchDoc 0.2 and earlier) to the current format",
+    )
     .argument("<file>", "v1 model file")
     .option("-n, --namespace <namespace>", "namespace for the model (default: from the file name)")
     .option("--name <name>", "display name for the model")

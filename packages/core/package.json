@@ -2,6 +2,12 @@
   "name": "@archdoc/core",
   "version": "0.9.2",
   "description": "The deterministic ArchDoc engine: load, validate, and query architecture models.",
+  "keywords": [
+    "architecture",
+    "architecture-as-code"
+  ],
+  "homepage": "https://archdoc.github.io",
+  "bugs": "https://github.com/ArchDoc/archdoc/issues",
   "license": "MIT",
   "type": "module",
   "repository": {

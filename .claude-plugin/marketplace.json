@@ -1,11 +1,16 @@
 {
   "name": "archdoc",
-  "description": "ArchDoc for Claude Code: architecture your AI agents can read, and your PRs can't quietly break.",
+  "description": "ArchDoc for Claude Code: an architecture model your coding agent reads before it edits, and keeps true as the code changes.",
   "owner": { "name": "ArchDoc", "url": "https://github.com/ArchDoc" },
   "plugins": [
     {
       "name": "archdoc",
-      "source": "./integrations/claude-plugin",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/ArchDoc/archdoc.git",
+        "path": "integrations/claude-plugin",
+        "ref": "release"
+      },
       "description": "Starts every task from your repository's architecture model: where a change belongs, what it affects, and the checks it has to pass. Starts a model where there's none.",
       "category": "development"
     }

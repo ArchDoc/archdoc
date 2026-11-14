@@ -41,6 +41,12 @@ describe("archdoc validate", () => {
     expect((await run("validate")).err).not.toContain("experimental");
   });
 
+  it("exits 2 where there's no model, as every command does when it can't run", async () => {
+    const r = await run("validate", tmp);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("Run archdoc init to start one.");
+  });
+
   it("prints JSON", async () => {
     const r = await run("validate", "--json");
     const result = JSON.parse(r.out);

@@ -87,6 +87,17 @@ describe("buildModel", () => {
     expect(codes(m, "error")).toEqual(["spec/v1-model"]);
   });
 
+  it("says to upgrade ArchDoc for a newer model format, before reporting its fields as unknown", () => {
+    for (const format of ["2.99", "3.0", "3"]) {
+      const m = model({
+        "archdoc.yaml": `archdoc: "${format}"\nnamespace: x\nfrom-the-future: {}\n`,
+      });
+      expect(codes(m, "error")).toEqual(["spec/newer-format"]);
+      expect(diagnostics(m)[0]?.message).toMatch(/Upgrade ArchDoc/);
+    }
+    expect(codes(model({ "archdoc.yaml": 'archdoc: "2"\nnamespace: x\n' }), "error")).toEqual([]);
+  });
+
   it("requires archdoc and namespace in the root file only", () => {
     const m = model({
       "archdoc.yaml": "elements: {}\n",

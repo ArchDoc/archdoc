@@ -10,14 +10,14 @@ environments:
         kind: registry
         name: npm
         technology: npm registry, trusted publishing (staged)
-        description: The published packages, staged from release.yml's stage job in the npm environment, which each package's trusted publisher names. A maintainer approves each staged version.
+        description: The published packages, staged from release.yml's stage job in the npm environment, which each package's trusted publisher names. A maintainer approves each staged version, which is when it goes live.
         code: [.github/workflows/release.yml, scripts/release.mjs]
       github:
         kind: repository
         name: GitHub
-        technology: GitHub repository, release tags
-        description: The action, the plugin marketplace, and the landscape template are used from the repository at a tag.
-        code: [.claude-plugin/marketplace.json]
+        technology: GitHub repository, release tags, GitHub Releases
+        description: Once a version is live on npm, publish.yml tags it, writes its GitHub release from the changelogs, and moves the release branch to it. The Claude Code marketplace installs the plugin from release, so it never runs a CLI that isn't on npm; the action and the landscape template are used at a tag.
+        code: [.claude-plugin/marketplace.json, .github/workflows/publish.yml, scripts/release-notes.mjs]
 
   workstation:
     provenance: { source: suggested, by: agent:claude-code }

@@ -2,6 +2,11 @@
   "name": "@archdoc/federation",
   "version": "0.9.2",
   "description": "Share ArchDoc models across repos: publish a bundle, and sync other repos' models into archdoc.lock.",
+  "keywords": [
+    "architecture"
+  ],
+  "homepage": "https://archdoc.github.io",
+  "bugs": "https://github.com/ArchDoc/archdoc/issues",
   "license": "MIT",
   "type": "module",
   "repository": {

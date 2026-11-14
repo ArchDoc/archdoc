@@ -48,9 +48,23 @@ describe("agent integrations", () => {
     const market = JSON.parse(read("../../../.claude-plugin/marketplace.json"));
     // pnpm version-packages (or set-version) runs scripts/sync-plugin.mjs.
     expect(plugin.version).toBe(version);
-    expect(mcp.mcpServers.archdoc.args).toEqual(["-y", `@archdoc/cli@${version}`, "mcp"]);
+    // node on a launcher rather than npx, which Windows can't start without a shell.
+    expect(mcp.mcpServers.archdoc).toEqual({
+      command: "node",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Claude Code expands it, not JavaScript.
+      args: ["${CLAUDE_PLUGIN_ROOT}/scripts/mcp.mjs", `@archdoc/cli@${version}`],
+    });
+    // From the release branch, which moves only once a version is live on npm (publish.yml).
     expect(market.plugins).toEqual([
-      expect.objectContaining({ name: plugin.name, source: "./integrations/claude-plugin" }),
+      expect.objectContaining({
+        name: plugin.name,
+        source: {
+          source: "git-subdir",
+          url: "https://github.com/ArchDoc/archdoc.git",
+          path: "integrations/claude-plugin",
+          ref: "release",
+        },
+      }),
     ]);
   });
 
