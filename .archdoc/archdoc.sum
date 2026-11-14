@@ -59,7 +59,7 @@ seals:
     by: agent:claude
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-51431099ea3c2bf5
+    hash: fnv-162695a53261f92b
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -143,6 +143,7 @@ seals:
         - findPaths
         - formatEntrySummary
         - formatPaths
+        - frameworkEntries
         - groupEntries
         - hopsOf
         - matchEntries
@@ -231,7 +232,7 @@ seals:
         - packageNameOf
         - workspacePackages
       packages/analyzers/tsconfig.json: []
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.cli:
     kind: structure
     hash: fnv-70dbc685a222deed

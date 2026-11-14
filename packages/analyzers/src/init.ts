@@ -501,6 +501,10 @@ async function manifests(ctx: AnalyzerContext): Promise<Found[]> {
     } catch {
       continue;
     }
+    // An app at the root of its own repository (a Next.js site) often has no name: it's the repository.
+    if (typeof json.name !== "string" && !dir && pkgs.length === 1 && json.dependencies) {
+      json.name = sanitize(basename(ctx.baseDir));
+    }
     if (typeof json.name !== "string") continue;
     const deps = {
       ...(json.dependencies as Record<string, string> | undefined),
@@ -601,16 +605,28 @@ async function manifests(ctx: AnalyzerContext): Promise<Found[]> {
       source: `the ${project?.[1] ?? "Python"} project`,
     });
   }
-  const poms = manifestsAt.filter((f) => /(^|\/)(pom\.xml|build\.gradle(\.kts)?)$/.test(f));
+  // pom.xml first: it names the project, where a build.gradle beside it may not.
+  const poms = manifestsAt
+    .filter((f) => /(^|\/)(pom\.xml|build\.gradle(\.kts)?)$/.test(f))
+    .sort((a, b) => Number(!a.endsWith("pom.xml")) - Number(!b.endsWith("pom.xml")));
+  // A project that builds with both Maven and Gradle has two manifests in one directory.
+  const pomDirs = new Set(poms.map(dirOf));
   for (const f of poms) {
     const dir = dirOf(f);
     // A parent build that only lists modules isn't a deployable of its own.
-    if (!dir && poms.length > 1) continue;
+    if (!dir && pomDirs.size > 1) continue;
     if (out.some((o) => o.dir === dir)) continue;
     const text = await read(f);
-    const artifact = /<artifactId>([^<]+)<\/artifactId>/.exec(text)?.[1];
+    // The project's own artifactId, not its parent's (spring-boot-starter-parent).
+    const artifact =
+      /<artifactId>([^<]+)<\/artifactId>/.exec(
+        text.replace(/<parent>[\s\S]*?<\/parent>/, ""),
+      )?.[1] ??
+      /rootProject\.name\s*=\s*["']([^"']+)["']/.exec(
+        await read(`${dir ? `${dir}/` : ""}settings.gradle${f.endsWith(".kts") ? ".kts" : ""}`),
+      )?.[1];
     out.push({
-      key: artifact ?? (basename(dir) || "app"),
+      key: artifact ?? (basename(dir) || sanitize(basename(ctx.baseDir)) || "app"),
       dir,
       kind: "container",
       technology: f.endsWith(".kts") ? "Kotlin" : "Java",
@@ -693,9 +709,10 @@ function components(dir: string, sources: string[], depth = 0): Unit[] {
     const at = `${prefix}${parts.slice(0, i + 1).join("/")}`;
     dirs.set(at, [...(dirs.get(at) ?? []), f]);
   }
-  // One package inside, such as backend/app: its parts are one level down.
+  // One package inside, such as backend/app, or a Java source tree (src/main/java/org/acme/app):
+  // its parts are further down.
   const [only] = dirs;
-  if (dirs.size === 1 && !loose.length && only && depth < 3) {
+  if (dirs.size === 1 && !loose.length && only && depth < 8) {
     return components(only[0], only[1], depth + 1);
   }
   const keys = new Set<string>();

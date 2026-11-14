@@ -281,6 +281,60 @@ describe("archdoc init on flat Go and Python layouts", () => {
     expect(uses(model)).toEqual(["blog.articles->blog.common"]);
   });
 
+  it("makes a Maven project built with Gradle too one container, with its Java packages as components", async () => {
+    const root = join(dir, "petclinic");
+    const w = (p: string, t: string) => write(`petclinic/${p}`, t);
+    await w(
+      "pom.xml",
+      "<project><parent><artifactId>spring-boot-starter-parent</artifactId></parent><artifactId>petclinic</artifactId></project>\n",
+    );
+    await w("build.gradle", "plugins { id 'java' }\n");
+    const pkg = "src/main/java/org/acme/petclinic";
+    await w(
+      `${pkg}/PetClinicApplication.java`,
+      "package org.acme.petclinic;\nclass PetClinicApplication {}\n",
+    );
+    for (const part of ["owner", "vet", "visit"]) {
+      for (const c of ["Controller", "Repository"]) {
+        await w(
+          `${pkg}/${part}/${part}${c}.java`,
+          `package org.acme.petclinic.${part};\nclass X {}\n`,
+        );
+      }
+    }
+    await w("src/checkstyle/rules.xml", "<rules/>\n");
+    const { model } = await inferred(root);
+    const kinds = [...model.elements.values()]
+      .filter((e) => e.spec.kind === "container" || e.spec.kind === "component")
+      .map((e) => `${e.id} ${e.spec.kind}`)
+      .sort();
+    expect(kinds).toEqual([
+      "petclinic container",
+      "petclinic.owner component",
+      "petclinic.vet component",
+      "petclinic.visit component",
+    ]);
+  });
+
+  it("makes an unnamed app at the root of its repository one container", async () => {
+    const root = join(dir, "storefront");
+    const w = (p: string, t: string) => write(`storefront/${p}`, t);
+    await w("package.json", '{ "private": true, "dependencies": { "next": "15.0.0" } }\n');
+    for (const p of [
+      "app/page.tsx",
+      "app/search/page.tsx",
+      "components/cart.tsx",
+      "components/grid.tsx",
+      "lib/shopify/index.ts",
+      "lib/shopify/queries.ts",
+    ]) {
+      await w(p, "export default function X() { return null; }\n");
+    }
+    const { model } = await inferred(root);
+    const containers = [...model.elements.values()].filter((e) => e.spec.kind === "container");
+    expect(containers.map((e) => e.id)).toEqual(["storefront"]);
+  });
+
   it("finds every crate in a Cargo workspace, whatever comes before the name", async () => {
     const root = join(dir, "rust");
     const w = (p: string, t: string) => write(`rust/${p}`, t);
