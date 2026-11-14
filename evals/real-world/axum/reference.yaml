@@ -1,0 +1,55 @@
+# What any Rust developer who knows axum would agree on, not a full model.
+# Scored for recall: a model may go further and isn't marked down.
+archdoc: "2.0"
+namespace: axum
+elements:
+  axum:
+    kind: container
+    technology: Rust library
+    description: The web framework, with routing, extractors, responses, and middleware on Tokio, Hyper, and Tower.
+    code: [axum/Cargo.toml, axum/src/**]
+    uses: { axum-core: Builds on its extractor and response traits, axum-macros: Re-exports debug_handler and FromRef derives }
+    elements:
+      routing:
+        kind: component
+        description: Router, method routing, and path matching.
+        code: axum/src/routing/**
+        uses: { handler: Calls handlers }
+      extract:
+        kind: component
+        description: The built-in extractors, such as Path, Query, State, and WebSocket upgrades.
+        code: axum/src/extract/**
+      response:
+        kind: component
+        description: IntoResponse for common types, redirects, and server-sent events.
+        code: axum/src/response/**
+      handler:
+        kind: component
+        description: The Handler trait that turns async functions of extractors into services.
+        code: axum/src/handler/**
+        uses: { extract: Extracts arguments, response: Builds responses }
+      middleware:
+        kind: component
+        description: from_fn, map_request, and map_response middleware.
+        code: axum/src/middleware/**
+      serve:
+        kind: component
+        description: axum::serve, which runs a router on a Tokio listener.
+        code: axum/src/serve/**
+        uses: { routing: Serves the router }
+  axum-core:
+    kind: container
+    technology: Rust library
+    description: The core traits (FromRequest, FromRequestParts, IntoResponse) and body type, for library authors.
+    code: axum-core/**
+  axum-extra:
+    kind: container
+    technology: Rust library
+    description: Extra extractors, responses, and routing helpers outside axum's stable API.
+    code: axum-extra/**
+    uses: { axum: Extends the router and extractors, axum-core: Implements its traits }
+  axum-macros:
+    kind: container
+    technology: Rust proc-macro library
+    description: Procedural macros such as debug_handler, FromRef, FromRequest, and TypedPath.
+    code: axum-macros/**

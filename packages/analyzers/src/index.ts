@@ -57,6 +57,7 @@ export {
   findPaths,
   formatEntrySummary,
   formatPaths,
+  frameworkEntries,
   groupEntries,
   hopsOf,
   matchEntries,

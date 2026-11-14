@@ -36,6 +36,9 @@ describe("isVerificationCode", () => {
     "src/__mocks__/fs.ts",
     "web/ui/react-app/src/pages/targets/__testdata__/testdata.ts",
     "benchmarks/parse.go",
+    "axum/benches/benches.rs",
+    "axum/src/test_helpers/mod.rs",
+    "dashboard/tests.py",
   ])("%s is test or verification code", (path) => {
     expect(isVerificationCode(path)).toBe(true);
   });
@@ -50,6 +53,8 @@ describe("isVerificationCode", () => {
     "src/Ordering.API/Program.cs",
     "src/latest/index.ts",
     "testimonials/page.tsx",
+    "src/benchmarking/report.ts",
+    "requests/contests.py",
   ])("%s isn't", (path) => {
     expect(isVerificationCode(path)).toBe(false);
   });

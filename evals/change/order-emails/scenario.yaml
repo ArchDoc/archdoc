@@ -1,0 +1,26 @@
+# The everyday loop on new code: an order confirmation email, sent through an
+# email provider's HTTP API. The model has to gain a component for it, the use
+# from orders, and the step in the checkout journey.
+fixture: ts-monorepo
+task: >-
+  Send the shopper an order confirmation email when an order is created. Put
+  the email code in apps/api/src/email/, sending through our email provider's
+  HTTP API at https://api.mail.example/send, and call it from createOrder.
+expect:
+  elements:
+    present: ["shop.api.email|shop.api.emails|shop.api.mail|shop.api.notifications"]
+  uses:
+    present: ["shop.api.orders -> shop.api.email|shop.api.emails|shop.api.mail|shop.api.notifications"]
+  files:
+    present: [apps/api/src/email]
+solution:
+  ops:
+    - op: add
+      id: api.email
+      spec:
+        description: Sends order confirmation emails through the email provider.
+        code: apps/api/src/email/**
+    - { op: use, from: api.orders, to: api.email, spec: Sends the confirmation }
+    - op: step
+      journey: checkout
+      spec: { from: api.orders, to: api.email, action: Emails the confirmation, code: apps/api/src/orders/service.ts }

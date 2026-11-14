@@ -141,6 +141,10 @@ model of a real system is one an engineer new to it can read and use:
 | `eshop` | dotnet/eShop 913acea | A .NET Aspire app: APIs, workers, web apps, RabbitMQ, Postgres, Redis. No C# analyzer, so the skill carries it |
 | `gson` | google/gson 2.15.0 | A Java library: modules and components, no services or datastores |
 | `stripe-accept-a-payment` | stripe-samples/accept-a-payment 1a57c3b | Four integrations, each a client and a server in up to ten interchangeable languages, and Stripe as an external |
+| `spring-petclinic` | spring-projects/spring-petclinic 500158f | A Spring Boot app built with both Maven and Gradle: one container, its Java packages as components, and MySQL or PostgreSQL |
+| `nextjs-commerce` | vercel/commerce f7521d5 | A Next.js App Router app at the repository root with no package name, and Shopify as an external over GraphQL |
+| `djangoproject` | django/djangoproject.com 7bab0e0 | A Django project of a dozen apps, two PostgreSQL databases, Redis, and Stripe |
+| `axum` | tokio-rs/axum 3ebdbe6 | A Rust Cargo workspace of four crates and about sixty example crates |
 
 Each has `repo.yaml` (URL, commit, and the run's turn and dollar caps),
 `reference.yaml` (the containers, components, datastores, and uses any
@@ -151,7 +155,13 @@ committed: `pnpm eval:agent --set real-world` clones each once into
 `evals/.cache/repos/` and gives the agent the pinned commit's files without
 their history.
 
-They're scored two ways:
+`pnpm eval:init` runs `archdoc init` alone on each of them and holds it to the
+`initFloor` in its `repo.yaml`, the way `pnpm test` holds init to its floors on
+the fixtures. It calls no model, so it costs nothing but the first clone: run it
+after changing init or the analyzers, and raise a floor when init finds more
+(`--print-floor` prints what init scores now, in the floor's shape).
+
+The agent runs are scored two ways:
 
 - **Against the reference**, with `scoreModel`, for recall: containers,
   components, datastores, and uses the reference has, plus nesting and code.
@@ -290,6 +300,46 @@ model, the eval itself, and, in the skills, only changed lines about the diff
 Otherwise it spends nothing. `--check-only` says whether it would run, and
 stops. Like the other agent evals, it runs by hand with the `claude` CLI signed
 in, not in CI.
+
+## The everyday loop
+
+The other agent evals start a model, plan a change, read a diff, or triage a
+bug. `change/` checks the loop an agent runs on every task once the model
+exists: ask `archdoc context`, change the code, change the model with
+`archdoc edit`, `archdoc check` against main, and seal what it touched. Each
+scenario starts from a fixture with its golden model sealed on main, and asks
+the agent for a code change on a branch:
+
+| Scenario | The change | What the model has to do |
+|---|---|---|
+| `move-payments` | Payments move into a new workspace package | Gain a container, lose a component, and move the use and the checkout journey's steps to it |
+| `drop-cache` | Products stop being cached in Redis | Lose a datastore, the use of it, and a journey step |
+| `order-emails` | Orders send a confirmation email | Gain a component, a use, and a journey step |
+
+It's scored without a judge, so the same run always scores the same:
+
+- **Model**: the share of the scenario's facts (elements, uses, and files
+  present or absent) that hold after the run.
+- **Clean**: `archdoc check` against main finds nothing the change introduced
+  that's an error, drift (a stale path, an undeclared dependency), or a sealed
+  fact whose code changed and wasn't sealed again.
+- **The loop**, from the transcript: whether it asked `archdoc context` before
+  changing code, and how many `archdoc edit`, hand edits and reads of
+  `.archdoc/`, `check`, and `seal` calls it made.
+
+```sh
+pnpm build
+pnpm eval:change                      # every scenario, once
+pnpm eval:change drop-cache --runs 3
+```
+
+Each scenario also has a reference solution (`solution/` and the ops in
+`scenario.yaml`): `pnpm test` (`packages/analyzers/test/change-evals.test.ts`)
+checks that the starting repository checks clean and doesn't meet the scenario,
+and that the solution meets all of it and checks clean, so a scenario never
+asks for something the tools can't do. A run costs about $0.25 to $0.40 (at most
+$1.50, set by `--max-budget-usd`). Results go to `evals/results/change-<time>/`; the
+first run is in `reports/2026-11-14-change/`: every scenario at 100%, clean.
 
 ## Triage
 

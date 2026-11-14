@@ -5,6 +5,11 @@ name: Release
 # clean, check the packed packages, and stage every version that isn't on npm yet.
 # A maintainer then approves the staged versions (npm stage approve, or on
 # npmjs.com), which is when they go live.
+#
+# Three jobs, so each holds only what it needs: the version pull request can
+# write to the repository but can't speak for npm; staging can speak for npm
+# (trusted publishing, in the npm environment) but can't write to the
+# repository; tagging only pushes the tag.
 on:
   push:
     branches: [main]
@@ -14,29 +19,30 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # the version pull request, and the release tag
-  pull-requests: write # the version pull request
-  id-token: write # trusted publishing: npm checks this workflow's identity, no token
+  contents: read
 
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # the version pull request's branch
+      pull-requests: write # the version pull request
+    outputs:
+      release: ${{ steps.changesets.outputs.hasChangesets == 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
-      # npm stage arrived in npm 11; the runner's bundled npm may be older.
-      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
 
       - name: Open or update the version pull request
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
           version: pnpm version-packages
           commit: "chore: version packages"
@@ -44,20 +50,49 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  stage:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    # Each package's trusted publisher on npm names this environment, so only
+    # this job, on a branch the environment allows (main), can stage a version.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # trusted publishing: npm checks this job's identity, no token
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      # No dependency cache: what this job stages is built only from the lockfile.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      # npm stage arrived in npm 11; the runner's bundled npm may be older.
+      # Pinned: this job can stage releases, so it never takes an npm it hasn't seen.
+      - run: npm install -g npm@12.2.2
+      - run: pnpm install --frozen-lockfile
+
       - name: Build from clean
-        if: steps.changesets.outputs.hasChangesets == 'false'
         run: pnpm clean && pnpm build
 
       - name: Check the packed packages install and run
-        if: steps.changesets.outputs.hasChangesets == 'false'
         run: pnpm smoke
 
       - name: Stage new versions on npm
-        if: steps.changesets.outputs.hasChangesets == 'false'
         run: pnpm release
 
+  tag:
+    needs: stage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the release tag
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
       - name: Tag the release
-        if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
           version=$(node -p "require('./packages/cli/package.json').version")
           if git rev-parse "v$version" >/dev/null 2>&1; then

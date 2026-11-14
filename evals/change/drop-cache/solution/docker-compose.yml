@@ -1,0 +1,11 @@
+services:
+  api:
+    build: ./apps/api
+    depends_on: [db]
+    environment:
+      DATABASE_URL: postgres://shop@db/shop
+  web:
+    build: ./apps/web
+    depends_on: [api]
+  db:
+    image: postgres:16

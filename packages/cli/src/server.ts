@@ -92,6 +92,12 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    // DNS rebinding: a page on another site can point its own name at 127.0.0.1
+    // and then reach this server as same-origin, so answer only to the names
+    // this server is reached by locally.
+    if (!localHost(req.headers.host, options.host)) {
+      return json(res, 403, { error: "The explorer only answers at its local address." });
+    }
     try {
       if (url.pathname === "/api/model" && options.landscape) {
         const { model, composed } = await loadLandscape(options.target, options.cwd);
@@ -206,6 +212,25 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       await new Promise<void>((r) => server.close(() => r()));
     },
   };
+}
+
+/** Host names the explorer answers to: loopback, and the host it was started on. */
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * Whether a Host header names this server on loopback, or the host it was
+ * started on. Any port: the explorer's dev server proxies with its own.
+ */
+export function localHost(header: string | undefined, host?: string): boolean {
+  if (!header) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(`http://${header}`);
+  } catch {
+    return false;
+  }
+  const name = parsed.hostname.toLowerCase();
+  return LOOPBACK.has(name) || (!!host && name === host.toLowerCase());
 }
 
 /** The most a plan edit's body can be. */

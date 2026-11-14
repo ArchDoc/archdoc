@@ -1,0 +1,64 @@
+# What any Django developer who has worked on the site would agree on, not a
+# full model. Scored for recall: a model may go further and isn't marked down.
+archdoc: "2.0"
+namespace: djangoproject
+elements:
+  djangoproject:
+    kind: container
+    technology: Python, Django
+    description: The djangoproject.com site, docs.djangoproject.com, and the Trac dashboard, served by one Django project.
+    code: [manage.py, djangoproject/**, accounts/**, aggregator/**, blog/**, dashboard/**, docs/**, fundraising/**, releases/**, tracdb/**]
+    uses: { postgres: Stores the site's content, cache: Caches pages and docs, trac-db: Reads Trac's tickets, stripe: Takes donations }
+    elements:
+      docs:
+        kind: component
+        description: The documentation site, built from Sphinx output, with full-text search in PostgreSQL.
+        code: docs/**
+        uses: { postgres: Stores and searches documents }
+      blog:
+        kind: component
+        description: The weblog and its feeds.
+        code: blog/**
+      releases:
+        kind: component
+        description: Django's releases and their download links.
+        code: releases/**
+      fundraising:
+        kind: component
+        description: Donations and the donor list, through Stripe Checkout and its webhooks.
+        code: fundraising/**
+        uses: { stripe: Creates checkout sessions and handles its webhooks }
+      aggregator:
+        kind: component
+        description: The community feed aggregator.
+        code: aggregator/**
+      dashboard:
+        kind: component
+        description: The development dashboard's metrics, many read from Trac.
+        code: dashboard/**
+        uses: { tracdb: Reads ticket counts }
+      tracdb:
+        kind: component
+        description: Read-only models of Trac's tables, routed to the Trac database.
+        code: tracdb/**
+        uses: { trac-db: Reads tickets }
+      accounts:
+        kind: component
+        description: User profiles and sign-up.
+        code: accounts/**
+  postgres:
+    kind: datastore
+    technology: PostgreSQL
+    description: The site's database.
+  trac-db:
+    kind: datastore
+    technology: PostgreSQL
+    description: Trac's database, for code.djangoproject.com, read for the dashboard and profiles.
+  cache:
+    kind: datastore
+    technology: Redis
+    description: The page and docs caches in production.
+  stripe:
+    kind: external
+    technology: Stripe
+    description: Takes donations.

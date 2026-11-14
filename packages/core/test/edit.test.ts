@@ -129,6 +129,93 @@ const errors = (m: ReturnType<typeof buildModel>) =>
   m.diagnostics.filter((d) => d.severity === "error").map((d) => d.message);
 
 describe("editModel", () => {
+  it("adds, changes, renames, and removes rules by id, in the file that has them", () => {
+    const rulesFile = dedent(`
+      # Guardrails.
+      rules:
+        - id: web-not-db
+          description: The storefront never reads the database.
+          deny: { from: web, to: db }
+    `);
+    const withRules = [...sources, { path: ".archdoc/rules.yaml", text: rulesFile }];
+    const run = (ops: EditOp[]) => editModel(withRules, ops);
+    const text = (r: ReturnType<typeof run>) =>
+      r.files.find((f) => f.path === ".archdoc/rules.yaml")?.text ?? "";
+
+    const added = run([
+      {
+        op: "add",
+        type: "rule",
+        id: "orders-own-the-store",
+        spec: {
+          description: "Only orders writes the store.",
+          "allow-only": { to: "store", from: ["orders"] },
+        },
+      },
+    ]);
+    expect(added.problems).toEqual([]);
+    expect(changed(rulesFile, text(added))).toEqual([
+      "+ - id: orders-own-the-store",
+      "+ description: Only orders writes the store.",
+      "+ allow-only:",
+      "+ to: store",
+      "+ from:",
+      "+ - orders",
+    ]);
+
+    const set = run([
+      { op: "set", id: "rule:web-not-db", spec: { description: "Web goes through orders." } },
+    ]);
+    expect(set.problems).toEqual([]);
+    expect(changed(rulesFile, text(set))).toEqual([
+      "- description: The storefront never reads the database.",
+      "+ description: Web goes through orders.",
+    ]);
+
+    const renamed = run([{ op: "rename", id: "web-not-db", to: "storefront-not-db" }]);
+    expect(changed(rulesFile, text(renamed))).toEqual([
+      "- - id: web-not-db",
+      "+ - id: storefront-not-db",
+    ]);
+
+    const removed = run([{ op: "remove", id: "web-not-db", type: "rule" }]);
+    expect(removed.problems).toEqual([]);
+    expect(text(removed)).not.toContain("web-not-db");
+
+    expect(
+      run([{ op: "set", id: "web-not-db", type: "rule", spec: { id: "x" } }]).problems[0],
+    ).toMatch(/rename/);
+    expect(
+      run([{ op: "add", type: "rule", id: "web-not-db", spec: { deny: {} } }]).problems[0],
+    ).toMatch(/already exists/);
+  });
+
+  it("adds the first rule to the root file when there are none", () => {
+    const r = edit({
+      op: "add",
+      type: "rule",
+      id: "web-not-db",
+      spec: { deny: { from: "web", to: "db" } },
+    });
+    expect(r.problems).toEqual([]);
+    expect(r.text()).toContain("rules:\n  - id: web-not-db");
+    expect(errors(r.model)).toEqual([]);
+  });
+
+  it("sets the model's own name and description, and nothing else, on type model", () => {
+    const r = edit({
+      op: "set",
+      type: "model",
+      id: "shop",
+      spec: { name: "Shop", description: "Sells things." },
+    });
+    expect(r.problems).toEqual([]);
+    expect(changed(ROOT, r.text())).toEqual(["+ name: Shop", "+ description: Sells things."]);
+    expect(edit({ op: "set", id: "archdoc.yaml", spec: { elements: {} } }).problems[0]).toMatch(
+      /takes name, description, imports/,
+    );
+  });
+
   it("sets fields and changes only those lines, keeping comments and blank lines", () => {
     const r = edit({
       op: "set",

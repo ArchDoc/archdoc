@@ -3,12 +3,12 @@ sealVersion: 1
 seals:
   deploy:ci.actions:
     kind: content
-    hash: fnv-2d4d7599fe24163d
+    hash: fnv-56643f6e78b1d20a
     refs:
       .github/workflows/archdoc.yml:
-        hash: fnv-4973599cc4a919ee
+        hash: fnv-443b0fd39a0b25e7
         lines: 22
-    by: agent:claude-code
+    by: agent:claude
   deploy:release.github:
     kind: content
     hash: fnv-26888f66b2c128aa
@@ -19,22 +19,28 @@ seals:
     by: agent:claude-code
   deploy:release.npm:
     kind: content
-    hash: fnv-e60fef49cf637fc1
+    hash: fnv-7ea25d1bb2f57deb
     refs:
       .github/workflows/release.yml:
-        hash: fnv-d84ab78157a58f95
-        lines: 52
+        hash: fnv-e920225adeb22a32
+        lines: 77
       scripts/release.mjs:
-        hash: fnv-289c47345136c39e
-        lines: 114
-    by: agent:claude-code
+        hash: fnv-48f41650ffd7f4f8
+        lines: 119
+    by: agent:claude
   element:toolchain.agent-skills:
     kind: structure
-    hash: fnv-4bbe8202346ab434
+    hash: fnv-c6a7fb36a1728918
     files:
       .agents/skills/archdoc/SKILL.md: []
+      .agents/skills/archdoc/references/init.md: []
+      .agents/skills/archdoc/references/plan.md: []
+      .agents/skills/archdoc/references/triage.md: []
       .claude-plugin/marketplace.json: []
       .claude/skills/archdoc/SKILL.md: []
+      .claude/skills/archdoc/references/init.md: []
+      .claude/skills/archdoc/references/plan.md: []
+      .claude/skills/archdoc/references/triage.md: []
       .mcp.json: []
       AGENTS.md: []
       CLAUDE.md: []
@@ -46,11 +52,14 @@ seals:
       integrations/claude-plugin/.mcp.json: []
       integrations/claude-plugin/README.md: []
       integrations/claude-plugin/skills/archdoc/SKILL.md: []
+      integrations/claude-plugin/skills/archdoc/references/init.md: []
+      integrations/claude-plugin/skills/archdoc/references/plan.md: []
+      integrations/claude-plugin/skills/archdoc/references/triage.md: []
       integrations/claude-plugin/skills/view/SKILL.md: []
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-51431099ea3c2bf5
+    hash: fnv-162695a53261f92b
     files:
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
@@ -134,6 +143,7 @@ seals:
         - findPaths
         - formatEntrySummary
         - formatPaths
+        - frameworkEntries
         - groupEntries
         - hopsOf
         - matchEntries
@@ -222,7 +232,7 @@ seals:
         - packageNameOf
         - workspacePackages
       packages/analyzers/tsconfig.json: []
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.cli:
     kind: structure
     hash: fnv-70dbc685a222deed
@@ -326,14 +336,16 @@ seals:
     by: agent:claude-code
   element:toolchain.cli.view-server:
     kind: structure
-    hash: fnv-2baa63e5c92cfa0d
+    hash: fnv-232e535240e58940
     files:
       packages/cli/src/server.ts:
         - ViewServer
         - ViewServerOptions
         - findWebDir
+        - localHost
         - modelResponse
         - startViewServer
+    by: agent:claude
   element:toolchain.core:
     kind: structure
     hash: fnv-1b6d565b8180af97
@@ -1761,14 +1773,16 @@ seals:
     by: agent:claude-code
   step:explore-architecture#2:
     kind: structure
-    hash: fnv-2baa63e5c92cfa0d
+    hash: fnv-232e535240e58940
     files:
       packages/cli/src/server.ts:
         - ViewServer
         - ViewServerOptions
         - findWebDir
+        - localHost
         - modelResponse
         - startViewServer
+    by: agent:claude
   step:explore-architecture#3:
     kind: structure
     hash: fnv-cf5352b3fc283e6d
@@ -2013,15 +2027,16 @@ seals:
     by: agent:claude-code
   step:plan-a-change#7:
     kind: structure
-    hash: fnv-2baa63e5c92cfa0d
+    hash: fnv-232e535240e58940
     files:
       packages/cli/src/server.ts:
         - ViewServer
         - ViewServerOptions
         - findWebDir
+        - localHost
         - modelResponse
         - startViewServer
-    by: agent:claude-code
+    by: agent:claude
   step:plan-a-change#8:
     kind: structure
     hash: fnv-18ff37de398ecb48
@@ -2167,15 +2182,16 @@ seals:
     by: agent:claude-code
   step:send-a-bug#3:
     kind: structure
-    hash: fnv-2baa63e5c92cfa0d
+    hash: fnv-232e535240e58940
     files:
       packages/cli/src/server.ts:
         - ViewServer
         - ViewServerOptions
         - findWebDir
+        - localHost
         - modelResponse
         - startViewServer
-    by: agent:claude-code
+    by: agent:claude
   step:send-a-bug#4:
     kind: structure
     hash: fnv-a6e8113ebf78e050

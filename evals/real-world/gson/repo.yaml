@@ -7,3 +7,5 @@ ref: gson-parent-2.15.0
 commit: fcd416909db2bea96eb916bcfb2d0a83cb9b86c3
 maxTurns: 80
 maxBudgetUsd: 3
+# What archdoc init alone scores today (--init-only); raise it when init finds more.
+initFloor: { overall: 0.59, containers: 1, nesting: 1, code: 0.99 }

@@ -376,8 +376,10 @@ describe.skipIf(!executablePath)("the explorer's Build tabs", () => {
   it("sends a pasted bug to the agent, and sends it again with what to do", async () => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
+    // A fresh load: a hash change alone races the explorer, which can write the last test's
+    // #plan=… back into the address before a reload reads it.
+    await page.goto("about:blank");
     await page.goto(`${server.url}/#triage`);
-    await page.reload();
     const dir = join(cwd, ".archdoc/triage");
     const record = async () => {
       const files = existsSync(dir) ? await readdir(dir) : [];

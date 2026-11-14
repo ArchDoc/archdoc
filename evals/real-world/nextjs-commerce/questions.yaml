@@ -1,0 +1,11 @@
+# Questions a new contributor asks, with where the answer is in the code.
+- ask: Where are the Shopify GraphQL requests sent?
+  paths: [lib/shopify/index.ts]
+- ask: Where does adding an item to the cart happen on the server?
+  paths: [components/cart/actions.ts]
+- ask: Where is the product page?
+  paths: [app/product/[handle]/page.tsx]
+- ask: Where does Shopify tell the site to revalidate its cache?
+  paths: [app/api/revalidate/route.ts, lib/shopify/index.ts]
+- ask: Where is the query that lists a collection's products?
+  paths: [lib/shopify/queries/collection.ts]

@@ -1,0 +1,11 @@
+# Questions a new contributor asks, with where the answer is in the code.
+- ask: Where are routes matched to a request's path?
+  paths: [axum/src/routing/path_router.rs, axum/src/routing/mod.rs]
+- ask: Where is the trait every response type implements?
+  paths: [axum-core/src/response/into_response.rs]
+- ask: Where is the Path extractor?
+  paths: [axum/src/extract/path/mod.rs]
+- ask: Where is the debug_handler macro?
+  paths: [axum-macros/src/debug_handler.rs]
+- ask: Where does axum::serve accept connections?
+  paths: [axum/src/serve/mod.rs]

@@ -29,7 +29,7 @@
     "@archdoc/spec": "workspace:*",
     "@marcbachmann/cel-js": "8.0.0",
     "yaml": "^2.9.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "publishConfig": {
     "access": "public"
