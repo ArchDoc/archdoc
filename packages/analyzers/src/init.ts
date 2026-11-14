@@ -561,18 +561,20 @@ async function manifests(ctx: AnalyzerContext): Promise<Found[]> {
   }
   // Rust, Python, Java: a container per package or module.
   for (const f of manifestsAt.filter((f) => /(^|\/)Cargo\.toml$/.test(f))) {
-    const text = await read(f);
-    const pkg = /\[package\][^[]*?name\s*=\s*"([^"]+)"/s.exec(text);
-    if (!pkg?.[1]) continue;
+    // The [package] table runs to the next table header; its arrays (keywords,
+    // categories) hold brackets too, so read it by lines.
+    const table = /^\[package\][ \t]*$([\s\S]*?)(?=^\[|(?![\s\S]))/m.exec(await read(f))?.[1] ?? "";
+    const name = /^name\s*=\s*"([^"]+)"/m.exec(table)?.[1];
+    if (!name) continue;
     const dir = dirOf(f);
     out.push({
-      key: pkg[1],
+      key: name,
       dir,
       kind: "container",
       technology: "Rust",
-      description: /\[package\][^[]*?description\s*=\s*"([^"]+)"/s.exec(text)?.[1],
+      description: /^description\s*=\s*"([^"]+)"/m.exec(table)?.[1],
       code: [glob(dir)],
-      source: `the ${pkg[1]} crate`,
+      source: `the ${name} crate`,
     });
   }
   for (const f of manifestsAt.filter((f) => /(^|\/)(pyproject\.toml|setup\.py)$/.test(f))) {

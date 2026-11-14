@@ -21,10 +21,10 @@ import { orphanElements } from "./check.js";
 const JOURNEY_SECTIONS_AT = 8;
 
 const VERIFICATION_DIR =
-  /(^|\/)(tests?|__tests__|e2e|e2e-tests?|integration-?tests?|acceptance-?tests?|functional-?tests?|smoke-?tests?|load-?tests?|loadtests?|perf-?tests?|testdata|__testdata__|test-?data|testutils?|test-?utils?|test-?helpers?|testing-?utils?|testlib|testing|__mocks__|mocks?|fakes?|stubs|fixtures?|__fixtures__|bench(mark)?s?|verification|conformance|playwright|cypress|test-[^/]+|[^/]+[-_]tests?|[^/]+\.(Unit|Functional|Integration|E2E)?Tests?)\//i;
+  /(^|\/)(tests?|__tests__|e2e|e2e-tests?|integration-?tests?|acceptance-?tests?|functional-?tests?|smoke-?tests?|load-?tests?|loadtests?|perf-?tests?|testdata|__testdata__|test-?data|testutils?|test[-_]?utils?|test[-_]?helpers?|testing[-_]?utils?|testlib|testing|__mocks__|mocks?|fakes?|stubs|fixtures?|__fixtures__|bench(mark)?(e?s)?|verification|conformance|playwright|cypress|test-[^/]+|[^/]+[-_]tests?|[^/]+\.(Unit|Functional|Integration|E2E)?Tests?)\//i;
 /** Files that are tests or only serve them, in the languages init reads. */
 const VERIFICATION_FILE =
-  /(^|\/)[^/]+[._-](test|spec|bench|e2e)\.[cm]?[jt]sx?$|_test\.go$|(^|\/)test_[^/]*\.py$|_test\.py$|(^|\/)conftest\.py$|(^|\/)[A-Z][A-Za-z0-9]*(Tests?|IT|Spec|Mock|Fake)\.(java|kt|kts|scala|cs|swift)$|(^|\/)[A-Z][A-Za-z0-9]*Mocks?[A-Z][A-Za-z0-9]*\.(java|kt|cs|swift|[cm]?[jt]sx?)$|\.Testing\.cs$|(^|\/)(setupTests|test-setup|testSetup|jest\.setup|vitest\.setup)\.[cm]?[jt]sx?$|(^|\/)(vitest|jest|playwright|cypress|karma|wdio|ava|mocha)\.config\.[a-z.]+$|(^|\/)\.mocharc\.[a-z]+$|(^|\/)(mock|fake)_[^/]+\.(go|py)$|_(mock|fake)\.(go|py)$|(^|\/)test_?utils?\.(go|py|[cm]?[jt]sx?)$/;
+  /(^|\/)[^/]+[._-](test|spec|bench|e2e)\.[cm]?[jt]sx?$|_test\.go$|(^|\/)test_[^/]*\.py$|(^|\/)tests\.py$|_test\.py$|(^|\/)conftest\.py$|(^|\/)[A-Z][A-Za-z0-9]*(Tests?|IT|Spec|Mock|Fake)\.(java|kt|kts|scala|cs|swift)$|(^|\/)[A-Z][A-Za-z0-9]*Mocks?[A-Z][A-Za-z0-9]*\.(java|kt|cs|swift|[cm]?[jt]sx?)$|\.Testing\.cs$|(^|\/)(setupTests|test-setup|testSetup|jest\.setup|vitest\.setup)\.[cm]?[jt]sx?$|(^|\/)(vitest|jest|playwright|cypress|karma|wdio|ava|mocha)\.config\.[a-z.]+$|(^|\/)\.mocharc\.[a-z]+$|(^|\/)(mock|fake)_[^/]+\.(go|py)$|_(mock|fake)\.(go|py)$|(^|\/)test_?utils?\.(go|py|[cm]?[jt]sx?)$/;
 
 /**
  * Whether a file is test or verification code: a test suite, a test helper,

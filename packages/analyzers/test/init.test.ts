@@ -281,6 +281,28 @@ describe("archdoc init on flat Go and Python layouts", () => {
     expect(uses(model)).toEqual(["blog.articles->blog.common"]);
   });
 
+  it("finds every crate in a Cargo workspace, whatever comes before the name", async () => {
+    const root = join(dir, "rust");
+    const w = (p: string, t: string) => write(`rust/${p}`, t);
+    await w("Cargo.toml", '[workspace]\nmembers = ["web", "web-*"]\n');
+    // Arrays before name, as most published crates have them.
+    await w(
+      "web/Cargo.toml",
+      '[package]\ncategories = ["web-programming"]\nkeywords = ["http"]\nname = "web"\ndescription = "Routing for web"\n\n[dependencies]\nname = "not-this"\n',
+    );
+    await w("web/src/lib.rs", "pub fn route() {}\n");
+    await w("web/benches/bench.rs", "fn main() {}\n");
+    await w("web-core/Cargo.toml", '[package]\nname = "web-core"\nedition = "2021"\n');
+    await w("web-core/src/lib.rs", "pub trait Handler {}\n");
+    const { model } = await inferred(root);
+    const containers = [...model.elements.values()]
+      .filter((e) => e.spec.kind === "container")
+      .map((e) => `${e.id.split(".").pop()}: ${e.spec.description}`)
+      .sort();
+    expect(containers).toEqual(["web-core: The web-core crate.", "web: Routing for web"]);
+    expect([...model.elements.keys()].some((id) => id.includes("benches"))).toBe(false);
+  });
+
   it("skips a pyproject that only declares a workspace, and reads the project's imports", async () => {
     const root = join(dir, "py");
     const w = (p: string, t: string) => write(`py/${p}`, t);
