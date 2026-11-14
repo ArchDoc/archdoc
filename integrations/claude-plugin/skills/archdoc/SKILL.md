@@ -59,8 +59,8 @@ In the PR description, list the affected journeys and actors and the model chang
 
 | op | Does | Example |
 |---|---|---|
-| `add` | Adds an element (its ID names its parent; `kind` defaults to the level below), actor, data entry, journey (in its own file), environment, or node (`production.aws.lambda`) | `{ "op": "add", "type": "element", "id": "orders.events", "spec": { "description": "Publishes order events", "code": "orders/src/events/**" } }` |
-| `set` | Merges fields into one thing, as a JSON merge patch: maps merge, lists replace, `null` removes | `{ "op": "set", "id": "Order", "spec": { "fields": { "total": { "type": "int" } } } }` |
+| `add` | Adds an element (its ID names its parent; `kind` defaults to the level below), actor, data entry, journey (in its own file), environment, node (`production.aws.lambda`), or rule (`type: rule`, with its `deny` or `allow-only`) | `{ "op": "add", "type": "element", "id": "orders.events", "spec": { "description": "Publishes order events", "code": "orders/src/events/**" } }` |
+| `set` | Merges fields into one thing, as a JSON merge patch: maps merge, lists replace, `null` removes; `type: model` sets the model's own `name`, `description`, or `imports` | `{ "op": "set", "id": "Order", "spec": { "fields": { "total": { "type": "int" } } } }` |
 | `remove` | Removes one thing; an element goes with what's inside it and the uses of it | `{ "op": "remove", "id": "vite-config" }` |
 | `rename` | Renames or moves, and rewrites every reference (uses, steps, sends, stores, owners); an element's dotted `to` moves it inside that parent | `{ "op": "rename", "id": "react-app", "to": "web.react-app" }` |
 | `use` | Adds or updates a use (`remove: true` removes it) | `{ "op": "use", "from": "orders.checkout", "to": "rabbitmq", "spec": { "description": "Publishes order.placed", "sends": "OrderPlaced" } }` |
@@ -68,7 +68,7 @@ In the PR description, list the affected journeys and actors and the model chang
 
 A spec has the fields the YAML would: a journey is one `add` with its `actor`, `goal`, and all its `steps`; a data entry has `kind` (`entity`, `message`, or `event`; `entity` if you leave it out) and `fields`; `stores` is `{ Order: "what it keeps" }` or a list of entries; a step's `sends` is an entry or a list, `creates` an entry or a list, and `changes` is `{ "Order.status": "pending -> paid" }`.
 
-Pass `by: agent:<your-name>` so what you add is marked `provenance: { source: suggested }`, and `dryRun: true` to see what an edit would do. Edit a file by hand only for what the ops don't cover, such as rules, mappings, and logic.
+Pass `by: agent:<your-name>` so what you add is marked `provenance: { source: suggested }`, and `dryRun: true` to see what an edit would do. Edit a file by hand only for what the ops don't cover: the experimental `mappings` and `logic`.
 
 ## Show the user the model
 

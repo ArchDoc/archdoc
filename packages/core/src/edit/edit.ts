@@ -16,7 +16,15 @@ import { parseForEdit, patchYaml, stringify } from "./patch.js";
 
 /** What an edit adds, sets, or renames. */
 /** What an op acts on; node is a deployment node, written as an environment's (production.aws.lambda). */
-export type EditType = "element" | "actor" | "journey" | "data" | "environment" | "node";
+export type EditType =
+  | "element"
+  | "actor"
+  | "journey"
+  | "data"
+  | "environment"
+  | "node"
+  | "rule"
+  | "model";
 
 /**
  * One change to the model, by ID, so an agent never has to find the right
@@ -24,7 +32,7 @@ export type EditType = "element" | "actor" | "journey" | "data" | "environment" 
  * `shop.orders.api`, or `api` when only one element ends that way.
  */
 export type EditOp =
-  /** A new element (inside the element its ID names), actor, journey, data entry, environment, or deployment node. */
+  /** A new element (inside the element its ID names), actor, journey, data entry, environment, deployment node, or rule. */
   | {
       op: "add";
       /** Without it: a node when the ID is inside an environment, a journey when the spec has steps, else an element. */
@@ -32,7 +40,10 @@ export type EditOp =
       id: string;
       spec?: Record<string, unknown> | undefined;
     }
-  /** Merges fields into one thing (a JSON merge patch: null removes a field, objects merge, lists replace). */
+  /**
+   * Merges fields into one thing (a JSON merge patch: null removes a field, objects merge, lists
+   * replace). type model sets the model's own name, description, or imports in archdoc.yaml.
+   */
   | { op: "set"; id: string; type?: EditType | undefined; spec: Record<string, unknown> }
   /** Removes one thing; for an element, its children and the uses that point at it too. */
   | { op: "remove"; id: string; type?: EditType | undefined }
@@ -126,6 +137,8 @@ interface Index {
   environments: Map<string, Site>;
   /** Deployment nodes, such as production.aws.lambda. */
   nodes: Map<string, Site>;
+  /** Rules, by their id, at their place in a rules list. */
+  rules: Map<string, Site>;
 }
 
 class EditError extends Error {}
@@ -268,7 +281,7 @@ class Editor {
   private lenient(op: EditOp): EditOp {
     const o = { ...op } as Record<string, unknown>;
     if (typeof o.id === "string") {
-      const m = /^(element|actor|journey|data|environment|node):(.+)$/.exec(o.id);
+      const m = /^(element|actor|journey|data|environment|node|rule|model):(.+)$/.exec(o.id);
       if (m) {
         o.id = m[2];
         o.type ??= m[1] === "node" ? "environment" : m[1];
@@ -303,6 +316,7 @@ class Editor {
       data: new Map(),
       environments: new Map(),
       nodes: new Map(),
+      rules: new Map(),
     };
     for (const file of live) {
       const value = plain(file.after);
@@ -332,6 +346,11 @@ class Editor {
       }
       for (const id of Object.keys(asRecord(value.data))) {
         if (!index.data.has(id)) index.data.set(id, { file, path: ["data", id] });
+      }
+      for (const [i, rule] of asArray(value.rules).entries()) {
+        const id = asRecord(rule).id;
+        if (typeof id === "string" && !index.rules.has(id))
+          index.rules.set(id, { file, path: ["rules", i] });
       }
       for (const [env, spec] of Object.entries(asRecord(value.environments))) {
         if (!index.environments.has(env))
@@ -385,6 +404,9 @@ class Editor {
 
   /** What an ID names, when the op doesn't say. */
   private find(id: string, type?: EditType): { type: EditType | "node"; id: string; site: Site } {
+    if (type === "model" || /(^|\/)archdoc\.ya?ml$/.test(id)) {
+      return { type: "model", id: this.index.namespace, site: { file: this.index.root, path: [] } };
+    }
     const own = this.stripNamespace(id);
     const found: { type: EditType | "node"; id: string; site: Site }[] = [];
     const tryMap = (t: EditType | "node", map: Map<string, Site>, key = own) => {
@@ -401,6 +423,7 @@ class Editor {
     if (!type || type === "actor") tryMap("actor", this.index.actors);
     if (!type || type === "journey") tryMap("journey", this.index.journeys);
     if (!type || type === "data") tryMap("data", this.index.data);
+    if (!type || type === "rule") tryMap("rule", this.index.rules, id);
     if (!type || type === "environment") {
       tryMap("environment", this.index.environments);
       tryMap("node", this.index.nodes);
@@ -421,6 +444,7 @@ class Editor {
       ...this.index.data.keys(),
       ...this.index.environments.keys(),
       ...this.index.nodes.keys(),
+      ...this.index.rules.keys(),
     ];
     throw new EditError(
       `Nothing is called "${id}"${type ? ` (${type})` : ""}.${this.near(id, all)}`,
@@ -546,11 +570,39 @@ class Editor {
         );
         return `Added node ${id} in ${where(site.file, [...site.path, "nodes", key])}.`;
       }
+      case "rule": {
+        checkKey(id);
+        if (this.index.rules.has(id))
+          throw new EditError(`Rule ${id} already exists. Use set to change it.`);
+        delete value.provenance;
+        delete value.id;
+        if (!Object.keys(value).length)
+          throw new EditError(
+            'A rule needs what it checks, such as { "description": "…", "deny": { "from": "web", "to": "db" } }.',
+          );
+        const file = this.rulesFile();
+        const rules = file.after.get("rules", true);
+        const node = tidy(file.after.createNode({ id, ...value }));
+        if (isSeq(rules)) rules.add(node);
+        else file.after.set("rules", file.after.createNode([{ id, ...value }]));
+        return `Added rule ${id} in ${file.path}.`;
+      }
       default:
         throw new EditError(
-          `Can't add a ${type as string}. Add an element, actor, journey, data entry, or environment.`,
+          `Can't add a ${type as string}. Add an element, actor, journey, data entry, environment, or rule.`,
         );
     }
+  }
+
+  /** The file that already has rules (rules.yaml), else the root file. */
+  private rulesFile(): FileState {
+    const live = this.files.filter((f) => !f.removed && !f.created);
+    const has = live.filter((f) => isSeq(f.after.get("rules", true)));
+    return (
+      has.find((f) => f !== this.index.root && onlyKey(plain(f.after), "rules")) ??
+      has[0] ??
+      this.index.root
+    );
   }
 
   /** The model's one top-level system, if it has exactly one. */
@@ -585,6 +637,17 @@ class Editor {
     if (!given || typeof given !== "object" || Array.isArray(given))
       throw new EditError("spec is an object of fields to set.");
     const found = this.find(id, type);
+    if (found.type === "model") {
+      const other = Object.keys(given).filter((k) => !MODEL_FIELDS.includes(k));
+      if (other.length)
+        throw new EditError(
+          `The model itself takes ${MODEL_FIELDS.join(", ")}; not ${other.join(", ")}. Add elements, actors, journeys, data, and rules with add.`,
+        );
+      mergePatch(found.site.file.after, this.mapAt(found.site), given);
+      return `Set ${Object.keys(given).join(", ")} on the model (${found.site.file.path}).`;
+    }
+    if (found.type === "rule" && "id" in given)
+      throw new EditError("Rename a rule with rename, not set id.");
     if (found.type === "element" && (Array.isArray(given.uses) || typeof given.uses === "string"))
       throw new EditError(
         'uses is a map of target to description, such as { "orders.api": "Posts orders" }; or add each with a use op.',
@@ -627,6 +690,7 @@ class Editor {
 
   private remove(id: string, type: EditType | undefined): string {
     const found = this.find(id, type);
+    if (found.type === "model") throw new EditError("The model itself can't be removed.");
     const { file, path } = found.site;
     const extra: string[] = [];
     if (found.type === "element") {
@@ -722,9 +786,15 @@ class Editor {
         return this.renameData(found.id, target);
       case "journey":
         return this.renameJourney(found.id, target);
+      case "rule": {
+        checkKey(target);
+        if (this.index.rules.has(target)) throw new EditError(`Rule ${target} already exists.`);
+        found.site.file.after.setIn([...found.site.path, "id"], target);
+        return `Renamed rule ${found.id} to ${target}.`;
+      }
       default:
         throw new EditError(
-          "Rename elements, actors, data entries, and journeys. Remove and add an environment instead.",
+          "Rename elements, actors, data entries, journeys, and rules. Remove and add an environment instead.",
         );
     }
   }
@@ -1130,6 +1200,9 @@ const ELEMENT_ORDER = [
   "elements",
   "provenance",
 ];
+/** What set changes on the model itself, in archdoc.yaml. */
+const MODEL_FIELDS = ["name", "description", "imports"];
+
 const ACTOR_ORDER = ["kind", "name", "description", "uses", "provenance"];
 const DATA_ORDER = ["kind", "name", "description", "source", "fields", "provenance"];
 const JOURNEY_ORDER = ["name", "actor", "goal", "description", "importance", "steps"];

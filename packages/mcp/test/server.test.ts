@@ -60,7 +60,8 @@ describe("archdoc MCP server", () => {
     // take most of it: they replace reading and hand-editing the YAML. triage
     // (0.8) added about 500, what a step needs (0.8.1) about 100, and plan
     // (0.9) about 1,450: the op shapes come with the plan it reads instead.
-    expect(JSON.stringify(tools).length).toBeLessThan(12800);
+    // Edit's rules and model types (1.0) about 60: one less reason to hand-edit.
+    expect(JSON.stringify(tools).length).toBeLessThan(12900);
   });
 
   it("finds parts of the model, and outlines it", async () => {

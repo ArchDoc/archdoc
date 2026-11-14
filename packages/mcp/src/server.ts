@@ -125,7 +125,7 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     op: z.enum(["add", "set", "remove", "rename", "use", "step"]),
     id: z.string().optional().describe("What add, set, remove, or rename acts on"),
     type: z
-      .enum(["element", "actor", "journey", "data", "environment", "node"])
+      .enum(["element", "actor", "journey", "data", "environment", "node", "rule", "model"])
       .optional()
       .describe("Only when an ID names two things, or add can't tell"),
     spec: z
@@ -145,8 +145,8 @@ export function createArchdocServer(options: ArchdocServerOptions = {}): McpServ
     {
       title: "Change the model by ID",
       description: `Change .archdoc/ by ID instead of editing its YAML. Ops run in order, and all are written or none: one that fails, or an edit that would add errors, writes nothing and says why. Writes only the lines it changes, and answers with what it did, the findings it fixed, and new warnings. IDs resolve the way references do (orders.api for shop.orders.api).
-- add {type, id, spec}: an element (shop.orders.api goes inside shop.orders; kind defaults to the level below), actor, data entry, journey (its own file), environment, or node (production.aws.lambda).
-- set {id, spec}: a JSON merge patch (objects merge, lists replace, null removes), such as {description, code, deploy} or {fields: {total: {type: int}}}.
+- add {type, id, spec}: an element (shop.orders.api goes inside shop.orders; kind defaults to the level below), actor, data entry, journey (its own file), environment, node (production.aws.lambda), or rule.
+- set {id, spec}: a JSON merge patch (objects merge, lists replace, null removes), such as {description, code, deploy} or {fields: {total: {type: int}}}. type model: its name, description, imports.
 - remove {id}: an element goes with what's inside it and the uses of it.
 - rename {id, to}: rewrites every reference. An element's dotted to moves it inside that parent.
 - use {from, to, spec}: adds or updates a use (spec: "what it does" or {description, sends}); remove: true removes it.
