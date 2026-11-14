@@ -2,3 +2,7 @@ packages:
   - packages/*
   - apps/*
   - integrations/*
+
+# Supply chain: install no dependency version younger than a day, so a
+# compromised release is usually caught and pulled before it reaches us.
+minimumReleaseAge: 1440

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -201,5 +202,40 @@ describe("view server plans", () => {
     expect(form.status).toBe(415);
     expect((await post("/api/plans/add-search", { ...op, base: "old text" })).status).toBe(409);
     expect((await fetch(`${server.url}/api/plans/add-search`)).status).toBe(405);
+  });
+
+  it("answers only at its local address, so a rebinding site can't reach it", async () => {
+    server = await startViewServer({ target: ".", cwd: repo, webDir: web });
+    const { port } = new URL(server.url);
+    const status = (host: string, method = "GET", path = "/api/model") =>
+      new Promise<number>((resolveStatus, reject) => {
+        const body = method === "POST" ? JSON.stringify({ goal: "Steal it" }) : undefined;
+        const req = request(
+          {
+            host: "127.0.0.1",
+            port,
+            path,
+            method,
+            headers: {
+              host,
+              ...(body ? { "content-type": "application/json", origin: `http://${host}` } : {}),
+            },
+          },
+          (res) => {
+            res.resume();
+            resolveStatus(res.statusCode ?? 0);
+          },
+        );
+        req.on("error", reject);
+        req.end(body);
+      });
+    // Same-origin to the browser, since the page's own name now points at 127.0.0.1.
+    expect(await status(`evil.example:${port}`, "POST", "/api/plans")).toBe(403);
+    expect(await status(`evil.example:${port}`, "POST", "/api/triage")).toBe(403);
+    expect(await status(`evil.example:${port}`)).toBe(403);
+    expect(await status(`127.0.0.1:${port}`)).toBe(200);
+    expect(await status(`localhost:${port}`)).toBe(200);
+    // The explorer's dev server proxies from its own port.
+    expect(await status("localhost:5173")).toBe(200);
   });
 });

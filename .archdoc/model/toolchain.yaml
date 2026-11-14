@@ -290,7 +290,7 @@ elements:
           view-server:
             kind: component
             technology: node:http, fs.watch, server-sent events
-            description: "Localhost-only server for the explorer. Sends model files, not a built model, so the browser runs core itself; with them, other repos' vendored models, which sealed facts to re-check, Triage records, and plans. Takes the person's plan edits from the Plan tab: JSON only, from the explorer's own origin, against the text the page last read, so the person and the agent never write over each other."
+            description: "Localhost-only server for the explorer, answering only to 127.0.0.1, localhost, or [::1] so a site that rebinds its own name to the machine is refused. Sends model files, not a built model, so the browser runs core itself; with them, other repos' vendored models, which sealed facts to re-check, Triage records, and plans. Takes the person's plan edits from the Plan tab: JSON only, from the explorer's own origin, against the text the page last read, so the person and the agent never write over each other."
             code: [packages/cli/src/server.ts]
             uses:
               analyzers:

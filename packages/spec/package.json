@@ -24,7 +24,7 @@
     "./schema.json": "./schema/archdoc.v2.schema.json"
   },
   "dependencies": {
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "scripts": {
     "gen:schema": "node --input-type=module -e \"import {writeFileSync} from 'node:fs'; import {archdocJsonSchema} from './dist/index.js'; writeFileSync('schema/archdoc.v2.schema.json', JSON.stringify(archdocJsonSchema(), null, 2) + '\\n')\""
