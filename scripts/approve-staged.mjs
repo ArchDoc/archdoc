@@ -68,4 +68,9 @@ const latest = npx(["view", "@archdoc/cli", "dist-tags.latest"]).trim();
 console.log(
   `\n${staged.length - failed} of ${staged.length} approved. @archdoc/cli latest: ${latest}`,
 );
+if (!failed) {
+  console.log(
+    `The publish workflow tags v${version}, writes its GitHub release, and moves the plugin to it within the hour. To do it now: gh workflow run publish.yml --repo ArchDoc/archdoc`,
+  );
+}
 process.exit(failed ? 1 : 0);

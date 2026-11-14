@@ -552,7 +552,10 @@ const sections = {
   $schema: z.string().optional(),
   archdoc: z
     .string()
-    .regex(/^2(\.\d+)?$/, 'This file is not spec v2. Run "archdoc migrate" to upgrade v1 models.')
+    .regex(
+      /^2(\.\d+)?$/,
+      'archdoc: is the model format, "2.0". For a v1 model (users and components), run "archdoc migrate".',
+    )
     .optional(),
   actors: z.record(IdSchema, ActorSchema).optional(),
   elements: z.record(IdSchema, ElementSchema).optional(),

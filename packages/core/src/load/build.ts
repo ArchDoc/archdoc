@@ -9,6 +9,7 @@ import {
   type ModelFile,
   ModelFileSchema,
   type ProvideSpec,
+  SPEC_VERSION,
   type UsesSpec,
 } from "@archdoc/spec";
 import type { z } from "zod";
@@ -114,6 +115,19 @@ export function buildModel(sources: readonly ModelSource[], options: BuildOption
       if (isRoot) {
         diagnostics.push(error("model/missing-root-field", "The root file is empty.", parsed, []));
       }
+      continue;
+    }
+    const newer = newerFormat(value);
+    if (newer) {
+      schemaErrors = true;
+      diagnostics.push(
+        error(
+          "spec/newer-format",
+          `This file uses model format ${newer}, which is newer than this version of ArchDoc reads (format ${SPEC_VERSION}). Upgrade ArchDoc: run npx -y @archdoc/cli@latest, or update the archdoc plugin.`,
+          parsed,
+          ["archdoc"],
+        ),
+      );
       continue;
     }
     if (isV1Model(value)) {
@@ -763,4 +777,19 @@ export function schemaDiagnostics(err: z.ZodError, file: ParsedFile): Diagnostic
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * The `archdoc:` format a file declares, when it's newer than the one this
+ * build reads: a later major, or a later minor of the same major. A newer
+ * minor may add fields, so reading it would report them as unknown.
+ */
+export function newerFormat(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || !("archdoc" in value)) return undefined;
+  const declared = String((value as { archdoc: unknown }).archdoc);
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(declared);
+  if (!m) return undefined;
+  const [major, minor] = SPEC_VERSION.split(".").map(Number) as [number, number];
+  const theirs = [Number(m[1]), Number(m[2] ?? 0)] as const;
+  return theirs[0] > major || (theirs[0] === major && theirs[1] > minor) ? declared : undefined;
 }

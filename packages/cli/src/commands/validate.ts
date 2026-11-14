@@ -17,6 +17,8 @@ export async function validate(target: string, options: ValidateOptions, io: Io)
   const model = await loadModel(target, { cwd: io.cwd });
   // Experimental parts of the format are a note, not a warning: using one on purpose isn't a problem.
   const experimental = experimentalUses(model);
+  // Exit 2, as every command does when it can't run: there's nothing to validate.
+  const notFound = model.diagnostics.some((d) => d.code === "model/not-found");
   const failed =
     hasErrors(model.diagnostics) ||
     (options.strict === true && model.diagnostics.some((d) => d.severity === "warning"));
@@ -41,7 +43,7 @@ export async function validate(target: string, options: ValidateOptions, io: Io)
         2,
       ),
     );
-    return failed ? 1 : 0;
+    return failed ? (notFound ? 2 : 1) : 0;
   }
 
   for (const d of model.diagnostics) io.err(formatDiagnostic(d));
@@ -73,7 +75,7 @@ export async function validate(target: string, options: ValidateOptions, io: Io)
       `note: uses experimental parts of the format, which may change before they're stable: ${formatExperimentalUses(experimental)}. See https://github.com/ArchDoc/archdoc/blob/main/docs/experimental.md`,
     );
   }
-  return failed ? 1 : 0;
+  return failed ? (notFound ? 2 : 1) : 0;
 }
 
 function plural(n: number, word: string): string {

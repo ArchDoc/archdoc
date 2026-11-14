@@ -1,7 +1,15 @@
 {
   "name": "@archdoc/spec",
   "version": "0.9.2",
-  "description": "The ArchDoc model format: v2 schema, TypeScript types, JSON Schema, and v1 migration.",
+  "description": "The ArchDoc model format: schema, TypeScript types, JSON Schema, and v1 migration.",
+  "keywords": [
+    "architecture",
+    "architecture-as-code",
+    "json-schema",
+    "c4"
+  ],
+  "homepage": "https://archdoc.github.io",
+  "bugs": "https://github.com/ArchDoc/archdoc/issues",
   "license": "MIT",
   "type": "module",
   "repository": {

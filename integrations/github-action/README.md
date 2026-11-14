@@ -1,5 +1,7 @@
 # ArchDoc GitHub Action
 
+> **Experimental.** The Action works, but it isn't covered by ArchDoc's [compatibility promise](../../COMPATIBILITY.md) yet: its inputs and comment may change in a minor release. See [docs/experimental.md](../../docs/experimental.md).
+
 Shows reviewers what a pull request means for the architecture, before they merge. On every pull request, it:
 
 1. Posts one comment, and keeps it up to date, that leads with a verdict:

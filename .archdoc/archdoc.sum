@@ -11,26 +11,32 @@ seals:
     by: agent:claude
   deploy:release.github:
     kind: content
-    hash: fnv-26888f66b2c128aa
+    hash: fnv-c77958a874ad7d50
     refs:
       .claude-plugin/marketplace.json:
-        hash: fnv-d581657a2482c4d6
-        lines: 13
-    by: agent:claude-code
+        hash: fnv-f1f8060a0b3c00f0
+        lines: 18
+      .github/workflows/publish.yml:
+        hash: fnv-6bf7521af86e218c
+        lines: 80
+      scripts/release-notes.mjs:
+        hash: fnv-9b4e8a050439f227
+        lines: 76
+    by: agent:claude
   deploy:release.npm:
     kind: content
-    hash: fnv-7ea25d1bb2f57deb
+    hash: fnv-f423464c978a4c3e
     refs:
       .github/workflows/release.yml:
-        hash: fnv-e920225adeb22a32
-        lines: 77
+        hash: fnv-ca75ac2e6bf7bd24
+        lines: 59
       scripts/release.mjs:
         hash: fnv-48f41650ffd7f4f8
         lines: 119
     by: agent:claude
   element:toolchain.agent-skills:
     kind: structure
-    hash: fnv-c6a7fb36a1728918
+    hash: fnv-9706273cf98711c8
     files:
       .agents/skills/archdoc/SKILL.md: []
       .agents/skills/archdoc/references/init.md: []
@@ -51,6 +57,7 @@ seals:
       integrations/claude-plugin/.claude-plugin/plugin.json: []
       integrations/claude-plugin/.mcp.json: []
       integrations/claude-plugin/README.md: []
+      integrations/claude-plugin/scripts/mcp.mjs: []
       integrations/claude-plugin/skills/archdoc/SKILL.md: []
       integrations/claude-plugin/skills/archdoc/references/init.md: []
       integrations/claude-plugin/skills/archdoc/references/plan.md: []
@@ -59,8 +66,9 @@ seals:
     by: agent:claude
   element:toolchain.analyzers:
     kind: structure
-    hash: fnv-162695a53261f92b
+    hash: fnv-c2c6cfa484f1c3da
     files:
+      packages/analyzers/README.md: []
       packages/analyzers/package.json: []
       packages/analyzers/src/answers.ts:
         - Answer
@@ -235,8 +243,9 @@ seals:
     by: agent:claude
   element:toolchain.cli:
     kind: structure
-    hash: fnv-70dbc685a222deed
+    hash: fnv-8824e0adc22f715b
     files:
+      packages/cli/README.md: []
       packages/cli/package.json: []
       packages/cli/src/bin.ts: []
       packages/cli/src/index.ts: []
@@ -252,6 +261,7 @@ seals:
       packages/cli/src/program.ts:
         - createProgram
       packages/cli/tsconfig.json: []
+    by: agent:claude
   element:toolchain.cli.commands:
     kind: structure
     hash: fnv-eeef0ee2b59f3850
@@ -348,8 +358,9 @@ seals:
     by: agent:claude
   element:toolchain.core:
     kind: structure
-    hash: fnv-1b6d565b8180af97
+    hash: fnv-67e454eeba26e294
     files:
+      packages/core/README.md: []
       packages/core/package.json: []
       packages/core/src/browser.ts: []
       packages/core/src/diagnostics.ts:
@@ -383,7 +394,7 @@ seals:
         - nodeKey
         - toReview
       packages/core/tsconfig.json: []
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.core.checker:
     kind: structure
     hash: fnv-863abbce08947f30
@@ -645,7 +656,7 @@ seals:
         - readFederationInput
   element:toolchain.core.loader:
     kind: structure
-    hash: fnv-79b72f3a5fc8e5f6
+    hash: fnv-63d290b08dcab2e6
     files:
       packages/core/src/load/build.ts:
         - BuildOptions
@@ -656,6 +667,7 @@ seals:
         - contractDiagnostic
         - contractName
         - isEventContract
+        - newerFormat
         - normalizeCode
         - schemaDiagnostics
       packages/core/src/load/fs.ts:
@@ -688,7 +700,7 @@ seals:
         - ParsedFile
         - YamlPath
         - parseYaml
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.core.plans:
     kind: structure
     hash: fnv-233fc87b1dced0c9
@@ -1038,8 +1050,9 @@ seals:
     by: agent:claude-code
   element:toolchain.federation:
     kind: structure
-    hash: fnv-7138e44155bf4699
+    hash: fnv-ceefdffe996a7234
     files:
+      packages/federation/README.md: []
       packages/federation/package.json: []
       packages/federation/src/git.ts:
         - RemoteModel
@@ -1061,6 +1074,7 @@ seals:
         - formatLock
         - sync
       packages/federation/tsconfig.json: []
+    by: agent:claude
   element:toolchain.github-action:
     kind: structure
     hash: fnv-7c220eee6070ac9c
@@ -1075,8 +1089,9 @@ seals:
       integrations/landscape-template/workflows/archdoc-landscape.yml: []
   element:toolchain.mcp:
     kind: structure
-    hash: fnv-24789448eccde85c
+    hash: fnv-adce149e7f94227e
     files:
+      packages/mcp/README.md: []
       packages/mcp/package.json: []
       packages/mcp/src/bin.ts: []
       packages/mcp/src/index.ts:
@@ -1086,14 +1101,16 @@ seals:
         - INSTRUCTIONS
         - createArchdocServer
       packages/mcp/tsconfig.json: []
+    by: agent:claude
   element:toolchain.model-files:
     kind: structure
     hash: fnv-5465b825e0d4f889
     files: {}
   element:toolchain.spec:
     kind: structure
-    hash: fnv-25bfce0e32731ece
+    hash: fnv-d8814b3df49552bb
     files:
+      packages/spec/README.md: []
       packages/spec/package.json: []
       packages/spec/schema/archdoc.v2.schema.json: []
       packages/spec/src/federation.ts:
@@ -1180,7 +1197,7 @@ seals:
         - WorksInSchema
         - WorksInSpec
       packages/spec/tsconfig.json: []
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.spec.migrator:
     kind: structure
     hash: fnv-d2cc8b300bab293c
@@ -1707,7 +1724,7 @@ seals:
     by: agent:claude-code
   step:check-model#4:
     kind: structure
-    hash: fnv-5b16c82e21e5b312
+    hash: fnv-286d7bc406e77c02
     files:
       packages/core/src/load/build.ts:
         - BuildOptions
@@ -1718,9 +1735,10 @@ seals:
         - contractDiagnostic
         - contractName
         - isEventContract
+        - newerFormat
         - normalizeCode
         - schemaDiagnostics
-    by: agent:claude-code
+    by: agent:claude
   step:depend-on-another-repo#1:
     kind: structure
     hash: fnv-b4dba358312e9a8c
