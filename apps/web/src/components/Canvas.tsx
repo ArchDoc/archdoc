@@ -881,12 +881,13 @@ export function Canvas(props: CanvasProps) {
     if (firstFit.current || refitNow) {
       firstFit.current = false;
       refit.current = false;
-      // Fit what fits; a big map stays readable and pans instead of shrinking its labels away.
+      // Show the whole level first, so a newcomer sees the architecture and not one corner of it;
+      // a map too big even at OVERVIEW pans from its start instead of shrinking its boxes away.
       requestAnimationFrame(() => {
         void flow
-          .fitView({ padding: 0.08, duration: 0, minZoom: READABLE, maxZoom: 1 })
+          .fitView({ padding: 0.08, duration: 0, minZoom: OVERVIEW, maxZoom: 1 })
           .then(() => {
-            // Still too big at a readable zoom: start from the left edge and the top, where the
+            // Still too big: start from the left edge and the top, where the
             // map begins and the people who use it are.
             const pane = pane_.current?.getBoundingClientRect();
             const bounds = flow.getNodesBounds(flow.getNodes());
@@ -950,7 +951,7 @@ export function Canvas(props: CanvasProps) {
     lastBy.current = grouping?.by;
     if (centerOn) return;
     requestAnimationFrame(
-      () => void flow.fitView({ padding: 0.08, duration: 450, minZoom: READABLE, maxZoom: 1 }),
+      () => void flow.fitView({ padding: 0.08, duration: 450, minZoom: OVERVIEW, maxZoom: 1 }),
     );
   }, [layout, graph, grouping?.by, centerOn, flow]);
 
@@ -1422,8 +1423,11 @@ function fitActors(model: Model, graph: Graph): Graph {
   };
 }
 
-/** The smallest zoom the map opens at, so a box's name is still at least 13px tall. */
+/** The smallest zoom a focused view fits at, so a box's name is still at least 13px tall. */
 const READABLE = 0.75;
+
+/** The smallest zoom a whole level opens at: names still legible, the shape of the map visible. */
+const OVERVIEW = 0.4;
 
 const NOTES_KEY = "archdoc:edge-notes";
 
