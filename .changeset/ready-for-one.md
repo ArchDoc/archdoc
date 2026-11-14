@@ -1,13 +1,13 @@
 ---
-"@archdoc/spec": patch
-"@archdoc/core": patch
-"@archdoc/analyzers": patch
-"@archdoc/federation": patch
-"@archdoc/mcp": patch
-"@archdoc/cli": patch
+"@archdoc/spec": major
+"@archdoc/core": major
+"@archdoc/analyzers": major
+"@archdoc/federation": major
+"@archdoc/mcp": major
+"@archdoc/cli": major
 ---
 
-Ready for 1.0: a compatibility promise, clear errors for what an older ArchDoc can't read, and the same plugin on every platform.
+ArchDoc 1.0: a compatibility promise, clear errors for what an older ArchDoc can't read, and the same plugin on every platform.
 
 - [COMPATIBILITY.md](https://github.com/ArchDoc/archdoc/blob/main/COMPATIBILITY.md) says what semantic versioning covers from 1.0: the model format, the CLI's commands, flags, exit codes, and JSON output, and the MCP tools' names and inputs. Experimental parts, including the GitHub Action, aren't covered yet.
 - A model whose `archdoc:` format is newer than the ArchDoc reading it (`2.1`, `3.0`) stops with `spec/newer-format` and says to upgrade, instead of calling its new fields unknown or saying to migrate it. `archdoc --version` prints `(model format 2.0)`.
