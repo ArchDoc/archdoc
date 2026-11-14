@@ -89,6 +89,8 @@ describe("archdoc MCP server", () => {
     expect(bad.text).toContain('Nothing is called "nope"');
   });
 
+  // These read the whole repository, the first of them cold, which takes a few
+  // seconds on a busy CI runner: more than the default 5.
   it("lists where flows start, and follows one through its calls", async () => {
     const all = await call("archdoc_paths", {});
     expect(all.isError).toBe(false);
@@ -96,14 +98,14 @@ describe("archdoc MCP server", () => {
     const one = await call("archdoc_paths", { entry: "nothing-matches-this" });
     expect(one.isError).toBe(true);
     expect(one.text).toContain('No entry point matches "nothing-matches-this"');
-  });
+  }, 30_000);
 
   it("finds where an area lives, by its words, file names, and tool names", async () => {
     const r = await call("archdoc_context", { task: "cli command" });
     expect(r.text).toMatch(/Start here\n {2}packages\/cli\/src\/[^\n]+\(toolchain\.cli/);
     const tool = await call("archdoc_context", { task: "archdoc_check" });
     expect(tool.text).toMatch(/Start here\n {2}packages\/mcp\/src\/server\.ts:\d+/);
-  });
+  }, 30_000);
 
   it("briefs a task from words or paths, with who uses it", async () => {
     const byPath = await call("archdoc_context", {
@@ -129,7 +131,7 @@ describe("archdoc MCP server", () => {
       /review-ai-change \(critical\) · step \d+ names packages\/core\/src\/report\/pr-report\.ts/,
     );
     expect(byWords.text).toContain("packages/core/test/pr-report.test.ts — same name");
-  });
+  }, 30_000);
 
   it("takes absolute paths too", async () => {
     const r = await call("archdoc_context", { paths: [`${repo}apps/web/src/graph/graph.ts`] });
@@ -147,7 +149,7 @@ describe("archdoc MCP server", () => {
     );
     const change = await call("archdoc_context", { task: "add a refund rounding option" });
     expect(change.text).not.toContain("This reads like a bug");
-  });
+  }, 30_000);
 
   it("places an error and starts a trace", async () => {
     const r = await call("archdoc_context", {
@@ -181,7 +183,7 @@ describe("archdoc MCP server", () => {
     const fact = await call("archdoc_show", { id: "step:keep-the-model-true#3" });
     expect(fact.text).toMatch(/^journey keep-the-model-true, step 3 \(\.archdoc\/journeys\//);
     expect(fact.text).toContain("Points at packages/analyzers/src/seals.ts");
-  });
+  }, 30_000);
 
   it("checks the model, the code, traces, and seals, and with a base, gives the verdict", async () => {
     const r = await call("archdoc_check");
