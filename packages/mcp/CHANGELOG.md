@@ -1,5 +1,19 @@
 # @archdoc/mcp
 
+## 0.9.3
+
+### Patch Changes
+
+- 4e1bdc9: `archdoc edit` changes rules and the model itself, so agents no longer edit those by hand: `add`, `set`, `rename`, and `remove` take `type: rule` (a rule by its `id`, in the file that has the rules), and `set` with `type: model` changes the model's own `name`, `description`, or `imports`.
+- 72b2741: Security hardening before 1.0.0. `archdoc view` answers only at its local address (127.0.0.1, localhost, or [::1]), so a web page that rebinds its own name to your machine can't read the model or send the agent a plan or a bug. The GitHub Action, the MCP configs, and the landscape workflow now run the CLI released with them instead of the newest on npm, and zod is at 4.6.7 or later.
+- Updated dependencies [e1ffedc]
+- Updated dependencies [4e1bdc9]
+- Updated dependencies [3dc97ac]
+- Updated dependencies [72b2741]
+- Updated dependencies [89ce93c]
+  - @archdoc/core@0.9.3
+  - @archdoc/analyzers@0.9.3
+
 ## 0.9.2
 
 ### Patch Changes
