@@ -1,0 +1,35 @@
+# What any Spring developer who knows PetClinic would agree on, not a full
+# model. Scored for recall: a model may go further and isn't marked down.
+archdoc: "2.0"
+namespace: spring-petclinic
+elements:
+  spring-petclinic:
+    kind: container
+    technology: Java, Spring Boot
+    description: The PetClinic web app, server-rendered with Thymeleaf.
+    code: [pom.xml, build.gradle, src/main/**]
+    uses: { database: "Stores owners, pets, visits, and vets" }
+    elements:
+      owner:
+        kind: component
+        description: Owners, their pets, and visits, with the controllers that find, add, and edit them.
+        code: src/main/java/org/springframework/samples/petclinic/owner/**
+        uses: { model: Extends the shared entities, database: "Stores owners, pets, and visits" }
+      vet:
+        kind: component
+        description: The vets and their specialties, listed as HTML or JSON.
+        code: src/main/java/org/springframework/samples/petclinic/vet/**
+        uses: { model: Extends the shared entities, database: Reads vets }
+      system:
+        kind: component
+        description: Caching, the welcome page, and error handling.
+        code: src/main/java/org/springframework/samples/petclinic/system/**
+      model:
+        kind: component
+        description: The base entities the others extend.
+        code: src/main/java/org/springframework/samples/petclinic/model/**
+  database:
+    kind: datastore
+    technology: MySQL or PostgreSQL (H2 by default)
+    description: The clinic's relational database; the schema and seed data are per engine.
+    code: [src/main/resources/db/**, docker-compose.yml]

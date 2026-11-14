@@ -1,0 +1,11 @@
+# tokio-rs/axum: the Rust web framework. A Cargo workspace of four crates (axum,
+# axum-core, axum-extra, axum-macros) and about sixty examples, each a crate of
+# its own. No services: tests that a Rust workspace gets its crates as
+# containers and the framework's modules as components, not sixty examples.
+url: https://github.com/tokio-rs/axum
+ref: main
+commit: 3ebdbe686c3d828dd8daff49c1a0d1516f102a02
+maxTurns: 80
+maxBudgetUsd: 3
+# What archdoc init alone scores today (--init-only); raise it when init finds more.
+initFloor: { overall: 0.8, containers: 1, components: 1, nesting: 1, code: 1 }

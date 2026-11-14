@@ -1,0 +1,11 @@
+# vercel/commerce: the Next.js App Router storefront on Shopify. One app at the
+# root of the repository with no package name, pages and route handlers under
+# app/, UI under components/, and the Shopify Storefront client under lib/.
+# Tests a Next.js app, and an external reached over GraphQL.
+url: https://github.com/vercel/commerce
+ref: main
+commit: f7521d57d29f0eb3d23c1399cf9bb299d61fcd21
+maxTurns: 60
+maxBudgetUsd: 2
+# What archdoc init alone scores today (--init-only); raise it when init finds more.
+initFloor: { overall: 0.79, containers: 1, components: 1, nesting: 1, code: 0.95 }

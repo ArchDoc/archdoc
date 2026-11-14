@@ -1,0 +1,11 @@
+# spring-projects/spring-petclinic: the Spring Boot sample app. One deployable
+# with feature packages (owner, vet, system) and a shared model package, built
+# with both Maven and Gradle, on H2 by default or MySQL or PostgreSQL. Tests
+# that a Spring app is one container with its packages as components.
+url: https://github.com/spring-projects/spring-petclinic
+ref: main
+commit: 500158f732419217507c7656904b8e6aa1bcc0d6
+maxTurns: 60
+maxBudgetUsd: 2
+# What archdoc init alone scores today (--init-only); raise it when init finds more.
+initFloor: { overall: 0.8, containers: 1, components: 1, datastores: 1, nesting: 1, code: 0.81 }

@@ -1,0 +1,11 @@
+# Questions a new contributor asks, with where the answer is in the code.
+- ask: Where is the search for owners by last name handled?
+  paths: [src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java]
+- ask: Where are pets validated before they're saved?
+  paths: [src/main/java/org/springframework/samples/petclinic/owner/PetValidator.java]
+- ask: Where is the vets list served as JSON?
+  paths: [src/main/java/org/springframework/samples/petclinic/vet/VetController.java]
+- ask: Where is caching for the vets configured?
+  paths: [src/main/java/org/springframework/samples/petclinic/system/CacheConfiguration.java]
+- ask: Where is the PostgreSQL schema?
+  paths: [src/main/resources/db/postgres/schema.sql]

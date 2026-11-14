@@ -1,0 +1,12 @@
+# django/djangoproject.com: the source of djangoproject.com. One Django project
+# made of a dozen apps (docs, blog, releases, fundraising, the community
+# aggregator, the Trac dashboard), two PostgreSQL databases (the site's and
+# Trac's), Redis as a cache, and Stripe for donations. Tests a Django project:
+# its apps as components, and urls.py as where requests start.
+url: https://github.com/django/djangoproject.com
+ref: main
+commit: 7bab0e026502786c493ebe9ce4c12c2fe5feb62e
+maxTurns: 80
+maxBudgetUsd: 3
+# What archdoc init alone scores today (--init-only); raise it when init finds more.
+initFloor: { overall: 0.74, containers: 1, components: 0.87, datastores: 0.33, uses: 0.25, nesting: 1, code: 1 }

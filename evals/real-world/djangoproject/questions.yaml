@@ -1,0 +1,11 @@
+# Questions a new contributor asks, with where the answer is in the code.
+- ask: Where does the documentation search query the database?
+  paths: [docs/search.py, docs/models.py]
+- ask: Where are Stripe donation webhooks handled?
+  paths: [fundraising/views.py]
+- ask: Where are queries sent to the Trac database instead of the site's?
+  paths: [tracdb/db_router.py]
+- ask: Where does the aggregator fetch community feeds?
+  paths: [aggregator/models.py]
+- ask: Where are the URLs for docs.djangoproject.com?
+  paths: [djangoproject/urls/docs.py]

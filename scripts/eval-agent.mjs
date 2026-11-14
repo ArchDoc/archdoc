@@ -9,7 +9,7 @@
 //   node scripts/eval-agent.mjs [fixture...] [--runs 1] [--parallel 2] [--model <id>]
 //        [--max-turns 80] [--out evals/results/<time>] [--claude claude] [--keep]
 //        [--set fixtures|real-world] [--judge | --no-judge] [--judge-passes 1]
-//        [--no-judge-cache] [--max-budget-usd <per run>]
+//        [--no-judge-cache] [--max-budget-usd <per run>] [--init-only [--print-floor]]
 //
 // Without --runs, each fixture runs once, except those in NOISY, which run
 // twice: their score moves a few points between runs.
@@ -28,6 +28,8 @@
 // ls-files) through, which read no more than the file tools can.
 // Writes results.json and report.md to --out, and each run's .archdoc/,
 // transcript, and score under it. --keep keeps the scratch repositories.
+// --init-only runs archdoc init alone, with no model calls, and holds each
+// repository to the initFloor in its repo.yaml (pnpm eval:init).
 // --claude swaps the agent for another command that takes the same flags,
 // such as a stub for testing the runner.
 import { execFileSync, spawn } from "node:child_process";
@@ -72,10 +74,11 @@ const flag = (name, fallback) => {
   return v;
 };
 const keep = argv.includes("--keep");
+const initOnly = argv.includes("--init-only");
 const set = flag("--set", "fixtures");
 if (!["fixtures", "real-world"].includes(set)) throw new Error("--set is fixtures or real-world.");
 const real = set === "real-world";
-const judging = argv.includes("--no-judge") ? false : real || argv.includes("--judge");
+const judging = argv.includes("--no-judge") || initOnly ? false : real || argv.includes("--judge");
 const judgePasses = Number(flag("--judge-passes", "1"));
 const judgeCache = !argv.includes("--no-judge-cache");
 const budget = flag("--max-budget-usd", undefined);
@@ -447,6 +450,37 @@ async function initScore(name) {
 
 const pct = (x) => (x === undefined ? "–" : `${Math.round(x * 100)}%`);
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : undefined);
+
+// --init-only: archdoc init alone on each repository, scored, and held to the initFloor in its
+// repo.yaml. No model calls, so it's free: run it after changing init or the analyzers.
+if (initOnly) {
+  const shown = ["overall", "containers", "components", "datastores", "uses", "nesting", "code"];
+  let low = 0;
+  for (const name of chosen) {
+    const s = await initScore(name);
+    if (argv.includes("--print-floor")) {
+      const f = Object.fromEntries(
+        shown.filter((m) => s[m] !== undefined).map((m) => [m, Math.floor(s[m] * 100) / 100]),
+      );
+      console.log(
+        `${name} initFloor: ${JSON.stringify(f).replace(/"/g, "").replace(/,/g, ", ").replace(/:/g, ": ")}`,
+      );
+    }
+    const under = Object.entries(spec(name).initFloor ?? {}).filter(
+      ([m, min]) => (s[m] ?? 0) + 1e-9 < min,
+    );
+    if (under.length) low++;
+    console.log(
+      `${name}: ${shown.map((m) => `${m} ${pct(s[m])}`).join(", ")}${under.length ? `; below its floor on ${under.map(([m, min]) => `${m} (${pct(min)})`).join(", ")}` : ""}`,
+    );
+  }
+  rmSync(kit, { recursive: true, force: true });
+  if (low)
+    console.log(
+      "Fix what init lost, or lower that floor in the repository's repo.yaml if it's meant.",
+    );
+  process.exit(low ? 1 : 0);
+}
 
 // Every fixture × run, `parallel` at a time.
 mkdirSync(out, { recursive: true });

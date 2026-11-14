@@ -141,6 +141,10 @@ model of a real system is one an engineer new to it can read and use:
 | `eshop` | dotnet/eShop 913acea | A .NET Aspire app: APIs, workers, web apps, RabbitMQ, Postgres, Redis. No C# analyzer, so the skill carries it |
 | `gson` | google/gson 2.15.0 | A Java library: modules and components, no services or datastores |
 | `stripe-accept-a-payment` | stripe-samples/accept-a-payment 1a57c3b | Four integrations, each a client and a server in up to ten interchangeable languages, and Stripe as an external |
+| `spring-petclinic` | spring-projects/spring-petclinic 500158f | A Spring Boot app built with both Maven and Gradle: one container, its Java packages as components, and MySQL or PostgreSQL |
+| `nextjs-commerce` | vercel/commerce f7521d5 | A Next.js App Router app at the repository root with no package name, and Shopify as an external over GraphQL |
+| `djangoproject` | django/djangoproject.com 7bab0e0 | A Django project of a dozen apps, two PostgreSQL databases, Redis, and Stripe |
+| `axum` | tokio-rs/axum 3ebdbe6 | A Rust Cargo workspace of four crates and about sixty example crates |
 
 Each has `repo.yaml` (URL, commit, and the run's turn and dollar caps),
 `reference.yaml` (the containers, components, datastores, and uses any
@@ -151,7 +155,13 @@ committed: `pnpm eval:agent --set real-world` clones each once into
 `evals/.cache/repos/` and gives the agent the pinned commit's files without
 their history.
 
-They're scored two ways:
+`pnpm eval:init` runs `archdoc init` alone on each of them and holds it to the
+`initFloor` in its `repo.yaml`, the way `pnpm test` holds init to its floors on
+the fixtures. It calls no model, so it costs nothing but the first clone: run it
+after changing init or the analyzers, and raise a floor when init finds more
+(`--print-floor` prints what init scores now, in the floor's shape).
+
+The agent runs are scored two ways:
 
 - **Against the reference**, with `scoreModel`, for recall: containers,
   components, datastores, and uses the reference has, plus nesting and code.

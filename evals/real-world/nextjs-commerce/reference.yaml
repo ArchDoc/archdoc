@@ -1,0 +1,31 @@
+# What any Next.js developer who knows this template would agree on, not a full
+# model. Scored for recall: a model may go further and isn't marked down.
+archdoc: "2.0"
+namespace: nextjs-commerce
+elements:
+  nextjs-commerce:
+    kind: container
+    technology: Next.js, React
+    description: The storefront, server-rendered with the App Router and server actions.
+    code: [package.json, app/**, components/**, lib/**]
+    uses: { shopify: "Reads products and collections, and changes the cart" }
+    elements:
+      app:
+        kind: component
+        description: The pages (home, search, collection, product) and the revalidation webhook route.
+        code: app/**
+        uses: { components: Renders the UI, lib: Fetches products and collections }
+      components:
+        kind: component
+        description: The UI, including the cart, whose server actions change the Shopify cart.
+        code: components/**
+        uses: { lib: "Adds, updates, and removes cart lines" }
+      lib:
+        kind: component
+        description: The Shopify Storefront API client, its GraphQL queries and mutations, and shared helpers.
+        code: lib/**
+        uses: { shopify: Sends GraphQL queries and mutations }
+  shopify:
+    kind: external
+    technology: Shopify Storefront API (GraphQL)
+    description: The store's products, collections, and carts.

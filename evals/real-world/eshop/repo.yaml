@@ -7,3 +7,5 @@ ref: main
 commit: 913acea66708a59595351174cee9b29f37179d29
 maxTurns: 100
 maxBudgetUsd: 4
+# What archdoc init alone scores today (--init-only); raise it when init finds more.
+initFloor: { overall: 0.62, containers: 0.81, components: 1, nesting: 1, code: 0.92 }
