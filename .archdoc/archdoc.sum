@@ -3,10 +3,10 @@ sealVersion: 1
 seals:
   deploy:ci.actions:
     kind: content
-    hash: fnv-2d4d7599fe24163d
+    hash: fnv-56643f6e78b1d20a
     refs:
       .github/workflows/archdoc.yml:
-        hash: fnv-4973599cc4a919ee
+        hash: fnv-443b0fd39a0b25e7
         lines: 22
     by: agent:claude
   deploy:release.github:
@@ -19,14 +19,14 @@ seals:
     by: agent:claude-code
   deploy:release.npm:
     kind: content
-    hash: fnv-e60fef49cf637fc1
+    hash: fnv-7ea25d1bb2f57deb
     refs:
       .github/workflows/release.yml:
-        hash: fnv-d84ab78157a58f95
-        lines: 52
+        hash: fnv-e920225adeb22a32
+        lines: 77
       scripts/release.mjs:
-        hash: fnv-289c47345136c39e
-        lines: 114
+        hash: fnv-48f41650ffd7f4f8
+        lines: 119
     by: agent:claude
   element:toolchain.agent-skills:
     kind: structure

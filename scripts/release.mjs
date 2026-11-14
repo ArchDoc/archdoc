@@ -54,6 +54,11 @@ async function identity() {
       `  ref:         ${claims.ref}`,
     ].join("\n"),
   );
+  if (claims.environment !== "npm") {
+    throw new Error(
+      "Stage releases only from the stage job in release.yml, which runs in the npm environment: each package's trusted publisher names it.",
+    );
+  }
 }
 
 /** npm's own trusted-publishing log lines from its newest debug log, which say where the exchange stopped. */
@@ -113,7 +118,7 @@ for (const dir of ORDER) {
         status >= 500
           ? `npm's token exchange failed on npm's side (${status}). Nothing to fix here: re-run the failed job in a few minutes, and check https://status.npmjs.org.`
           : status === 404 || status === 401 || status === 403
-            ? `npm found no trusted publisher on ${name} that matches this run (above). Check it with: npx npm@latest trust list ${name}. The workflow is release.yml and the environment is empty.`
+            ? `npm found no trusted publisher on ${name} that matches this run (above). Check it with: npx npm@latest trust list ${name}. The workflow is release.yml and the environment is npm.`
             : "npm didn't use trusted publishing; its log above says why.";
       console.error(
         [

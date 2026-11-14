@@ -10,7 +10,7 @@ environments:
         kind: registry
         name: npm
         technology: npm registry, trusted publishing (staged)
-        description: The published packages. A maintainer approves each staged version.
+        description: The published packages, staged from release.yml's stage job in the npm environment, which each package's trusted publisher names. A maintainer approves each staged version.
         code: [.github/workflows/release.yml, scripts/release.mjs]
       github:
         kind: repository
