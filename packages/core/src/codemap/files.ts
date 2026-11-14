@@ -12,12 +12,20 @@ const SKIP = new Set(["node_modules", ".git", "dist", "coverage"]);
  */
 export async function listRepoFiles(baseDir: string): Promise<string[]> {
   try {
-    const { stdout } = await run(
-      "git",
-      ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-      { cwd: baseDir, maxBuffer: 64 * 1024 * 1024 },
-    );
-    return stdout.split("\0").filter(Boolean).sort();
+    const ls = async (...args: string[]) =>
+      (
+        await run("git", ["ls-files", ...args, "-z"], { cwd: baseDir, maxBuffer: 64 * 1024 * 1024 })
+      ).stdout
+        .split("\0")
+        .filter(Boolean);
+    // A tracked file deleted from the working tree, and not yet staged, is still in the index:
+    // leave it out, or every reader of the working tree trips over a file that isn't there.
+    const [listed, deleted] = await Promise.all([
+      ls("--cached", "--others", "--exclude-standard"),
+      ls("--deleted"),
+    ]);
+    const gone = new Set(deleted);
+    return listed.filter((f) => !gone.has(f)).sort();
   } catch {
     const out: string[] = [];
     const walk = async (dir: string) => {

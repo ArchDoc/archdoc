@@ -1,0 +1,4 @@
+{
+  "name": "@shop/billing",
+  "description": "Charges for orders through the payment provider."
+}

@@ -1,0 +1,41 @@
+# The everyday loop on a structural change: payments move out of the API into
+# a new workspace package that charges through a payment provider. The model
+# has to follow: a new container, the payments component gone, the use and
+# the checkout journey's steps moved to it, and the facts the change touched
+# sealed again.
+fixture: ts-monorepo
+task: >-
+  Move payments out of the API into a new workspace package, packages/billing
+  (@shop/billing), that charges through our payment provider's HTTP API at
+  https://api.payments.example/charges. Orders should charge through it and
+  keep recording the charge in the database. Delete apps/api/src/payments.
+expect:
+  elements:
+    present: [shop.billing]
+    absent: [shop.api.payments]
+  uses:
+    present: ["shop.api.orders|shop.api -> shop.billing"]
+    absent: ["shop.api.orders -> shop.api.payments"]
+  files:
+    present: [packages/billing/package.json]
+    absent: [apps/api/src/payments/charge.ts]
+solution:
+  delete: [apps/api/src/payments/charge.ts]
+  ops:
+    - op: add
+      id: billing
+      spec:
+        kind: container
+        technology: TypeScript
+        description: Charges for orders through the payment provider.
+        code: packages/billing/**
+    - { op: use, from: api.orders, to: billing, spec: Charges for the order }
+    - { op: use, from: api, to: billing, spec: Depends on it for charges }
+    - { op: use, from: api.orders, to: api.payments, remove: true }
+    - { op: step, journey: checkout, at: 4, spec: { to: billing } }
+    - op: step
+      journey: checkout
+      at: 5
+      spec: { from: api.orders, to: api.storage, action: Records the charge, code: apps/api/src/orders/service.ts }
+    - { op: remove, id: api.payments }
+    - { op: set, id: api.orders, spec: { description: Creates orders and charges for them through billing. } }

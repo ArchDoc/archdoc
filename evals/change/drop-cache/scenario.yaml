@@ -1,0 +1,31 @@
+# The everyday loop on a removal: products stop being cached in Redis. The
+# model has to drop the cache datastore, the use of it, and the journey step
+# that reads it, and say what storage and the catalog do now.
+fixture: ts-monorepo
+task: >-
+  Stop caching products in Redis: the catalog should read products straight
+  from Postgres. Remove the Redis client, the ioredis dependency, and the
+  cache service from docker-compose.yml.
+expect:
+  elements:
+    present: [shop.api.storage, shop.db]
+    absent: [shop.cache]
+  uses:
+    present: ["shop.api.storage -> shop.db"]
+    absent: ["shop.api.storage -> shop.cache"]
+  files:
+    absent: [apps/api/src/storage/cache.ts]
+solution:
+  delete: [apps/api/src/storage/cache.ts]
+  ops:
+    - { op: step, journey: browse-product, at: 5, remove: true }
+    - op: step
+      journey: browse-product
+      at: 5
+      spec: { action: Reads the product }
+    - { op: step, journey: browse-product, at: 4, spec: { action: Reads it } }
+    - { op: use, from: api.storage, to: cache, remove: true }
+    - { op: remove, id: cache }
+    - { op: set, id: api.storage, spec: { description: The Postgres pool. } }
+    - { op: set, id: api.catalog, spec: { description: Product lookups. } }
+    - { op: use, from: api.catalog, to: api.storage, spec: Reads products }

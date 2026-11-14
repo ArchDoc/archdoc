@@ -301,6 +301,45 @@ Otherwise it spends nothing. `--check-only` says whether it would run, and
 stops. Like the other agent evals, it runs by hand with the `claude` CLI signed
 in, not in CI.
 
+## The everyday loop
+
+The other agent evals start a model, plan a change, read a diff, or triage a
+bug. `change/` checks the loop an agent runs on every task once the model
+exists: ask `archdoc context`, change the code, change the model with
+`archdoc edit`, `archdoc check` against main, and seal what it touched. Each
+scenario starts from a fixture with its golden model sealed on main, and asks
+the agent for a code change on a branch:
+
+| Scenario | The change | What the model has to do |
+|---|---|---|
+| `move-payments` | Payments move into a new workspace package | Gain a container, lose a component, and move the use and the checkout journey's steps to it |
+| `drop-cache` | Products stop being cached in Redis | Lose a datastore, the use of it, and a journey step |
+| `order-emails` | Orders send a confirmation email | Gain a component, a use, and a journey step |
+
+It's scored without a judge, so the same run always scores the same:
+
+- **Model**: the share of the scenario's facts (elements, uses, and files
+  present or absent) that hold after the run.
+- **Clean**: `archdoc check` against main finds nothing the change introduced
+  that's an error, drift (a stale path, an undeclared dependency), or a sealed
+  fact whose code changed and wasn't sealed again.
+- **The loop**, from the transcript: whether it asked `archdoc context` before
+  changing code, and how many `archdoc edit`, hand edits and reads of
+  `.archdoc/`, `check`, and `seal` calls it made.
+
+```sh
+pnpm build
+pnpm eval:change                      # every scenario, once
+pnpm eval:change drop-cache --runs 3
+```
+
+Each scenario also has a reference solution (`solution/` and the ops in
+`scenario.yaml`): `pnpm test` (`packages/analyzers/test/change-evals.test.ts`)
+checks that the starting repository checks clean and doesn't meet the scenario,
+and that the solution meets all of it and checks clean, so a scenario never
+asks for something the tools can't do. A run costs about $0.50 to $1.50,
+capped by `--max-budget-usd`. Results go to `evals/results/change-<time>/`.
+
 ## Triage
 
 `triage/` measures whether an agent, handed a bug report, finds the root cause

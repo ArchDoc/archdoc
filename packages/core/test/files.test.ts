@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { listRepoFiles, webUrlOf } from "../src/index.js";
@@ -19,5 +23,21 @@ describe("listRepoFiles", () => {
     expect(files).toContain("packages/core/src/codemap/glob.ts");
     expect(files.some((f) => f.includes("node_modules/"))).toBe(false);
     expect([...files].sort()).toEqual(files);
+  });
+
+  it("leaves out a tracked file deleted from the working tree before the deletion is staged", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "archdoc-files-"));
+    try {
+      const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, stdio: "ignore" });
+      writeFileSync(join(dir, "kept.ts"), "");
+      writeFileSync(join(dir, "gone.ts"), "");
+      git("init", "-q");
+      git("add", "-A");
+      rmSync(join(dir, "gone.ts"));
+      writeFileSync(join(dir, "new.ts"), "");
+      expect(await listRepoFiles(dir)).toEqual(["kept.ts", "new.ts"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
