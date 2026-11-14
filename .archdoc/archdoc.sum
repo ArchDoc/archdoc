@@ -30,11 +30,17 @@ seals:
     by: agent:claude
   element:toolchain.agent-skills:
     kind: structure
-    hash: fnv-4bbe8202346ab434
+    hash: fnv-c6a7fb36a1728918
     files:
       .agents/skills/archdoc/SKILL.md: []
+      .agents/skills/archdoc/references/init.md: []
+      .agents/skills/archdoc/references/plan.md: []
+      .agents/skills/archdoc/references/triage.md: []
       .claude-plugin/marketplace.json: []
       .claude/skills/archdoc/SKILL.md: []
+      .claude/skills/archdoc/references/init.md: []
+      .claude/skills/archdoc/references/plan.md: []
+      .claude/skills/archdoc/references/triage.md: []
       .mcp.json: []
       AGENTS.md: []
       CLAUDE.md: []
@@ -46,8 +52,11 @@ seals:
       integrations/claude-plugin/.mcp.json: []
       integrations/claude-plugin/README.md: []
       integrations/claude-plugin/skills/archdoc/SKILL.md: []
+      integrations/claude-plugin/skills/archdoc/references/init.md: []
+      integrations/claude-plugin/skills/archdoc/references/plan.md: []
+      integrations/claude-plugin/skills/archdoc/references/triage.md: []
       integrations/claude-plugin/skills/view/SKILL.md: []
-    by: agent:claude-code
+    by: agent:claude
   element:toolchain.analyzers:
     kind: structure
     hash: fnv-51431099ea3c2bf5

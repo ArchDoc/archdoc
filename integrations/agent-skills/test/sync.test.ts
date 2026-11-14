@@ -5,10 +5,25 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf
 
 describe("agent integrations", () => {
   // Claude Code reads .claude/skills/; Codex and other agents read .agents/skills/.
+  const SKILL_FILES = [
+    "SKILL.md",
+    "references/init.md",
+    "references/plan.md",
+    "references/triage.md",
+  ];
   it.each([".claude", ".agents"])("this repo's %s/skills/ has the same skill it ships", (dir) => {
-    expect(read(`../../../${dir}/skills/archdoc/SKILL.md`)).toBe(
-      read("../../claude-plugin/skills/archdoc/SKILL.md"),
-    );
+    for (const file of SKILL_FILES) {
+      expect(read(`../../../${dir}/skills/archdoc/${file}`), file).toBe(
+        read(`../../claude-plugin/skills/archdoc/${file}`),
+      );
+    }
+  });
+
+  it("keeps the skill an agent reads on every task short, and links each reference", () => {
+    const skill = read("../../claude-plugin/skills/archdoc/SKILL.md");
+    // Init, triage, and plan are read only for those tasks: a change loads this file alone.
+    expect(skill.split(/\s+/).length).toBeLessThan(2600);
+    for (const file of SKILL_FILES.slice(1)) expect(skill).toContain(`](${file})`);
   });
 
   it("this repo's AGENTS.md carries the shipped workflow, word for word", () => {
