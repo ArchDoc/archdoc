@@ -1,5 +1,16 @@
 # @archdoc/core
 
+## 0.9.3
+
+### Patch Changes
+
+- e1ffedc: `archdoc check` (and every command that reads the working tree) no longer fails with "Can't read" when a tracked file has been deleted and the deletion isn't staged yet, which is how a change that removes a file looks until it's committed.
+- 4e1bdc9: `archdoc edit` changes rules and the model itself, so agents no longer edit those by hand: `add`, `set`, `rename`, and `remove` take `type: rule` (a rule by its `id`, in the file that has the rules), and `set` with `type: model` changes the model's own `name`, `description`, or `imports`.
+- 72b2741: Security hardening before 1.0.0. `archdoc view` answers only at its local address (127.0.0.1, localhost, or [::1]), so a web page that rebinds its own name to your machine can't read the model or send the agent a plan or a bug. The GitHub Action, the MCP configs, and the landscape workflow now run the CLI released with them instead of the newest on npm, and zod is at 4.6.7 or later.
+- 89ce93c: `archdoc init` finds every crate in a Cargo workspace: it read a crate's name only when no array (such as `categories` or `keywords`) came before it, so most published crates were missed. Init and `archdoc paths` also leave out Rust benches (`benches/`), test helpers spelled with an underscore (`test_helpers/`, `test_utils/`), and Django's `tests.py`, so a test is no longer reported as an entry point.
+- Updated dependencies [72b2741]
+  - @archdoc/spec@0.9.3
+
 ## 0.9.2
 
 ### Patch Changes

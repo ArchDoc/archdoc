@@ -1,5 +1,23 @@
 # @archdoc/cli
 
+## 0.9.3
+
+### Patch Changes
+
+- 2dcf0dc: The explorer opens each level showing the whole map, zooming out as far as names stay legible, instead of opening at reading zoom on the actors with the system cut off at the edge.
+- 3dc97ac: Init and path discovery handle more stacks: entry points in Next.js pages, Spring controllers, Rails and Laravel routes, Django `urls.py`, axum, and actix-web; a Maven project that also builds with Gradle is one container named by its own artifactId, with its Java packages as components; and an unnamed app at the root of its repository is named after the repository.
+- 72b2741: Security hardening before 1.0.0. `archdoc view` answers only at its local address (127.0.0.1, localhost, or [::1]), so a web page that rebinds its own name to your machine can't read the model or send the agent a plan or a bug. The GitHub Action, the MCP configs, and the landscape workflow now run the CLI released with them instead of the newest on npm, and zod is at 4.6.7 or later.
+- Updated dependencies [e1ffedc]
+- Updated dependencies [4e1bdc9]
+- Updated dependencies [3dc97ac]
+- Updated dependencies [72b2741]
+- Updated dependencies [89ce93c]
+  - @archdoc/core@0.9.3
+  - @archdoc/mcp@0.9.3
+  - @archdoc/analyzers@0.9.3
+  - @archdoc/spec@0.9.3
+  - @archdoc/federation@0.9.3
+
 ## 0.9.2
 
 ### Patch Changes

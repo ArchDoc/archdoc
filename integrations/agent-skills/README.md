@@ -17,13 +17,13 @@ The skill is [`claude-plugin/skills/archdoc/SKILL.md`](../claude-plugin/skills/a
 
 1. Paste [`AGENTS.md`](./AGENTS.md) near the top of your repository's `AGENTS.md`. Codex, Cursor, Copilot, and others read it.
 2. Copy the skill folder, [`claude-plugin/skills/archdoc/`](../claude-plugin/skills/archdoc), to `.agents/skills/archdoc/` in your repository. Codex looks for skills there, not in `.claude/skills/` or the Claude Code plugin cache.
-3. Register the MCP server, which runs `npx -y @archdoc/cli@0.9.2 mcp` in the repository:
+3. Register the MCP server, which runs `npx -y @archdoc/cli@0.9.3 mcp` in the repository:
    - **Cursor:** copy [`mcp/cursor.mcp.json`](./mcp/cursor.mcp.json) to `.cursor/mcp.json`.
    - **Codex:** add it to `~/.codex/config.toml`:
      ```toml
      [mcp_servers.archdoc]
      command = "npx"
-     args = ["-y", "@archdoc/cli@0.9.2", "mcp"]
+     args = ["-y", "@archdoc/cli@0.9.3", "mcp"]
      ```
      `npx` downloads `@archdoc/cli` from npm the first time, and Codex's sandbox has no network access by default, so the server (and `npx @archdoc/cli` in a shell) exits with no output. Do one of these:
      - Allow network access: add `network_access = true` under `[sandbox_workspace_write]` in `~/.codex/config.toml`.

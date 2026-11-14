@@ -34,12 +34,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: ArchDoc/archdoc/integrations/github-action@v0.9.2
+      - uses: ArchDoc/archdoc/integrations/github-action@v0.9.3
         with:
           fail-on: error # or warning, or never to only comment
 ```
 
-Use a release tag (`v0.9.2`), or pin its commit, rather than `@main`: the action runs with a token that can comment on pull requests, so take new versions on purpose. Each release's action runs the CLI released with it.
+Use a release tag (`v0.9.3`), or pin its commit, rather than `@main`: the action runs with a token that can comment on pull requests, so take new versions on purpose. Each release's action runs the CLI released with it.
 
 ## Inputs
 
@@ -52,7 +52,7 @@ Use a release tag (`v0.9.2`), or pin its commit, rather than `@main`: the action
 | `annotations` | `true` | Put introduced findings on their lines in Files changed |
 | `explorer-url` | | A page that shows this change in the explorer, linked from the comment |
 | `site` | `false` | Also write the explorer, opened on this change, to the directory in the `site` output |
-| `command` | `npx -y @archdoc/cli@0.9.2`, the CLI released with this version of the action | How to run ArchDoc, such as `node packages/cli/dist/bin.js` for a local build |
+| `command` | `npx -y @archdoc/cli@0.9.3`, the CLI released with this version of the action | How to run ArchDoc, such as `node packages/cli/dist/bin.js` for a local build |
 | `github-token` | `github.token` | Token used to comment |
 
 Outputs: `report` (the markdown file), `verdict` (`blocking`, `attention`, `info`, or `none`), and `site` (the directory, with `site: true`).
@@ -64,7 +64,7 @@ Pull requests from forks get a read-only token, so the comment step is skipped t
 The comment is for deciding; the explorer is for looking around. With `site: true`, the Action writes the explorer as a static site, opened on this change with the same verdict and findings. Host it anywhere, and pass where it will be as `explorer-url`. For example, with a Pages site for previews:
 
 ```yaml
-      - uses: ArchDoc/archdoc/integrations/github-action@v0.9.2
+      - uses: ArchDoc/archdoc/integrations/github-action@v0.9.3
         id: archdoc
         with:
           site: true

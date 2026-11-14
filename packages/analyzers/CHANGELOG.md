@@ -1,5 +1,17 @@
 # @archdoc/analyzers
 
+## 0.9.3
+
+### Patch Changes
+
+- 3dc97ac: Init and path discovery handle more stacks: entry points in Next.js pages, Spring controllers, Rails and Laravel routes, Django `urls.py`, axum, and actix-web; a Maven project that also builds with Gradle is one container named by its own artifactId, with its Java packages as components; and an unnamed app at the root of its repository is named after the repository.
+- 89ce93c: `archdoc init` finds every crate in a Cargo workspace: it read a crate's name only when no array (such as `categories` or `keywords`) came before it, so most published crates were missed. Init and `archdoc paths` also leave out Rust benches (`benches/`), test helpers spelled with an underscore (`test_helpers/`, `test_utils/`), and Django's `tests.py`, so a test is no longer reported as an entry point.
+- Updated dependencies [e1ffedc]
+- Updated dependencies [4e1bdc9]
+- Updated dependencies [72b2741]
+- Updated dependencies [89ce93c]
+  - @archdoc/core@0.9.3
+
 ## 0.9.2
 
 ### Patch Changes
