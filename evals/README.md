@@ -337,8 +337,9 @@ Each scenario also has a reference solution (`solution/` and the ops in
 `scenario.yaml`): `pnpm test` (`packages/analyzers/test/change-evals.test.ts`)
 checks that the starting repository checks clean and doesn't meet the scenario,
 and that the solution meets all of it and checks clean, so a scenario never
-asks for something the tools can't do. A run costs about $0.50 to $1.50,
-capped by `--max-budget-usd`. Results go to `evals/results/change-<time>/`.
+asks for something the tools can't do. A run costs about $0.25 to $0.40 (at most
+$1.50, set by `--max-budget-usd`). Results go to `evals/results/change-<time>/`; the
+first run is in `reports/2026-11-14-change/`: every scenario at 100%, clean.
 
 ## Triage
 
